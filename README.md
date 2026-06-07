@@ -55,16 +55,26 @@ npm run patch:codex
 ```
 
 The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and
-installs it as `~/.local/bin/codex-hud-codex`. It refuses to overwrite `codex`
-unless you explicitly pass `--replace-codex`.
+installs it as `~/.local/bin/codex-hud-codex`. It also writes
+`~/.local/bin/codex-hud-tui`, a launcher that passes the HUD command through
+Codex's `-c tui.status_line_command=...` override without changing
+`~/.codex/config.toml`. It refuses to overwrite `codex` unless you explicitly
+pass `--replace-codex`.
 
-Add the printed line under your existing `[tui]` table:
+Launch a HUD-enabled session with:
+
+```bash
+codex-hud-tui
+```
+
+If you prefer a persistent config, add the printed line under your existing
+`[tui]` table, but note that stock Codex versions may reject unknown fields:
 
 ```toml
 status_line_command = "node /Users/brandonwie/dev/personal/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line"
 ```
 
-Run `codex-hud-codex` to see the compact footer. Homebrew or Codex updates will
+Run `codex-hud-tui` to see the compact footer. Homebrew or Codex updates will
 not update this separate command; rerun `npm run patch:codex` after updating
 Codex.
 

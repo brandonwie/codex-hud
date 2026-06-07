@@ -7,6 +7,7 @@ const { spawnSync } = require("child_process");
 
 const OPENAI_CODEX_REPO = "https://github.com/openai/codex.git";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
+const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
 
 function usage() {
   return `Usage: node scripts/install-patched-codex.js [options]
@@ -17,6 +18,7 @@ Options:
   --version <version>       Codex CLI version to patch. Defaults to installed codex version.
   --prefix <dir>            Install directory prefix. Defaults to ~/.local/bin.
   --bin-name <name>         Installed command name. Defaults to ${DEFAULT_BIN_NAME}.
+  --launcher-name <name>    Launcher command name. Defaults to ${DEFAULT_LAUNCHER_NAME}.
   --repo <url>              Upstream source repo. Defaults to ${OPENAI_CODEX_REPO}.
   --cache-dir <dir>         Source cache directory. Defaults to ~/.cache/codex-hud.
   --dry-run                 Clone/check out and patch source, but do not build or install.
@@ -62,6 +64,7 @@ function parseArgs(argv) {
     repo: OPENAI_CODEX_REPO,
     prefix: path.join(os.homedir(), ".local", "bin"),
     binName: DEFAULT_BIN_NAME,
+    launcherName: DEFAULT_LAUNCHER_NAME,
     cacheDir: path.join(os.homedir(), ".cache", "codex-hud"),
     dryRun: false,
     replaceCodex: false,
@@ -78,7 +81,7 @@ function parseArgs(argv) {
       args.replaceCodex = true;
     } else if (arg === "--print-config") {
       args.printConfig = true;
-    } else if (arg === "--version" || arg === "--prefix" || arg === "--bin-name" || arg === "--repo" || arg === "--cache-dir") {
+    } else if (arg === "--version" || arg === "--prefix" || arg === "--bin-name" || arg === "--launcher-name" || arg === "--repo" || arg === "--cache-dir") {
       const value = argv[index + 1];
       if (!value) {
         throw new Error(`${arg} requires a value`);
@@ -88,6 +91,7 @@ function parseArgs(argv) {
         "--version": "version",
         "--prefix": "prefix",
         "--bin-name": "binName",
+        "--launcher-name": "launcherName",
         "--repo": "repo",
         "--cache-dir": "cacheDir",
       }[arg];
@@ -297,9 +301,14 @@ function ensureSource(args) {
 
 function installBinary(sourceDir, args) {
   const workspace = path.join(sourceDir, "codex-rs");
+  const env = {
+    ...process.env,
+    CARGO_NET_GIT_FETCH_WITH_CLI: process.env.CARGO_NET_GIT_FETCH_WITH_CLI || "true",
+  };
   run("cargo", ["build", "--release", "-p", "codex-cli", "--bin", "codex"], {
     cwd: workspace,
     stdio: "inherit",
+    env,
   });
 
   const builtBinary = path.join(workspace, "target", "release", process.platform === "win32" ? "codex.exe" : "codex");
@@ -308,6 +317,23 @@ function installBinary(sourceDir, args) {
   fs.copyFileSync(builtBinary, target);
   fs.chmodSync(target, 0o755);
   return target;
+}
+
+function installLauncher(installedBinary, args) {
+  const launcher = path.join(args.prefix, args.launcherName);
+  const command = defaultStatusLineCommand();
+  const script = `#!/usr/bin/env bash
+set -euo pipefail
+
+exec ${shellQuote(installedBinary)} \\
+  -c ${shellQuote(`tui.status_line_command=${JSON.stringify(command)}`)} \\
+  "$@"
+`;
+
+  fs.mkdirSync(args.prefix, { recursive: true });
+  fs.writeFileSync(launcher, script);
+  fs.chmodSync(launcher, 0o755);
+  return launcher;
 }
 
 function main() {
@@ -343,7 +369,9 @@ function main() {
   }
 
   const installed = installBinary(sourceDir, args);
+  const launcher = installLauncher(installed, args);
   console.log(`Installed patched Codex as: ${installed}`);
+  console.log(`Installed HUD launcher as: ${launcher}`);
   console.log("Add this under your existing [tui] table:");
   console.log(`status_line_command = ${JSON.stringify(defaultStatusLineCommand())}`);
 }
