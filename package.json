@@ -1,6 +1,6 @@
 {
   "name": "codex-hud",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Multiline local context HUD for Codex CLI sessions.",
   "license": "MIT",
   "type": "commonjs",
@@ -8,8 +8,10 @@
     "codex-hud": "./plugins/codex-hud/scripts/codex-hud.js"
   },
   "scripts": {
-    "test": "node scripts/test-codex-hud.js",
-    "hud": "node plugins/codex-hud/scripts/codex-hud.js"
+    "test": "node scripts/test-codex-hud.js && node scripts/test-patched-codex-installer.js",
+    "hud": "node plugins/codex-hud/scripts/codex-hud.js",
+    "patch:codex": "node scripts/install-patched-codex.js",
+    "patch:codex:dry-run": "node scripts/install-patched-codex.js --dry-run"
   },
   "keywords": [
     "codex",

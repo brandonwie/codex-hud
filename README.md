@@ -3,10 +3,10 @@
 Codex HUD is a local Codex plugin that shows a multiline workspace HUD for
 Codex CLI sessions.
 
-It is intentionally a companion to Codex's native `[tui].status_line`, not a
-replacement. Codex CLI 0.137 exposes a configurable single-line status item
-array; it does not currently expose a Claude-style `statusLine.command` renderer
-that a plugin can replace with arbitrary multiline output.
+By default it is a companion to Codex's native `[tui].status_line`, because stock
+Codex exposes a configurable built-in status item array but not a plugin-owned
+renderer. This repo also ships a maintained patch path for users who want the
+HUD script to render in the real Codex footer.
 
 ## What It Shows
 
@@ -44,6 +44,30 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5
 npm test
 ```
 
+## Patched Codex Footer
+
+Stock Codex cannot render arbitrary plugin output under the input area. To get a
+Claude-HUD-style footer, build a separate patched Codex command:
+
+```bash
+npm run patch:codex:dry-run
+npm run patch:codex
+```
+
+The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and
+installs it as `~/.local/bin/codex-hud-codex`. It refuses to overwrite `codex`
+unless you explicitly pass `--replace-codex`.
+
+Add the printed line under your existing `[tui]` table:
+
+```toml
+status_line_command = "node /Users/brandonwie/dev/personal/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line"
+```
+
+Run `codex-hud-codex` to see the compact footer. Homebrew or Codex updates will
+not update this separate command; rerun `npm run patch:codex` after updating
+Codex.
+
 ## Local Codex Install
 
 ```bash
@@ -58,6 +82,6 @@ refreshed.
 
 - Add richer session transcript summaries if Codex exposes a stable local
   session-state API for plugins.
-- Add a true TUI renderer if Codex adds a custom status-line or panel extension
-  surface.
+- Track upstream Codex status-line changes so the patch can be retired if a
+  supported custom renderer lands.
 - Add screenshots once the Codex plugin directory card is ready for publishing.
