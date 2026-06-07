@@ -5,7 +5,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const DEFAULT_TIMEOUT_MS = 1200;
 
 function usage() {
@@ -14,6 +14,9 @@ function usage() {
     "",
     "Usage:",
     "  codex-hud             Print a multiline Codex context HUD",
+    "  codex-hud --line      Print compact CTX/Sesh/Week usage only",
+    "  codex-hud --status-line",
+    "                        Alias for --line",
     "  codex-hud --json      Print the same data as JSON",
     "  codex-hud --watch 5   Refresh the text HUD every 5 seconds",
     "  codex-hud --help      Show this help",
@@ -204,6 +207,122 @@ function hookSummary(codexHome) {
   }
 }
 
+function listSessionFiles(codexHome) {
+  const sessionsRoot = path.join(codexHome, "sessions");
+  const files = [];
+
+  function walk(dir) {
+    if (!fs.existsSync(dir) || files.length > 3000) return;
+
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (/^rollout-.*\.jsonl$/.test(entry.name)) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  walk(sessionsRoot);
+  return files.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+}
+
+function readTailLines(filePath, maxLines) {
+  const text = readText(filePath);
+  if (!text) return [];
+  const lines = text.trim().split(/\r?\n/);
+  return lines.slice(Math.max(0, lines.length - maxLines));
+}
+
+function parseTokenCount(line) {
+  let event;
+  try {
+    event = JSON.parse(line);
+  } catch (_) {
+    return null;
+  }
+
+  const payload = event && event.payload;
+  if (!payload || payload.type !== "token_count") return null;
+
+  return {
+    timestamp: event.timestamp || null,
+    info: payload.info || null,
+    rateLimits: payload.rate_limits || null,
+  };
+}
+
+function percentFromTokens(usage, contextWindow) {
+  const total = usage && Number(usage.total_tokens);
+  const window = Number(contextWindow);
+  if (!Number.isFinite(total) || !Number.isFinite(window) || window <= 0) return null;
+  return Math.max(0, Math.round((total / window) * 100));
+}
+
+function rateWindow(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const usedPercent = Number(raw.used_percent);
+  const windowMinutes = Number(raw.window_minutes);
+  const resetsAt = Number(raw.resets_at);
+  return {
+    usedPercent: Number.isFinite(usedPercent) ? Math.round(usedPercent) : null,
+    windowMinutes: Number.isFinite(windowMinutes) ? windowMinutes : null,
+    resetsAt: Number.isFinite(resetsAt) ? resetsAt : null,
+  };
+}
+
+function latestUsage(codexHome) {
+  const files = listSessionFiles(codexHome);
+  let latestContext = null;
+  let latestRateLimits = null;
+  let sourceFile = null;
+
+  for (const file of files.slice(0, 50)) {
+    const lines = readTailLines(file, 1200).reverse();
+
+    for (const line of lines) {
+      const tokenCount = parseTokenCount(line);
+      if (!tokenCount) continue;
+
+      if (!latestContext && tokenCount.info) {
+        const info = tokenCount.info;
+        latestContext = {
+          usedPercent: percentFromTokens(info.last_token_usage, info.model_context_window),
+          usedTokens: info.last_token_usage ? Number(info.last_token_usage.total_tokens) : null,
+          windowTokens: Number(info.model_context_window) || null,
+          timestamp: tokenCount.timestamp,
+        };
+        sourceFile = file;
+      }
+
+      if (!latestRateLimits && tokenCount.rateLimits) {
+        latestRateLimits = {
+          primary: rateWindow(tokenCount.rateLimits.primary),
+          secondary: rateWindow(tokenCount.rateLimits.secondary),
+          planType: tokenCount.rateLimits.plan_type || null,
+          limitId: tokenCount.rateLimits.limit_id || null,
+          timestamp: tokenCount.timestamp,
+        };
+      }
+
+      if (latestContext && latestRateLimits) {
+        return {
+          sourceFile,
+          context: latestContext,
+          rateLimits: latestRateLimits,
+        };
+      }
+    }
+  }
+
+  return {
+    sourceFile,
+    context: latestContext,
+    rateLimits: latestRateLimits,
+  };
+}
+
 function commandVersion(command, args) {
   const out = run(command, args);
   return out ? out.split(/\r?\n/)[0] : null;
@@ -242,8 +361,9 @@ function collect() {
     git,
     project: hints,
     hooks: hookSummary(codexHome),
+    usage: latestUsage(codexHome),
     limits: {
-      note: "Live token and rate-limit values are rendered by Codex's native TUI status line, not exposed to this plugin script.",
+      note: "Usage is parsed from the latest Codex rollout JSONL. Codex's native TUI status line remains authoritative.",
     },
   };
 }
@@ -264,6 +384,42 @@ function formatHookEvents(events) {
   return parts.length ? parts.join(" ") : "none";
 }
 
+function formatPercent(value) {
+  return Number.isFinite(value) ? Math.round(value) + "%" : "?";
+}
+
+function formatDurationUntil(epochSeconds) {
+  const seconds = Number(epochSeconds) - Date.now() / 1000;
+  if (!Number.isFinite(seconds)) return "?";
+  if (seconds <= 0) return "now";
+
+  const hours = seconds / 3600;
+  if (hours < 24) {
+    return (hours < 10 ? hours.toFixed(1) : Math.round(hours).toString()) + "h";
+  }
+
+  const days = hours / 24;
+  return (days < 10 ? days.toFixed(1) : Math.round(days).toString()) + "d";
+}
+
+function formatRate(label, window) {
+  if (!window) return label + " ?";
+  const pct = formatPercent(window.usedPercent);
+  const remaining = window.resetsAt ? "(" + formatDurationUntil(window.resetsAt) + ")" : "";
+  return label + " " + pct + remaining;
+}
+
+function formatUsageLine(data) {
+  const usage = data.usage || {};
+  const context = usage.context || {};
+  const rateLimits = usage.rateLimits || {};
+  return [
+    "CTX " + formatPercent(context.usedPercent),
+    formatRate("Sesh", rateLimits.primary),
+    formatRate("Week", rateLimits.secondary),
+  ].join(" | ");
+}
+
 function formatText(data) {
   const statusPreview = data.config.nativeStatusItems.slice(0, 8).join(", ");
   const statusSuffix =
@@ -282,6 +438,7 @@ function formatText(data) {
     "  status line: " + data.config.nativeStatusItemCount + " items, colors " +
       (data.config.nativeStatusColors === null ? "?" : data.config.nativeStatusColors ? "on" : "off"),
     "  items: " + (statusPreview || "none") + statusSuffix,
+    "  usage: " + formatUsageLine(data),
     "",
     "Workspace",
     "  cwd: " + data.cwd,
@@ -317,10 +474,19 @@ function printText() {
   console.log(formatText(collect()));
 }
 
+function printLine() {
+  console.log(formatUsageLine(collect()));
+}
+
 function main() {
   const args = process.argv.slice(2);
   if (args.includes("--help") || args.includes("-h")) {
     console.log(usage());
+    return;
+  }
+
+  if (args.includes("--line") || args.includes("--status-line")) {
+    printLine();
     return;
   }
 

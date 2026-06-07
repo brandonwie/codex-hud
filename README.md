@@ -12,12 +12,14 @@ that a plugin can replace with arbitrary multiline output.
 
 - Codex version, model, reasoning effort, sandbox, and approval mode
 - Native Codex status-line item count and color setting
+- Compact usage parsed from Codex rollout logs, for example
+  `CTX 34% | Sesh 33%(3.3h) | Week 47%(3.7d)`
 - Current working directory, git branch, dirty counts, and repo root
 - Project hints such as package name, nearby `AGENTS.md`, and 3B
   `ACTIVE-STATUS.md` priority when present
 - Codex hook event counts from `hooks.json`
-- A clear note when live token/limit values are only available in Codex's native
-  status line
+- A clear note that Codex's native status line remains authoritative for live
+  token and rate-limit values
 
 ## Layout
 
@@ -36,6 +38,7 @@ codex-hud/
 
 ```bash
 node plugins/codex-hud/scripts/codex-hud.js
+node plugins/codex-hud/scripts/codex-hud.js --line
 node plugins/codex-hud/scripts/codex-hud.js --json
 node plugins/codex-hud/scripts/codex-hud.js --watch 5
 npm test
