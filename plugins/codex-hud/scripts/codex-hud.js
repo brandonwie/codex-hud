@@ -5,7 +5,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 const DEFAULT_TIMEOUT_MS = 1200;
 
 function usage() {
@@ -414,9 +414,9 @@ function formatUsageLine(data) {
   const context = usage.context || {};
   const rateLimits = usage.rateLimits || {};
   return [
-    "CTX " + formatPercent(context.usedPercent),
-    formatRate("Sesh", rateLimits.primary),
-    formatRate("Week", rateLimits.secondary),
+    "C " + formatPercent(context.usedPercent),
+    formatRate("5", rateLimits.primary),
+    formatRate("W", rateLimits.secondary),
   ].join(" | ");
 }
 

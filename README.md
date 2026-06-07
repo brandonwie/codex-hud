@@ -13,7 +13,7 @@ that a plugin can replace with arbitrary multiline output.
 - Codex version, model, reasoning effort, sandbox, and approval mode
 - Native Codex status-line item count and color setting
 - Compact usage parsed from Codex rollout logs, for example
-  `CTX 34% | Sesh 33%(3.3h) | Week 47%(3.7d)`
+  `C 34% | 5 33%(3.3h) | W 47%(3.7d)`
 - Current working directory, git branch, dirty counts, and repo root
 - Project hints such as package name, nearby `AGENTS.md`, and 3B
   `ACTIVE-STATUS.md` priority when present
