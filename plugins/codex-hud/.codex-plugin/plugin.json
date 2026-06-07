@@ -1,0 +1,37 @@
+{
+  "name": "codex-hud",
+  "version": "0.1.0",
+  "description": "Multiline local context HUD for Codex CLI sessions.",
+  "author": {
+    "name": "Brandon Wie",
+    "url": "https://github.com/brandonwie"
+  },
+  "homepage": "https://github.com/brandonwie/codex-hud#readme",
+  "repository": "https://github.com/brandonwie/codex-hud",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "hud",
+    "statusline",
+    "developer-tools"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex HUD",
+    "shortDescription": "Show a multiline local context HUD for Codex.",
+    "longDescription": "Codex HUD adds a script-backed skill that summarizes Codex config, git state, project hints, hooks, and runtime context in a compact multiline view. It complements Codex's native single-line TUI status line.",
+    "developerName": "Brandon Wie",
+    "category": "Productivity",
+    "capabilities": [
+      "Context",
+      "Local tooling",
+      "Developer productivity"
+    ],
+    "defaultPrompt": [
+      "Show my Codex HUD.",
+      "Summarize this Codex workspace status.",
+      "Explain what my Codex HUD is showing."
+    ],
+    "brandColor": "#10B981"
+  }
+}

@@ -1,0 +1,37 @@
+#!/usr/bin/env node
+
+const assert = require("assert");
+const path = require("path");
+const { spawnSync } = require("child_process");
+
+const repoRoot = path.resolve(__dirname, "..");
+const hudScript = path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js");
+
+function run(args) {
+  return spawnSync(process.execPath, [hudScript, ...args], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+}
+
+const help = run(["--help"]);
+assert.strictEqual(help.status, 0, help.stderr);
+assert.match(help.stdout, /Usage:/);
+
+const json = run(["--json"]);
+assert.strictEqual(json.status, 0, json.stderr);
+
+const parsed = JSON.parse(json.stdout);
+assert.strictEqual(parsed.codexHudVersion, "0.1.0");
+assert.strictEqual(typeof parsed.cwd, "string");
+assert.strictEqual(typeof parsed.config, "object");
+assert.strictEqual(typeof parsed.git, "object");
+assert.strictEqual(Array.isArray(parsed.config.nativeStatusItems), true);
+assert.strictEqual(parsed.config.projectPath, null);
+
+const text = run([]);
+assert.strictEqual(text.status, 0, text.stderr);
+assert.match(text.stdout, /Codex HUD 0\.1\.0/);
+assert.match(text.stdout, /Workspace/);
+
+console.log("codex-hud smoke tests passed");
