@@ -405,7 +405,7 @@ function formatDurationUntil(epochSeconds) {
 function formatReasoningEffort(value) {
   if (!value) return null;
   const normalized = String(value).trim();
-  if (/^x[-_ ]?high$/i.test(normalized)) return "xHigh";
+  if (/^x[-_ ]?high$/i.test(normalized)) return "xhigh";
   if (/^high$/i.test(normalized)) return "High";
   if (/^medium$/i.test(normalized)) return "Med";
   if (/^low$/i.test(normalized)) return "Low";

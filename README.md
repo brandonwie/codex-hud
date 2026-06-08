@@ -13,7 +13,7 @@ HUD script to render in the real Codex footer.
 - Codex version, model, reasoning effort, sandbox, and approval mode
 - Native Codex status-line item count and color setting
 - Compact usage parsed from Codex rollout logs, for example
-  `gpt-5.5 xHigh · 3b git:(main*) · CTX:34% | 5H:33%(3.3H) | 7D:47%(3.7D)`
+  `gpt-5.5 xhigh · 3b git:(main*) · CTX:34% | 5H:33%(3.3H) | 7D:47%(3.7D)`
 - Current working directory, git branch, dirty counts, and repo root
 - Project hints such as package name, nearby `AGENTS.md`, and 3B
   `ACTIVE-STATUS.md` priority when present
