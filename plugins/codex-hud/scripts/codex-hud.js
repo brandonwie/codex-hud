@@ -5,7 +5,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const VERSION = "0.2.3";
+const VERSION = "0.2.4";
 const DEFAULT_TIMEOUT_MS = 1200;
 const RESET = "\x1b[0m";
 const COLORS = {

@@ -90,6 +90,15 @@ const shim = path.join(shimRoot, "codex");
 fs.writeFileSync(launcher, "#!/usr/bin/env bash\nexit 0\n");
 fs.chmodSync(launcher, 0o755);
 
+const { installLauncher } = require("./install-patched-codex");
+const generatedLauncher = installLauncher(path.join(shimRoot, "codex-hud-codex"), {
+  prefix: shimRoot,
+  launcherName: "generated-codex-hud-tui",
+});
+const generatedLauncherText = fs.readFileSync(generatedLauncher, "utf8");
+assert(generatedLauncherText.includes("exec -a codex "), "launcher should preserve argv[0] as codex for terminal process detection");
+assert(generatedLauncherText.includes("--line --color"));
+
 const parsed = parseArgs(["--make-default", "--force-shim", "--prefix", shimRoot]);
 assert.strictEqual(parsed.makeDefault, true);
 assert.strictEqual(parsed.forceShim, true);

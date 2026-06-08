@@ -460,7 +460,7 @@ function installLauncher(installedBinary, args) {
   const script = `#!/usr/bin/env bash
 set -euo pipefail
 
-exec ${shellQuote(installedBinary)} \\
+exec -a codex ${shellQuote(installedBinary)} \\
   -c ${shellQuote(`tui.status_line_command=${JSON.stringify(command)}`)} \\
   "$@"
 `;
@@ -600,6 +600,7 @@ module.exports = {
   defaultStatusLineCommand,
   detectCodexVersion,
   installDefaultShim,
+  installLauncher,
   isManagedDefaultShim,
   parseArgs,
   patchSource,
