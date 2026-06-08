@@ -5,7 +5,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const VERSION = "0.1.2";
+const VERSION = "0.2.1";
 const DEFAULT_TIMEOUT_MS = 1200;
 
 function usage() {
@@ -14,7 +14,7 @@ function usage() {
     "",
     "Usage:",
     "  codex-hud             Print a multiline Codex context HUD",
-    "  codex-hud --line      Print compact CTX/Sesh/Week usage only",
+    "  codex-hud --line      Print compact model, git, and CTX/5H/7D usage",
     "  codex-hud --status-line",
     "                        Alias for --line",
     "  codex-hud --json      Print the same data as JSON",
@@ -391,33 +391,64 @@ function formatPercent(value) {
 function formatDurationUntil(epochSeconds) {
   const seconds = Number(epochSeconds) - Date.now() / 1000;
   if (!Number.isFinite(seconds)) return "?";
-  if (seconds <= 0) return "now";
+  if (seconds <= 0) return "NOW";
 
   const hours = seconds / 3600;
   if (hours < 24) {
-    return (hours < 10 ? hours.toFixed(1) : Math.round(hours).toString()) + "h";
+    return (hours < 10 ? hours.toFixed(1) : Math.round(hours).toString()) + "H";
   }
 
   const days = hours / 24;
-  return (days < 10 ? days.toFixed(1) : Math.round(days).toString()) + "d";
+  return (days < 10 ? days.toFixed(1) : Math.round(days).toString()) + "D";
+}
+
+function formatReasoningEffort(value) {
+  if (!value) return null;
+  const normalized = String(value).trim();
+  if (/^x[-_ ]?high$/i.test(normalized)) return "xHigh";
+  if (/^high$/i.test(normalized)) return "High";
+  if (/^medium$/i.test(normalized)) return "Med";
+  if (/^low$/i.test(normalized)) return "Low";
+  return normalized;
 }
 
 function formatRate(label, window) {
-  if (!window) return label + " ?";
+  if (!window) return label + ":?";
   const pct = formatPercent(window.usedPercent);
   const remaining = window.resetsAt ? "(" + formatDurationUntil(window.resetsAt) + ")" : "";
-  return label + " " + pct + remaining;
+  return label + ":" + pct + remaining;
+}
+
+function statusProjectName(data) {
+  if (data.project.package && data.project.package.name) return data.project.package.name;
+  if (data.git.available && data.git.root) return path.basename(data.git.root);
+  return path.basename(data.cwd);
+}
+
+function statusGitBranch(data) {
+  if (!data.git.available) return null;
+  return data.git.branch + (data.git.dirty > 0 ? "*" : "");
+}
+
+function statusModel(data) {
+  const model = data.config.model || (data.codexVersion || "").split(/\s+/)[0] || null;
+  const reasoning = formatReasoningEffort(data.config.reasoning);
+  return [model, reasoning].filter(Boolean).join(" ") || null;
 }
 
 function formatUsageLine(data) {
   const usage = data.usage || {};
   const context = usage.context || {};
   const rateLimits = usage.rateLimits || {};
-  return [
-    "C " + formatPercent(context.usedPercent),
-    formatRate("5", rateLimits.primary),
-    formatRate("W", rateLimits.secondary),
+  const usageLine = [
+    "CTX:" + formatPercent(context.usedPercent),
+    formatRate("5H", rateLimits.primary),
+    formatRate("7D", rateLimits.secondary),
   ].join(" | ");
+  const project = statusProjectName(data);
+  const branch = statusGitBranch(data);
+  const workspace = branch ? project + " git:(" + branch + ")" : project;
+  return [statusModel(data), workspace, usageLine].filter(Boolean).join(" · ");
 }
 
 function formatText(data) {
