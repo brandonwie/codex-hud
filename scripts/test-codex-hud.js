@@ -22,7 +22,7 @@ const json = run(["--json"]);
 assert.strictEqual(json.status, 0, json.stderr);
 
 const parsed = JSON.parse(json.stdout);
-assert.strictEqual(parsed.codexHudVersion, "0.2.2");
+assert.strictEqual(parsed.codexHudVersion, "0.2.3");
 assert.strictEqual(typeof parsed.cwd, "string");
 assert.strictEqual(typeof parsed.config, "object");
 assert.strictEqual(typeof parsed.git, "object");
@@ -32,7 +32,7 @@ assert.strictEqual(typeof parsed.usage, "object");
 
 const text = run([]);
 assert.strictEqual(text.status, 0, text.stderr);
-assert.match(text.stdout, /Codex HUD 0\.2\.2/);
+assert.match(text.stdout, /Codex HUD 0\.2\.3/);
 assert.match(text.stdout, /Workspace/);
 assert.match(text.stdout, /usage: .+ · .+ · CTX:.+ \| 5H:.+ \| 7D:.+/);
 

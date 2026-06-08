@@ -4,7 +4,13 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { patchSource } = require("./install-patched-codex");
+const {
+  installDefaultShim,
+  isManagedDefaultShim,
+  parseArgs,
+  patchSource,
+  uninstallDefaultShim,
+} = require("./install-patched-codex");
 
 function writeFile(root, relativePath, contents) {
   const filePath = path.join(root, relativePath);
@@ -77,5 +83,42 @@ assert(statusSurfaces.includes("fn custom_status_line_from_command"));
 assert(statusSurfaces.includes("std::process::Command::new"));
 assert(statusSurfaces.includes("fn ansi_status_line_to_line"));
 assert(statusSurfaces.includes("ratatui::style::Color::Indexed"));
+
+const shimRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-shim-test-"));
+const launcher = path.join(shimRoot, "codex-hud-tui");
+const shim = path.join(shimRoot, "codex");
+fs.writeFileSync(launcher, "#!/usr/bin/env bash\nexit 0\n");
+fs.chmodSync(launcher, 0o755);
+
+const parsed = parseArgs(["--make-default", "--force-shim", "--prefix", shimRoot]);
+assert.strictEqual(parsed.makeDefault, true);
+assert.strictEqual(parsed.forceShim, true);
+assert.strictEqual(parsed.prefix, shimRoot);
+
+const shimArgs = {
+  prefix: shimRoot,
+  launcherName: "codex-hud-tui",
+  forceShim: false,
+};
+
+const installedShim = installDefaultShim(launcher, shimArgs);
+assert.deepStrictEqual(installedShim, { target: shim, status: "installed" });
+assert.strictEqual(fs.readlinkSync(shim), launcher);
+assert.strictEqual(isManagedDefaultShim(shim, launcher), true);
+
+const unchangedShim = installDefaultShim(launcher, shimArgs);
+assert.deepStrictEqual(unchangedShim, { target: shim, status: "unchanged" });
+
+const removedShim = uninstallDefaultShim(shimArgs);
+assert.deepStrictEqual(removedShim, { target: shim, status: "removed" });
+assert.strictEqual(fs.existsSync(shim), false);
+
+fs.writeFileSync(shim, "#!/usr/bin/env bash\nexit 1\n");
+assert.throws(() => installDefaultShim(launcher, shimArgs), /Refusing to replace existing codex/);
+assert.throws(() => uninstallDefaultShim(shimArgs), /not a Codex HUD-managed shim/);
+
+const forcedShim = installDefaultShim(launcher, { ...shimArgs, forceShim: true });
+assert.deepStrictEqual(forcedShim, { target: shim, status: "installed" });
+assert.strictEqual(isManagedDefaultShim(shim, launcher), true);
 
 console.log("patched Codex installer tests passed");

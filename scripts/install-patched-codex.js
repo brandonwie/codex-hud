@@ -22,6 +22,9 @@ Options:
   --repo <url>              Upstream source repo. Defaults to ${OPENAI_CODEX_REPO}.
   --cache-dir <dir>         Source cache directory. Defaults to ~/.cache/codex-hud.
   --dry-run                 Clone/check out and patch source, but do not build or install.
+  --make-default            Symlink ~/.local/bin/codex to the HUD launcher after install.
+  --force-shim              Replace an existing ~/.local/bin/codex when used with --make-default.
+  --uninstall-shim          Remove the managed ~/.local/bin/codex shim and exit.
   --replace-codex           Allow --bin-name codex. Without this, overwriting codex is refused.
   --print-config            Print the TOML line for this repo's HUD command and exit.
   -h, --help                Show this help.
@@ -67,6 +70,9 @@ function parseArgs(argv) {
     launcherName: DEFAULT_LAUNCHER_NAME,
     cacheDir: path.join(os.homedir(), ".cache", "codex-hud"),
     dryRun: false,
+    makeDefault: false,
+    forceShim: false,
+    uninstallShim: false,
     replaceCodex: false,
     printConfig: false,
   };
@@ -77,6 +83,12 @@ function parseArgs(argv) {
       args.help = true;
     } else if (arg === "--dry-run") {
       args.dryRun = true;
+    } else if (arg === "--make-default") {
+      args.makeDefault = true;
+    } else if (arg === "--force-shim") {
+      args.forceShim = true;
+    } else if (arg === "--uninstall-shim") {
+      args.uninstallShim = true;
     } else if (arg === "--replace-codex") {
       args.replaceCodex = true;
     } else if (arg === "--print-config") {
@@ -459,6 +471,71 @@ exec ${shellQuote(installedBinary)} \\
   return launcher;
 }
 
+function defaultShimPath(args) {
+  return path.join(args.prefix, "codex");
+}
+
+function isManagedDefaultShim(target, launcher) {
+  if (!fs.existsSync(target)) {
+    return false;
+  }
+
+  const stat = fs.lstatSync(target);
+  if (!stat.isSymbolicLink()) {
+    return false;
+  }
+
+  const rawLink = fs.readlinkSync(target);
+  const resolvedLink = path.resolve(path.dirname(target), rawLink);
+  if (resolvedLink === launcher) {
+    return true;
+  }
+
+  try {
+    return fs.realpathSync.native(target) === fs.realpathSync.native(launcher);
+  } catch (_) {
+    return false;
+  }
+}
+
+function installDefaultShim(launcher, args) {
+  const target = defaultShimPath(args);
+  if (path.resolve(target) === path.resolve(launcher)) {
+    throw new Error("Refusing to make the launcher itself the codex shim. Use a distinct --launcher-name.");
+  }
+
+  fs.mkdirSync(args.prefix, { recursive: true });
+  if (fs.existsSync(target)) {
+    if (isManagedDefaultShim(target, launcher)) {
+      return { target, status: "unchanged" };
+    }
+    if (!args.forceShim) {
+      throw new Error(`Refusing to replace existing codex at ${target}. Pass --force-shim only if you want this PATH entry to launch Codex HUD.`);
+    }
+    if (fs.lstatSync(target).isDirectory()) {
+      throw new Error(`Refusing to replace directory at ${target}.`);
+    }
+    fs.unlinkSync(target);
+  }
+
+  fs.symlinkSync(launcher, target);
+  return { target, status: "installed" };
+}
+
+function uninstallDefaultShim(args) {
+  const target = defaultShimPath(args);
+  const launcher = path.join(args.prefix, args.launcherName);
+  if (!fs.existsSync(target)) {
+    return { target, status: "missing" };
+  }
+  if (!isManagedDefaultShim(target, launcher)) {
+    throw new Error(`Refusing to remove ${target} because it is not a Codex HUD-managed shim.`);
+  }
+
+  fs.unlinkSync(target);
+  return { target, status: "removed" };
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -468,6 +545,12 @@ function main() {
 
   if (args.printConfig) {
     console.log(`status_line_command = ${JSON.stringify(defaultStatusLineCommand())}`);
+    return;
+  }
+
+  if (args.uninstallShim) {
+    const result = uninstallDefaultShim(args);
+    console.log(result.status === "removed" ? `Removed Codex HUD shim: ${result.target}` : `No Codex HUD shim found at: ${result.target}`);
     return;
   }
 
@@ -495,6 +578,11 @@ function main() {
   const launcher = installLauncher(installed, args);
   console.log(`Installed patched Codex as: ${installed}`);
   console.log(`Installed HUD launcher as: ${launcher}`);
+  if (args.makeDefault) {
+    const shim = installDefaultShim(launcher, args);
+    console.log(`${shim.status === "unchanged" ? "Kept" : "Installed"} default codex shim: ${shim.target}`);
+    console.log("Run `rehash` if your shell cached the old codex path.");
+  }
   console.log("Add this under your existing [tui] table:");
   console.log(`status_line_command = ${JSON.stringify(defaultStatusLineCommand())}`);
 }
@@ -511,5 +599,9 @@ if (require.main === module) {
 module.exports = {
   defaultStatusLineCommand,
   detectCodexVersion,
+  installDefaultShim,
+  isManagedDefaultShim,
+  parseArgs,
   patchSource,
+  uninstallDefaultShim,
 };

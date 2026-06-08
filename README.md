@@ -59,23 +59,39 @@ The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and
 installs it as `~/.local/bin/codex-hud-codex`. It also writes
 `~/.local/bin/codex-hud-tui`, a launcher that passes the colored HUD command through
 Codex's `-c tui.status_line_command=...` override without changing
-`~/.codex/config.toml`. It refuses to overwrite `codex` unless you explicitly
-pass `--replace-codex`.
+`~/.codex/config.toml`.
 
-Launch a HUD-enabled session with:
+Safe launcher mode leaves your normal `codex` command alone:
 
 ```bash
 codex-hud-tui
 ```
 
-If you prefer a persistent config, add the printed line under your existing
-`[tui]` table, but note that stock Codex versions may reject unknown fields:
+To make a fresh `codex` launch use the HUD-enabled TUI, opt in to the managed
+shim:
 
-```toml
-status_line_command = "node /Users/brandonwie/dev/personal/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line"
+```bash
+npm run patch:codex -- --make-default
+rehash
+which codex
+codex
 ```
 
-For color, use:
+`which codex` should resolve to `~/.local/bin/codex`. The installer refuses to
+replace an existing `~/.local/bin/codex` unless you pass `--force-shim`, and it
+still refuses to install the patched binary itself as `codex` unless you pass
+`--replace-codex`.
+
+Rollback removes only the managed `codex` shim:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+If you prefer a persistent config, add the printed line under your existing
+`[tui]` table, but note that stock Codex versions may reject unknown fields:
 
 ```toml
 status_line_command = "node /Users/brandonwie/dev/personal/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
