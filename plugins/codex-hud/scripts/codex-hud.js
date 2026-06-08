@@ -533,13 +533,13 @@ function formatTokenUsage(tokens, colorEnabled) {
   if (!tokens) return labelText + colorize(": ?", COLORS.dim, colorEnabled);
 
   const total = colorize(formatTokenCount(tokens.total), COLORS.cyan, colorEnabled);
-  const input = colorize(formatTokenCount(tokens.input), COLORS.dim, colorEnabled);
-  const output = colorize(formatTokenCount(tokens.output), COLORS.dim, colorEnabled);
-  const cache = colorize(formatTokenCount(tokens.cache), COLORS.dim, colorEnabled);
+  const input = colorize(formatTokenCount(tokens.input), COLORS.mint, colorEnabled);
+  const output = colorize(formatTokenCount(tokens.output), COLORS.violet, colorEnabled);
+  const cache = colorize(formatTokenCount(tokens.cache), COLORS.amber, colorEnabled);
   return labelText + colorize(": ", COLORS.dim, colorEnabled) + total
-    + colorize(" (I: ", COLORS.dim, colorEnabled) + input
-    + colorize(", O: ", COLORS.dim, colorEnabled) + output
-    + colorize(", cache: ", COLORS.dim, colorEnabled) + cache
+    + colorize("(I:", COLORS.dim, colorEnabled) + input
+    + colorize(",O:", COLORS.dim, colorEnabled) + output
+    + colorize(",C:", COLORS.dim, colorEnabled) + cache
     + colorize(")", COLORS.dim, colorEnabled);
 }
 
@@ -560,7 +560,8 @@ function statusGitBranch(data) {
 }
 
 function statusModel(data) {
-  const model = data.config.model || (data.codexVersion || "").split(/\s+/)[0] || null;
+  const rawModel = data.config.model || (data.codexVersion || "").split(/\s+/)[0] || null;
+  const model = rawModel ? String(rawModel).replace(/^gpt-/i, "") : null;
   const reasoning = formatReasoningEffort(data.config.reasoning);
   return [model, reasoning].filter(Boolean).join(" ") || null;
 }
@@ -572,11 +573,7 @@ function formatWorkspace(data, colorEnabled) {
 
   const cleanBranch = branch.endsWith("*") ? branch.slice(0, -1) : branch;
   const dirty = branch.endsWith("*") ? colorize("*", COLORS.amber, colorEnabled) : "";
-  const git = colorize(" git:(", COLORS.violet, colorEnabled)
-    + colorize(cleanBranch, COLORS.violet, colorEnabled)
-    + dirty
-    + colorize(")", COLORS.violet, colorEnabled);
-  return project + git;
+  return project + " " + colorize(cleanBranch, COLORS.violet, colorEnabled) + dirty;
 }
 
 function formatUsageLine(data, options = {}) {
@@ -598,7 +595,7 @@ function formatUsageLine(data, options = {}) {
     model ? colorize(model, COLORS.neonViolet, colorEnabled) : null,
     workspace,
     usageLine,
-  ].filter(Boolean).join(colorize(" · ", COLORS.dim, colorEnabled));
+  ].filter(Boolean).join(colorize(" | ", COLORS.dim, colorEnabled));
 }
 
 function formatText(data) {

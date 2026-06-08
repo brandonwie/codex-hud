@@ -37,11 +37,14 @@ const text = run([]);
 assert.strictEqual(text.status, 0, text.stderr);
 assert.match(text.stdout, /Codex HUD 0\.2\.4/);
 assert.match(text.stdout, /Workspace/);
-assert.match(text.stdout, /usage: .+ · .+ node v.+ · Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+/);
+assert.match(text.stdout, /usage: .+ \| .+ .+\*? node v.+ \| Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+/);
 
 const line = run(["--line"]);
 assert.strictEqual(line.status, 0, line.stderr);
-assert.match(line.stdout.trim(), /^.+ · .+ node v.+ · Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+$/);
+assert.match(line.stdout.trim(), /^.+ \| .+ .+\*? node v.+ \| Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+$/);
+assert.doesNotMatch(line.stdout, /gpt-/);
+assert.doesNotMatch(line.stdout, /git:\(/);
+assert.doesNotMatch(line.stdout, /·/);
 
 const colorLine = run(["--line", "--color"]);
 assert.strictEqual(colorLine.status, 0, colorLine.stderr);
@@ -49,12 +52,17 @@ assert.match(colorLine.stdout, /\x1b\[38;5;135m/);
 assert.match(colorLine.stdout, /\x1b\[38;5;245m/);
 assert.match(
   colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
-  /^.+ · .+ node v.+ · Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+$/
+  /^.+ \| .+ .+\*? node v.+ \| Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+$/
 );
 
 const tmpCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-test-"));
 try {
   const nowMs = Date.parse("2026-06-08T00:00:00.000Z");
+  fs.writeFileSync(
+    path.join(tmpCodexHome, "config.toml"),
+    'model = "gpt-5.5"\nmodel_reasoning_effort = "xhigh"\n',
+    "utf8"
+  );
   const sessionDir = path.join(tmpCodexHome, "sessions", "2026", "06", "08");
   fs.mkdirSync(sessionDir, { recursive: true });
   fs.writeFileSync(
@@ -104,7 +112,7 @@ try {
   assert.strictEqual(fixtureLine.status, 0, fixtureLine.stderr);
   assert.match(
     fixtureLine.stdout.trim(),
-    /node v.+ · Ctx: 26% \| 5h: 0%\(4\.4h,12%\) \| 7d: 6%\(6\.4d,9%\) \| Tkn: 36\.1M \(I: 399k, O: 583k, cache: 35\.1M\)$/
+    /^5\.5 xhigh \| codex-hud .+\*? node v.+ \| Ctx: 26% \| 5h: 0%\(4\.4h,12%\) \| 7d: 6%\(6\.4d,9%\) \| Tkn: 36\.1M\(I:399k,O:583k,C:35\.1M\)$/
   );
 } finally {
   fs.rmSync(tmpCodexHome, { recursive: true, force: true });
