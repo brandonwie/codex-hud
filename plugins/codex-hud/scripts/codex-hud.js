@@ -24,7 +24,7 @@ function usage() {
     "",
     "Usage:",
     "  codex-hud             Print a multiline Codex context HUD",
-    "  codex-hud --line      Print compact model, git, and CTX/5H/7D usage",
+    "  codex-hud --line      Print compact model, git, runtime, usage, and tokens",
     "  codex-hud --line --color",
     "                        Print compact usage with 256-color ANSI styling",
     "  codex-hud --status-line",
@@ -274,7 +274,7 @@ function percentFromTokens(usage, contextWindow) {
 
 function rateWindow(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const usedPercent = Number(raw.used_percent);
+  const usedPercent = Number(raw.used_percent ?? raw.used_percentage);
   const windowMinutes = Number(raw.window_minutes);
   const resetsAt = Number(raw.resets_at);
   return {
@@ -284,9 +284,31 @@ function rateWindow(raw) {
   };
 }
 
+function tokenNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function tokenSummary(raw) {
+  if (!raw || typeof raw !== "object") return null;
+
+  const input = tokenNumber(raw.input_tokens);
+  const output = tokenNumber(raw.output_tokens);
+  const cache = tokenNumber(raw.cached_input_tokens ?? raw.cache_read_input_tokens);
+  const fallbackTotal = tokenNumber(raw.total_tokens);
+  const componentTotal = [input, output, cache]
+    .filter((value) => value !== null)
+    .reduce((sum, value) => sum + value, 0);
+  const total = componentTotal > 0 ? componentTotal : fallbackTotal;
+
+  if (total === null) return null;
+  return { total, input, output, cache };
+}
+
 function latestUsage(codexHome) {
   const files = listSessionFiles(codexHome);
   let latestContext = null;
+  let latestTokens = null;
   let latestRateLimits = null;
   let sourceFile = null;
 
@@ -308,20 +330,28 @@ function latestUsage(codexHome) {
         sourceFile = file;
       }
 
+      if (!latestTokens && tokenCount.info) {
+        latestTokens = tokenSummary(tokenCount.info.total_token_usage || tokenCount.info.last_token_usage);
+      }
+
       if (!latestRateLimits && tokenCount.rateLimits) {
+        const primary = rateWindow(tokenCount.rateLimits.primary);
+        const secondary = rateWindow(tokenCount.rateLimits.secondary);
+        if (!primary && !secondary) continue;
         latestRateLimits = {
-          primary: rateWindow(tokenCount.rateLimits.primary),
-          secondary: rateWindow(tokenCount.rateLimits.secondary),
+          primary,
+          secondary,
           planType: tokenCount.rateLimits.plan_type || null,
           limitId: tokenCount.rateLimits.limit_id || null,
           timestamp: tokenCount.timestamp,
         };
       }
 
-      if (latestContext && latestRateLimits) {
+      if (latestContext && latestTokens && latestRateLimits) {
         return {
           sourceFile,
           context: latestContext,
+          tokens: latestTokens,
           rateLimits: latestRateLimits,
         };
       }
@@ -331,6 +361,7 @@ function latestUsage(codexHome) {
   return {
     sourceFile,
     context: latestContext,
+    tokens: latestTokens,
     rateLimits: latestRateLimits,
   };
 }
@@ -338,6 +369,16 @@ function latestUsage(codexHome) {
 function commandVersion(command, args) {
   const out = run(command, args);
   return out ? out.split(/\r?\n/)[0] : null;
+}
+
+function runtimeInfo(cwd) {
+  if (findUp(cwd, "package.json") || findUp(cwd, ".nvmrc") || findUp(cwd, ".node-version")) {
+    return {
+      label: "node",
+      version: commandVersion("node", ["-v"]) || process.version,
+    };
+  }
+  return null;
 }
 
 function mergedConfigValue(configs, key) {
@@ -359,6 +400,7 @@ function collect() {
     codexHome,
     codexVersion: commandVersion("codex", ["--version"]),
     nodeVersion: process.version,
+    runtime: runtimeInfo(cwd),
     config: {
       userPath: configs.userConfig,
       projectPath: configs.projectConfig,
@@ -400,6 +442,11 @@ function formatPercent(value) {
   return Number.isFinite(value) ? Math.round(value) + "%" : "?";
 }
 
+function nowMs() {
+  const override = Number(process.env.CODEX_HUD_NOW_MS);
+  return Number.isFinite(override) && override > 0 ? override : Date.now();
+}
+
 function colorize(text, color, colorEnabled) {
   return colorEnabled && color ? color + text + RESET : text;
 }
@@ -412,17 +459,17 @@ function colorByPercent(value) {
 }
 
 function formatDurationUntil(epochSeconds) {
-  const seconds = Number(epochSeconds) - Date.now() / 1000;
+  const seconds = Number(epochSeconds) - nowMs() / 1000;
   if (!Number.isFinite(seconds)) return "?";
-  if (seconds <= 0) return "NOW";
+  if (seconds <= 0) return "now";
 
   const hours = seconds / 3600;
   if (hours < 24) {
-    return (hours < 10 ? hours.toFixed(1) : Math.round(hours).toString()) + "H";
+    return (hours < 10 ? hours.toFixed(1) : Math.round(hours).toString()) + "h";
   }
 
   const days = hours / 24;
-  return (days < 10 ? days.toFixed(1) : Math.round(days).toString()) + "D";
+  return (days < 10 ? days.toFixed(1) : Math.round(days).toString()) + "d";
 }
 
 function formatReasoningEffort(value) {
@@ -435,21 +482,70 @@ function formatReasoningEffort(value) {
   return normalized;
 }
 
-function formatMetric(label, percent, remaining, colorEnabled) {
+function colorByPaceDelta(percent, pace) {
+  if (!Number.isFinite(percent) || !Number.isFinite(pace)) return COLORS.dim;
+  const diff = percent - pace;
+  if (diff > 15) return COLORS.coral;
+  if (diff > 0) return COLORS.amber;
+  return COLORS.mint;
+}
+
+function formatMetric(label, percent, detail, colorEnabled) {
   const labelText = colorize(label, COLORS.dim, colorEnabled);
   const percentText = colorize(formatPercent(percent), colorByPercent(percent), colorEnabled);
-  const remainingText = remaining
-    ? colorize("(" + remaining + ")", COLORS.dim, colorEnabled)
+  const detailText = detail
+    ? colorize("(" + detail + ")", COLORS.dim, colorEnabled)
     : "";
-  return labelText + colorize(":", COLORS.dim, colorEnabled) + percentText + remainingText;
+  return labelText + colorize(": ", COLORS.dim, colorEnabled) + percentText + detailText;
+}
+
+function ratePacePercent(window) {
+  if (!window || !window.resetsAt || !window.windowMinutes) return null;
+  const remainingMs = Math.max(0, (window.resetsAt * 1000) - nowMs());
+  const windowMs = window.windowMinutes * 60000;
+  const elapsedMs = windowMs - remainingMs;
+  if (elapsedMs < 0 || elapsedMs > windowMs) return null;
+  return Math.round((elapsedMs / windowMs) * 100);
 }
 
 function formatRate(label, window, colorEnabled) {
   if (!window) {
-    return colorize(label, COLORS.dim, colorEnabled) + colorize(":?", COLORS.dim, colorEnabled);
+    return colorize(label, COLORS.dim, colorEnabled) + colorize(": ?", COLORS.dim, colorEnabled);
   }
   const remaining = window.resetsAt ? formatDurationUntil(window.resetsAt) : "";
-  return formatMetric(label, window.usedPercent, remaining, colorEnabled);
+  const pace = ratePacePercent(window);
+  const paceText = pace !== null
+    ? colorize(formatPercent(pace), colorByPaceDelta(window.usedPercent, pace), colorEnabled)
+    : "";
+  const detail = [remaining, paceText].filter(Boolean).join(",");
+  return formatMetric(label, window.usedPercent, detail, colorEnabled);
+}
+
+function formatTokenCount(value) {
+  if (!Number.isFinite(value)) return "?";
+  if (value >= 1000000) return (value / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (value >= 1000) return Math.round(value / 1000) + "k";
+  return Math.round(value).toString();
+}
+
+function formatTokenUsage(tokens, colorEnabled) {
+  const labelText = colorize("Tkn", COLORS.dim, colorEnabled);
+  if (!tokens) return labelText + colorize(": ?", COLORS.dim, colorEnabled);
+
+  const total = colorize(formatTokenCount(tokens.total), COLORS.cyan, colorEnabled);
+  const input = colorize(formatTokenCount(tokens.input), COLORS.dim, colorEnabled);
+  const output = colorize(formatTokenCount(tokens.output), COLORS.dim, colorEnabled);
+  const cache = colorize(formatTokenCount(tokens.cache), COLORS.dim, colorEnabled);
+  return labelText + colorize(": ", COLORS.dim, colorEnabled) + total
+    + colorize(" (I: ", COLORS.dim, colorEnabled) + input
+    + colorize(", O: ", COLORS.dim, colorEnabled) + output
+    + colorize(", cache: ", COLORS.dim, colorEnabled) + cache
+    + colorize(")", COLORS.dim, colorEnabled);
+}
+
+function formatRuntime(runtime, colorEnabled) {
+  if (!runtime || !runtime.label || !runtime.version) return null;
+  return colorize(runtime.label + " " + runtime.version, COLORS.dim, colorEnabled);
 }
 
 function statusProjectName(data) {
@@ -489,14 +585,18 @@ function formatUsageLine(data, options = {}) {
   const context = usage.context || {};
   const rateLimits = usage.rateLimits || {};
   const usageLine = [
-    formatMetric("CTX", context.usedPercent, "", colorEnabled),
-    formatRate("5H", rateLimits.primary, colorEnabled),
-    formatRate("7D", rateLimits.secondary, colorEnabled),
+    formatMetric("Ctx", context.usedPercent, "", colorEnabled),
+    formatRate("5h", rateLimits.primary, colorEnabled),
+    formatRate("7d", rateLimits.secondary, colorEnabled),
+    formatTokenUsage(usage.tokens, colorEnabled),
   ].join(colorize(" | ", COLORS.dim, colorEnabled));
   const model = statusModel(data);
+  const workspace = [formatWorkspace(data, colorEnabled), formatRuntime(data.runtime, colorEnabled)]
+    .filter(Boolean)
+    .join(" ");
   return [
     model ? colorize(model, COLORS.neonViolet, colorEnabled) : null,
-    formatWorkspace(data, colorEnabled),
+    workspace,
     usageLine,
   ].filter(Boolean).join(colorize(" · ", COLORS.dim, colorEnabled));
 }
