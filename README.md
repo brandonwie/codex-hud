@@ -13,7 +13,9 @@ HUD script to render in the real Codex footer.
 - Codex version, model, reasoning effort, sandbox, and approval mode
 - Native Codex status-line item count and color setting
 - Compact usage parsed from Codex rollout logs, for example
-  `5.5 xhigh | codex-hud main* node v24.16.0 | Ctx: 26% | 5h: 0%(4.4h,12%) | 7d: 6%(6.4d,9%) | Tkn: 36.1M(I:399k,O:583k,C:35.1M)`
+  `5.5 xhigh | codex-hud main* | Ctx: 26% | 5h: 0%(4.4h,12%) | 7d: 6%(6.4d,9%) | Tkn: 36.1M(I:399k,O:583k,C:35.1M)`
+  (segments, labels, colors, and thresholds are configurable — see
+  [Configuration](#configuration))
 - Current working directory, git branch, dirty counts, and repo root
 - Project hints such as package name, nearby `AGENTS.md`, and 3B
   `ACTIVE-STATUS.md` priority when present
@@ -25,13 +27,18 @@ HUD script to render in the real Codex footer.
 
 ```text
 codex-hud/
-├─ .agents/plugins/marketplace.json
 ├─ plugins/
 │  └─ codex-hud/
 │     ├─ .codex-plugin/plugin.json
-│     ├─ scripts/codex-hud.js
+│     ├─ scripts/codex-hud.js        # HUD renderer + config loader
+│     ├─ vendor/toml.js              # vendored TOML parser (smol-toml)
 │     └─ skills/codex-hud/SKILL.md
-└─ scripts/test-codex-hud.js
+└─ scripts/
+   ├─ test-codex-hud.js
+   ├─ test-codex-hud-config.js
+   ├─ test-patched-codex-installer.js
+   ├─ vendor-toml.js                 # regenerates vendor/toml.js
+   └─ install-patched-codex.js
 ```
 
 ## Local Development
@@ -44,6 +51,71 @@ node plugins/codex-hud/scripts/codex-hud.js --json
 node plugins/codex-hud/scripts/codex-hud.js --watch 5
 npm test
 ```
+
+## Configuration
+
+The footer is configurable through an optional `codex-hud.toml`. With no config
+file you get the default footer shown above; every key is optional and anything
+you omit inherits the built-in default.
+
+```bash
+codex-hud --init-config     # scaffold ~/.codex/codex-hud.toml (--force to overwrite)
+codex-hud --print-config    # print the resolved, merged config as JSON
+codex-hud --config-path     # show which config files are in effect
+```
+
+### Search order
+
+Later sources override earlier ones (per key — arrays replace, scalars override):
+
+1. built-in defaults
+2. `$CODEX_HOME/codex-hud.toml` (per-user; `$CODEX_HOME` defaults to `~/.codex`)
+3. `./.codex/codex-hud.toml` (per-project; walks up to the git root)
+4. `$CODEX_HUD_CONFIG` (explicit file path via env var)
+
+A missing file is fine. A malformed or invalid file is ignored — the HUD falls
+back to defaults and prints a one-line note on stderr, so the status line never
+breaks. codex-hud keeps its own file instead of a table inside Codex's
+`config.toml`, so a bad HUD config can never stop Codex from launching.
+
+### Options
+
+```toml
+# Text placed between segments.
+separator = " | "
+
+# Which segments to show, in order. Ids:
+#   model, project, branch, runtime, ctx, 5h, 7d, tkn
+# Aliases: workspace = project + branch + runtime; context = ctx; tokens = tkn.
+# (runtime / "node vX" is available but off by default — add it to opt in.)
+segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]
+
+# Rename a segment's label (keys are segment ids).
+[labels]
+ctx = "Ctx"
+
+# Colors: a palette name, a 256-color code (0-255), or "#rrggbb" (mapped to the
+# nearest 256 color). Names: dim, coral, mint, amber, cyan, violet, neonViolet.
+# ok / warn / crit are the threshold colors shared by ctx / 5h / 7d.
+[colors]
+model = "neonViolet"
+branch = "#5fafff"
+ok = "mint"
+warn = "amber"
+crit = "coral"
+
+# Percent thresholds (0-100) that switch ctx/5h/7d between ok/warn/crit.
+[thresholds.percent]
+warn = 70
+crit = 90
+
+# Formatting toggles.
+[format]
+tokenParts = true   # false -> total only, hide (I:.. O:.. C:..)
+showPace = true     # false -> hide the pace % in 5h/7d
+```
+
+Run `codex-hud --print-config` to see the full resolved option set.
 
 ## Patched Codex Footer
 

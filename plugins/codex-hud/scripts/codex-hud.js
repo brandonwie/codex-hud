@@ -5,7 +5,17 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const VERSION = "0.2.4";
+// Vendored TOML parser (see scripts/vendor-toml.js). Loaded defensively: if the
+// vendored file is ever missing or broken, config silently disables and the HUD
+// falls back to defaults rather than crashing the status line.
+let parseToml;
+try {
+  parseToml = require("../vendor/toml.js").parse;
+} catch (_) {
+  parseToml = null;
+}
+
+const VERSION = "0.3.0";
 const DEFAULT_TIMEOUT_MS = 1200;
 const RESET = "\x1b[0m";
 const COLORS = {
@@ -24,13 +34,19 @@ function usage() {
     "",
     "Usage:",
     "  codex-hud             Print a multiline Codex context HUD",
-    "  codex-hud --line      Print compact model, git, runtime, usage, and tokens",
+    "  codex-hud --line      Print compact model, git, usage, and tokens",
     "  codex-hud --line --color",
     "                        Print compact usage with 256-color ANSI styling",
     "  codex-hud --status-line",
     "                        Alias for --line",
     "  codex-hud --json      Print the same data as JSON",
     "  codex-hud --watch 5   Refresh the text HUD every 5 seconds",
+    "  codex-hud --init-config",
+    "                        Write a starter codex-hud.toml in CODEX_HOME (--force to overwrite)",
+    "  codex-hud --print-config",
+    "                        Print the resolved, merged HUD config as JSON",
+    "  codex-hud --config-path",
+    "                        Show which codex-hud.toml files are in effect",
     "  codex-hud --help      Show this help",
     "",
     "Codex HUD complements Codex's native [tui].status_line.",
@@ -392,9 +408,11 @@ function collect() {
   const configs = resolveConfig(codexHome, cwd, git.root);
   const statusItems = tomlStringArray(configs.userText, "tui", "status_line");
   const hints = projectHints(cwd, git.root);
+  const hud = loadHudConfig(codexHome, cwd, git.root);
 
   return {
     codexHudVersion: VERSION,
+    hud,
     generatedAt: new Date().toISOString(),
     cwd,
     codexHome,
@@ -438,10 +456,6 @@ function formatHookEvents(events) {
   return parts.length ? parts.join(" ") : "none";
 }
 
-function formatPercent(value) {
-  return Number.isFinite(value) ? Math.round(value) + "%" : "?";
-}
-
 function nowMs() {
   const override = Number(process.env.CODEX_HUD_NOW_MS);
   return Number.isFinite(override) && override > 0 ? override : Date.now();
@@ -449,13 +463,6 @@ function nowMs() {
 
 function colorize(text, color, colorEnabled) {
   return colorEnabled && color ? color + text + RESET : text;
-}
-
-function colorByPercent(value) {
-  if (!Number.isFinite(value)) return COLORS.dim;
-  if (value >= 90) return COLORS.coral;
-  if (value >= 70) return COLORS.amber;
-  return COLORS.mint;
 }
 
 function formatDurationUntil(epochSeconds) {
@@ -482,23 +489,6 @@ function formatReasoningEffort(value) {
   return normalized;
 }
 
-function colorByPaceDelta(percent, pace) {
-  if (!Number.isFinite(percent) || !Number.isFinite(pace)) return COLORS.dim;
-  const diff = percent - pace;
-  if (diff > 15) return COLORS.coral;
-  if (diff > 0) return COLORS.amber;
-  return COLORS.mint;
-}
-
-function formatMetric(label, percent, detail, colorEnabled) {
-  const labelText = colorize(label, COLORS.dim, colorEnabled);
-  const percentText = colorize(formatPercent(percent), colorByPercent(percent), colorEnabled);
-  const detailText = detail
-    ? colorize("(" + detail + ")", COLORS.dim, colorEnabled)
-    : "";
-  return labelText + colorize(": ", COLORS.dim, colorEnabled) + percentText + detailText;
-}
-
 function ratePacePercent(window) {
   if (!window || !window.resetsAt || !window.windowMinutes) return null;
   const remainingMs = Math.max(0, (window.resetsAt * 1000) - nowMs());
@@ -506,46 +496,6 @@ function ratePacePercent(window) {
   const elapsedMs = windowMs - remainingMs;
   if (elapsedMs < 0 || elapsedMs > windowMs) return null;
   return Math.round((elapsedMs / windowMs) * 100);
-}
-
-function formatRate(label, window, colorEnabled) {
-  if (!window) {
-    return colorize(label, COLORS.dim, colorEnabled) + colorize(": ?", COLORS.dim, colorEnabled);
-  }
-  const remaining = window.resetsAt ? formatDurationUntil(window.resetsAt) : "";
-  const pace = ratePacePercent(window);
-  const paceText = pace !== null
-    ? colorize(formatPercent(pace), colorByPaceDelta(window.usedPercent, pace), colorEnabled)
-    : "";
-  const detail = [remaining, paceText].filter(Boolean).join(",");
-  return formatMetric(label, window.usedPercent, detail, colorEnabled);
-}
-
-function formatTokenCount(value) {
-  if (!Number.isFinite(value)) return "?";
-  if (value >= 1000000) return (value / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (value >= 1000) return Math.round(value / 1000) + "k";
-  return Math.round(value).toString();
-}
-
-function formatTokenUsage(tokens, colorEnabled) {
-  const labelText = colorize("Tkn", COLORS.dim, colorEnabled);
-  if (!tokens) return labelText + colorize(": ?", COLORS.dim, colorEnabled);
-
-  const total = colorize(formatTokenCount(tokens.total), COLORS.cyan, colorEnabled);
-  const input = colorize(formatTokenCount(tokens.input), COLORS.mint, colorEnabled);
-  const output = colorize(formatTokenCount(tokens.output), COLORS.violet, colorEnabled);
-  const cache = colorize(formatTokenCount(tokens.cache), COLORS.amber, colorEnabled);
-  return labelText + colorize(": ", COLORS.dim, colorEnabled) + total
-    + colorize("(I:", COLORS.dim, colorEnabled) + input
-    + colorize(",O:", COLORS.dim, colorEnabled) + output
-    + colorize(",C:", COLORS.dim, colorEnabled) + cache
-    + colorize(")", COLORS.dim, colorEnabled);
-}
-
-function formatRuntime(runtime, colorEnabled) {
-  if (!runtime || !runtime.label || !runtime.version) return null;
-  return colorize(runtime.label + " " + runtime.version, COLORS.dim, colorEnabled);
 }
 
 function statusProjectName(data) {
@@ -566,36 +516,603 @@ function statusModel(data) {
   return [model, reasoning].filter(Boolean).join(" ") || null;
 }
 
-function formatWorkspace(data, colorEnabled) {
-  const project = colorize(statusProjectName(data), COLORS.cyan, colorEnabled);
-  const branch = statusGitBranch(data);
-  if (!branch) return project;
+// ── Config-driven footer rendering ──────────────────────────────────────────
+// resolveColor maps a user color value to a 256-color ANSI fg sequence:
+//   - a named palette key (read from COLORS, so defaults stay byte-identical)
+//   - a 256 index 0-255 (number or numeric string)
+//   - a "#rrggbb" hex (mapped to the NEAREST xterm-256 color)
+// Anything invalid returns `fallback` — never raw/garbage ANSI.
+function resolveColor(input, fallback) {
+  if (input == null) return fallback;
+  if (typeof input === "string" && Object.prototype.hasOwnProperty.call(COLORS, input)) {
+    return COLORS[input];
+  }
+  if (typeof input === "number" || (typeof input === "string" && /^\d{1,3}$/.test(input))) {
+    const n = Number(input);
+    if (Number.isInteger(n) && n >= 0 && n <= 255) return "\x1b[38;5;" + n + "m";
+    return fallback;
+  }
+  if (typeof input === "string" && /^#?[0-9a-fA-F]{6}$/.test(input)) {
+    const hex = input.replace(/^#/, "");
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return "\x1b[38;5;" + nearestXterm256(r, g, b) + "m";
+  }
+  return fallback;
+}
 
-  const cleanBranch = branch.endsWith("*") ? branch.slice(0, -1) : branch;
-  const dirty = branch.endsWith("*") ? colorize("*", COLORS.amber, colorEnabled) : "";
-  return project + " " + colorize(cleanBranch, COLORS.violet, colorEnabled) + dirty;
+// Map an RGB triple to the closest xterm-256 index, comparing the 6x6x6 color
+// cube (indices 16-231) against the 24-step grayscale ramp (232-255).
+function nearestXterm256(r, g, b) {
+  const STEPS = [0, 95, 135, 175, 215, 255];
+  const nearestStep = (v) => {
+    let best = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < STEPS.length; i++) {
+      const d = Math.abs(STEPS[i] - v);
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    }
+    return best;
+  };
+  const ri = nearestStep(r);
+  const gi = nearestStep(g);
+  const bi = nearestStep(b);
+  const cubeIdx = 16 + 36 * ri + 6 * gi + bi;
+  const cube = [STEPS[ri], STEPS[gi], STEPS[bi]];
+
+  const gray = Math.round((r + g + b) / 3);
+  const grayLevel = Math.max(0, Math.min(23, Math.round((gray - 8) / 10)));
+  const grayVal = 8 + grayLevel * 10;
+  const grayIdx = 232 + grayLevel;
+
+  const dist = (a, c) => (a[0] - c[0]) ** 2 + (a[1] - c[1]) ** 2 + (a[2] - c[2]) ** 2;
+  return dist(cube, [r, g, b]) <= dist([grayVal, grayVal, grayVal], [r, g, b]) ? cubeIdx : grayIdx;
+}
+
+// Resolve every value in a config.colors map to a concrete ANSI sequence once.
+function resolveColorSet(colorsCfg) {
+  const out = {};
+  for (const key of Object.keys(colorsCfg)) {
+    out[key] = resolveColor(colorsCfg[key], COLORS.dim);
+  }
+  return out;
+}
+
+// DEFAULT_CONFIG reproduces the pre-config footer except the `runtime` (node vX)
+// segment, which is intentionally omitted from the default `segments` list (it
+// stays registered, so users can opt it back in). Every other value is the
+// literal pulled from the original hardcoded renderer, so the remaining segments
+// render byte-for-byte identically.
+const DEFAULT_CONFIG = {
+  segments: ["model", "project", "branch", "ctx", "5h", "7d", "tkn"],
+  separators: { segment: " | ", tokenPart: ",", labelValue: ": ", open: "(", close: ")" },
+  labels: { ctx: "Ctx", "5h": "5h", "7d": "7d", tkn: "Tkn", tokenInput: "I:", tokenOutput: "O:", tokenCache: "C:" },
+  colors: {
+    model: "neonViolet",
+    project: "cyan",
+    branch: "violet",
+    runtime: "dim",
+    dirty: "amber",
+    label: "dim",
+    separator: "dim",
+    tokenTotal: "cyan",
+    tokenInput: "mint",
+    tokenOutput: "violet",
+    tokenCache: "amber",
+    ok: "mint",
+    warn: "amber",
+    crit: "coral",
+    none: "dim",
+  },
+  thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
+  format: { percentRound: true, tokenUnits: true, tokenParts: true, showPace: true },
+};
+
+// Convenience aliases expanded before id validation, so the simple public form
+// ["model","workspace","ctx","5h","7d","tkn"] works as-is.
+const SEGMENT_ALIASES = {
+  workspace: ["project", "branch", "runtime"],
+  context: ["ctx"],
+  tokens: ["tkn"],
+};
+
+// cfg-aware value formatters — each defaults to its pre-config counterpart.
+function formatPercentCfg(value, format) {
+  if (!Number.isFinite(value)) return "?";
+  return (format.percentRound ? Math.round(value) : Math.round(value * 10) / 10) + "%";
+}
+
+function formatTokenCountCfg(value, format) {
+  if (!Number.isFinite(value)) return "?";
+  if (!format.tokenUnits) return Math.round(value).toString();
+  if (value >= 1000000) return (value / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (value >= 1000) return Math.round(value / 1000) + "k";
+  return Math.round(value).toString();
+}
+
+function colorByPercentCfg(value, ctx) {
+  const t = ctx.thresholds.percent;
+  const c = ctx.colors;
+  if (!Number.isFinite(value)) return c.none;
+  if (value >= t.crit) return c.crit;
+  if (value >= t.warn) return c.warn;
+  return c.ok;
+}
+
+function colorByPaceDeltaCfg(percent, pace, ctx) {
+  const t = ctx.thresholds.pace;
+  const c = ctx.colors;
+  if (!Number.isFinite(percent) || !Number.isFinite(pace)) return c.none;
+  const diff = percent - pace;
+  if (diff > t.crit) return c.crit;
+  if (diff > t.warn) return c.warn;
+  return c.ok;
+}
+
+function renderMetric(label, percent, detail, ctx) {
+  const e = ctx.colorEnabled;
+  const c = ctx.colors;
+  const s = ctx.separators;
+  const labelText = colorize(label, ctx.color || c.label, e);
+  const percentText = colorize(formatPercentCfg(percent, ctx.format), colorByPercentCfg(percent, ctx), e);
+  const detailText = detail ? colorize(s.open + detail + s.close, c.label, e) : "";
+  return labelText + colorize(s.labelValue, c.label, e) + percentText + detailText;
+}
+
+function renderRate(label, window, ctx) {
+  const e = ctx.colorEnabled;
+  const c = ctx.colors;
+  const s = ctx.separators;
+  if (!window) {
+    return colorize(label, ctx.color || c.label, e) + colorize(s.labelValue + "?", c.label, e);
+  }
+  const remaining = window.resetsAt ? formatDurationUntil(window.resetsAt) : "";
+  const pace = ratePacePercent(window);
+  const paceText = ctx.format.showPace && pace !== null
+    ? colorize(formatPercentCfg(pace, ctx.format), colorByPaceDeltaCfg(window.usedPercent, pace, ctx), e)
+    : "";
+  const detail = [remaining, paceText].filter(Boolean).join(s.tokenPart);
+  return renderMetric(label, window.usedPercent, detail, ctx);
+}
+
+function renderTokenUsage(label, tokens, ctx) {
+  const e = ctx.colorEnabled;
+  const c = ctx.colors;
+  const s = ctx.separators;
+  const lab = ctx.labels;
+  const labelText = colorize(label, ctx.color || c.label, e);
+  if (!tokens) return labelText + colorize(s.labelValue + "?", c.label, e);
+
+  const total = colorize(formatTokenCountCfg(tokens.total, ctx.format), c.tokenTotal, e);
+  if (!ctx.format.tokenParts) {
+    return labelText + colorize(s.labelValue, c.label, e) + total;
+  }
+  const input = colorize(formatTokenCountCfg(tokens.input, ctx.format), c.tokenInput, e);
+  const output = colorize(formatTokenCountCfg(tokens.output, ctx.format), c.tokenOutput, e);
+  const cache = colorize(formatTokenCountCfg(tokens.cache, ctx.format), c.tokenCache, e);
+  return labelText + colorize(s.labelValue, c.label, e) + total
+    + colorize(s.open + lab.tokenInput, c.label, e) + input
+    + colorize(s.tokenPart + lab.tokenOutput, c.label, e) + output
+    + colorize(s.tokenPart + lab.tokenCache, c.label, e) + cache
+    + colorize(s.close, c.label, e);
+}
+
+// Segment registry. Each entry: { id, defaultLabel?, joinWithPrevious?, render }.
+// `joinWithPrevious` glues this segment to the prior one with a raw (uncolored)
+// string instead of the colored segment separator.
+const SEGMENTS = {
+  model: {
+    id: "model",
+    render(data, ctx) {
+      const model = statusModel(data);
+      return model ? colorize(model, ctx.color, ctx.colorEnabled) : null;
+    },
+  },
+  project: {
+    id: "project",
+    render(data, ctx) {
+      return colorize(statusProjectName(data), ctx.color, ctx.colorEnabled);
+    },
+  },
+  branch: {
+    id: "branch",
+    joinWithPrevious: " ",
+    render(data, ctx) {
+      const branch = statusGitBranch(data);
+      if (!branch) return null;
+      const isDirty = branch.endsWith("*");
+      const clean = isDirty ? branch.slice(0, -1) : branch;
+      const dirty = isDirty ? colorize("*", ctx.colors.dirty, ctx.colorEnabled) : "";
+      return colorize(clean, ctx.color, ctx.colorEnabled) + dirty;
+    },
+  },
+  runtime: {
+    id: "runtime",
+    joinWithPrevious: " ",
+    render(data, ctx) {
+      const r = data.runtime;
+      if (!r || !r.label || !r.version) return null;
+      return colorize(r.label + " " + r.version, ctx.color, ctx.colorEnabled);
+    },
+  },
+  ctx: {
+    id: "ctx",
+    defaultLabel: "Ctx",
+    render(data, ctx) {
+      const context = (data.usage && data.usage.context) || {};
+      return renderMetric(ctx.label, context.usedPercent, "", ctx);
+    },
+  },
+  "5h": {
+    id: "5h",
+    defaultLabel: "5h",
+    render(data, ctx) {
+      const rl = (data.usage && data.usage.rateLimits) || {};
+      return renderRate(ctx.label, rl.primary, ctx);
+    },
+  },
+  "7d": {
+    id: "7d",
+    defaultLabel: "7d",
+    render(data, ctx) {
+      const rl = (data.usage && data.usage.rateLimits) || {};
+      return renderRate(ctx.label, rl.secondary, ctx);
+    },
+  },
+  tkn: {
+    id: "tkn",
+    defaultLabel: "Tkn",
+    render(data, ctx) {
+      return renderTokenUsage(ctx.label, data.usage && data.usage.tokens, ctx);
+    },
+  },
+};
+
+// Config used for rendering: the loaded user config (attached to data.hud by
+// collect()) or DEFAULT_CONFIG when no config layer is present.
+function getRenderConfig(data) {
+  return (data && data.hud && data.hud.config) || DEFAULT_CONFIG;
+}
+
+function renderFooter(data, config, options = {}) {
+  const colorEnabled = options.color === true;
+  const colors = resolveColorSet(config.colors);
+  const sepColor = resolveColor(config.colors.separator, COLORS.dim);
+  const separator = colorize(config.separators.segment, sepColor, colorEnabled);
+
+  const pieces = [];
+  for (const id of config.segments) {
+    const seg = SEGMENTS[id];
+    if (!seg) continue;
+    const ctx = {
+      label: config.labels && config.labels[id] != null ? config.labels[id] : seg.defaultLabel || "",
+      color: colors[id],
+      colors,
+      thresholds: config.thresholds,
+      format: config.format,
+      separators: config.separators,
+      labels: config.labels,
+      colorEnabled,
+    };
+    let text;
+    try {
+      text = seg.render(data, ctx);
+    } catch (_) {
+      text = null;
+    }
+    if (text == null || text === "") continue;
+    pieces.push({ text, joiner: seg.joinWithPrevious });
+  }
+
+  if (pieces.length === 0) return "";
+  let out = pieces[0].text;
+  for (let i = 1; i < pieces.length; i++) {
+    const glue = pieces[i].joiner != null ? pieces[i].joiner : separator;
+    out += glue + pieces[i].text;
+  }
+  return out;
+}
+
+// ── User config loading ─────────────────────────────────────────────────────
+// Optional codex-hud.toml lets users pick/reorder segments and override labels,
+// separators, colors, thresholds, and formats. Search order (later wins):
+//   DEFAULT_CONFIG < $CODEX_HOME/codex-hud.toml < ./.codex/codex-hud.toml
+//   (walked up to the git root) < $CODEX_HUD_CONFIG (explicit file).
+// A missing file is fine; a malformed/invalid file is ignored (defaults used)
+// with a one-line note on stderr. The status line must never break.
+const HUD_CONFIG_FILENAME = "codex-hud.toml";
+
+const CONFIG_SCAFFOLD = `# codex-hud.toml — Codex HUD footer configuration (every key is optional).
+# Search order (first found in each tier; later tiers override earlier):
+#   1. $CODEX_HUD_CONFIG            explicit file path (env var)
+#   2. ./.codex/codex-hud.toml      per-project (walks up to the git root)
+#   3. $CODEX_HOME/codex-hud.toml   per-user ($CODEX_HOME defaults to ~/.codex)
+# Anything you omit inherits the built-in default. Delete this file to reset.
+# A malformed or invalid file is ignored (defaults used) with a note on stderr.
+# Inspect the resolved result with:  codex-hud --print-config
+
+# Text placed between segments.
+separator = " | "
+
+# Which segments to show, in order. Remove, reorder, or add any of these ids:
+#   model, project, branch, runtime, ctx, 5h, 7d, tkn
+# Aliases: "workspace" = project + branch + runtime; "context" = ctx; "tokens" = tkn.
+# (runtime / "node vX" is available but off by default — add it to opt in.)
+segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]
+
+# Rename the label shown for a segment. Keys are segment ids.
+[labels]
+ctx = "Ctx"
+"5h" = "5h"
+"7d" = "7d"
+tkn = "Tkn"
+
+# Per-segment / threshold colors. A value is a palette name, a 256-color code
+# (0-255), or a "#rrggbb" hex (mapped to the nearest 256 color).
+# Palette names: dim, coral, mint, amber, cyan, violet, neonViolet.
+# ok / warn / crit are the threshold colors shared by ctx / 5h / 7d.
+[colors]
+model = "neonViolet"
+project = "cyan"
+branch = "violet"
+ok = "mint"
+warn = "amber"
+crit = "coral"
+
+# Percent thresholds (0-100) switching ctx/5h/7d between ok/warn/crit colors.
+[thresholds.percent]
+warn = 70
+crit = 90
+
+# Pace thresholds for 5h/7d (how far ahead of an even burn rate before warn/crit).
+[thresholds.pace]
+warn = 0
+crit = 15
+
+# Value formatting toggles.
+[format]
+percentRound = true   # false -> one decimal place
+tokenUnits = true     # false -> raw integers (no k/M)
+tokenParts = true     # false -> total only, hide (I:.. O:.. C:..)
+showPace = true       # false -> hide the pace % in 5h/7d
+`;
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function clone(value) {
+  if (Array.isArray(value)) return value.map(clone);
+  if (isPlainObject(value)) {
+    const out = {};
+    for (const key of Object.keys(value)) out[key] = clone(value[key]);
+    return out;
+  }
+  return value;
+}
+
+// Deep-merge override onto base. Arrays REPLACE (so `segments` is an exact list);
+// plain objects merge key-by-key (override one label/color without restating all).
+function deepMerge(base, override) {
+  if (!isPlainObject(base) || !isPlainObject(override)) return clone(override);
+  const out = clone(base);
+  for (const key of Object.keys(override)) {
+    out[key] = key in base ? deepMerge(base[key], override[key]) : clone(override[key]);
+  }
+  return out;
+}
+
+// Walk up from cwd for <dir>/<...relParts>, stopping at git root / fs root and
+// skipping $HOME (mirrors findProjectConfig).
+function findProjectFile(cwd, gitRoot, relParts) {
+  let current = path.resolve(cwd);
+  const home = path.resolve(os.homedir());
+  const stopAt = gitRoot ? path.resolve(gitRoot) : path.parse(current).root;
+  while (true) {
+    const candidate = path.join(current, ...relParts);
+    if (current !== home && fs.existsSync(candidate)) return candidate;
+    if (current === stopAt) return null;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+// Ordered low->high precedence list of existing config sources.
+function resolveHudConfigSources(codexHome, cwd, gitRoot) {
+  const envRaw = process.env.CODEX_HUD_CONFIG;
+  const sources = [
+    { tier: "user", path: path.join(codexHome, HUD_CONFIG_FILENAME) },
+    { tier: "project", path: findProjectFile(cwd, gitRoot, [".codex", HUD_CONFIG_FILENAME]) },
+    { tier: "env", path: envRaw ? path.resolve(envRaw) : null },
+  ];
+  return sources.filter((src) => src.path);
+}
+
+function loadOneTomlFile(filePath) {
+  const text = readText(filePath);
+  if (text == null) return { ok: true, value: null }; // absent file is not an error
+  if (!parseToml) return { ok: false, error: filePath + ": TOML parser unavailable" };
+  try {
+    return { ok: true, value: parseToml(text) };
+  } catch (err) {
+    return { ok: false, error: filePath + ": " + (err && err.message ? err.message : "parse error") };
+  }
+}
+
+// Validate + coerce a raw parsed config into a safe partial. Never throws; drops
+// unknown/ill-typed entries and records a note. resolveColor (render layer)
+// interprets color values, so here we only require string|number for colors.
+function validateAndCoerce(raw, warnings, source) {
+  const note = (msg) => warnings.push(source + ": " + msg);
+  if (!isPlainObject(raw)) {
+    note("top-level config is not a table; ignored");
+    return {};
+  }
+  const out = {};
+
+  if ("segments" in raw) {
+    if (Array.isArray(raw.segments)) {
+      const known = new Set(Object.keys(SEGMENTS));
+      const result = [];
+      for (const entry of raw.segments) {
+        if (typeof entry !== "string") {
+          note("ignored non-string segment " + JSON.stringify(entry));
+          continue;
+        }
+        for (const id of SEGMENT_ALIASES[entry] || [entry]) {
+          if (known.has(id)) result.push(id);
+          else note('unknown segment "' + id + '" ignored');
+        }
+      }
+      out.segments = result;
+    } else {
+      note("segments must be an array; ignored");
+    }
+  }
+
+  if ("separator" in raw) {
+    if (typeof raw.separator === "string") out.separators = { segment: raw.separator };
+    else note("separator must be a string; ignored");
+  }
+  if (isPlainObject(raw.separators)) {
+    out.separators = out.separators || {};
+    for (const key of Object.keys(raw.separators)) {
+      if (typeof raw.separators[key] === "string") out.separators[key] = raw.separators[key];
+      else note("separators." + key + " must be a string; ignored");
+    }
+  }
+
+  if (isPlainObject(raw.labels)) {
+    out.labels = {};
+    for (const key of Object.keys(raw.labels)) {
+      const value = raw.labels[key];
+      if (typeof value === "string" || typeof value === "number") out.labels[key] = String(value).slice(0, 40);
+      else note("labels." + key + " must be a string; ignored");
+    }
+  }
+
+  if (isPlainObject(raw.colors)) {
+    out.colors = {};
+    for (const key of Object.keys(raw.colors)) {
+      const value = raw.colors[key];
+      if (typeof value === "string") out.colors[key] = value;
+      else if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 255) out.colors[key] = value;
+      else note("colors." + key + " must be a color name, 0-255, or #hex; ignored");
+    }
+  }
+
+  if (isPlainObject(raw.thresholds)) {
+    out.thresholds = {};
+    for (const group of ["percent", "pace"]) {
+      if (!isPlainObject(raw.thresholds[group])) continue;
+      const coerced = {};
+      for (const key of ["warn", "crit"]) {
+        const value = raw.thresholds[group][key];
+        if (Number.isFinite(value)) coerced[key] = Math.max(0, Math.min(100, value));
+        else if (value !== undefined) note("thresholds." + group + "." + key + " must be a number; ignored");
+      }
+      out.thresholds[group] = coerced;
+    }
+  }
+
+  if (isPlainObject(raw.format)) {
+    out.format = {};
+    for (const key of ["percentRound", "tokenUnits", "tokenParts", "showPace"]) {
+      if (typeof raw.format[key] === "boolean") out.format[key] = raw.format[key];
+      else if (raw.format[key] !== undefined) note("format." + key + " must be a boolean; ignored");
+    }
+  }
+
+  return out;
+}
+
+function loadHudConfig(codexHome, cwd, gitRoot) {
+  const warnings = [];
+  const contributors = [];
+  let merged = clone(DEFAULT_CONFIG);
+  try {
+    for (const src of resolveHudConfigSources(codexHome, cwd, gitRoot)) {
+      const res = loadOneTomlFile(src.path);
+      if (!res.ok) {
+        warnings.push(res.error);
+        continue;
+      }
+      if (res.value == null) continue;
+      merged = deepMerge(merged, validateAndCoerce(res.value, warnings, src.path));
+      contributors.push({ tier: src.tier, path: src.path });
+    }
+  } catch (_) {
+    return { config: clone(DEFAULT_CONFIG), contributors: [], warnings: ["codex-hud: config load failed, using defaults"] };
+  }
+  return { config: merged, contributors, warnings };
+}
+
+// Emit the first config warning (if any) to stderr. Codex consumes the status
+// command's stdout only, so a stderr note never corrupts the rendered line.
+function emitHudWarnings(data) {
+  const warnings = data.hud && data.hud.warnings;
+  if (warnings && warnings.length) {
+    // Collapse embedded newlines (parser errors include a multi-line caret
+    // diagram) so the note is always a single stderr line.
+    const first = String(warnings[0]).replace(/\s+/g, " ").trim().slice(0, 300);
+    const extra = warnings.length > 1 ? " (+" + (warnings.length - 1) + " more)" : "";
+    process.stderr.write("codex-hud: " + first + extra + "\n");
+  }
+}
+
+// --init-config: scaffold a commented codex-hud.toml into CODEX_HOME. The only
+// writer in this script. Refuses to overwrite an existing file without --force.
+function initConfig(options) {
+  const codexHome = resolveCodexHome();
+  const target = path.join(codexHome, HUD_CONFIG_FILENAME);
+  try {
+    fs.mkdirSync(codexHome, { recursive: true });
+    fs.writeFileSync(target, CONFIG_SCAFFOLD, { encoding: "utf8", flag: options.force ? "w" : "wx" });
+    console.log("wrote " + target);
+  } catch (err) {
+    if (err && err.code === "EEXIST") {
+      process.stderr.write("codex-hud: " + target + " already exists (use --init-config --force to overwrite)\n");
+      process.exitCode = 1;
+      return;
+    }
+    process.stderr.write("codex-hud: failed to write " + target + ": " + (err && err.message ? err.message : err) + "\n");
+    process.exitCode = 1;
+  }
+}
+
+// --config-path: show every candidate file (high precedence first) and whether
+// it exists.
+function printConfigPath() {
+  const codexHome = resolveCodexHome();
+  const cwd = process.cwd();
+  const gitRoot = gitInfo(cwd).root;
+  const envRaw = process.env.CODEX_HUD_CONFIG;
+  const rows = [
+    ["env     ($CODEX_HUD_CONFIG)", envRaw ? path.resolve(envRaw) : null],
+    ["project (./.codex)", findProjectFile(cwd, gitRoot, [".codex", HUD_CONFIG_FILENAME])],
+    ["user    ($CODEX_HOME)", path.join(codexHome, HUD_CONFIG_FILENAME)],
+  ];
+  console.log("codex-hud config search (highest precedence first):");
+  for (const [label, candidate] of rows) {
+    const status = candidate ? (fs.existsSync(candidate) ? "found  " : "absent ") : "unset  ";
+    console.log("  " + status + label + (candidate ? "  " + candidate : ""));
+  }
+}
+
+// --print-config: dump the merged config + which files contributed + warnings.
+function printMergedConfig() {
+  const cwd = process.cwd();
+  const result = loadHudConfig(resolveCodexHome(), cwd, gitInfo(cwd).root);
+  console.log(JSON.stringify(result, null, 2));
 }
 
 function formatUsageLine(data, options = {}) {
-  const colorEnabled = options.color === true;
-  const usage = data.usage || {};
-  const context = usage.context || {};
-  const rateLimits = usage.rateLimits || {};
-  const usageLine = [
-    formatMetric("Ctx", context.usedPercent, "", colorEnabled),
-    formatRate("5h", rateLimits.primary, colorEnabled),
-    formatRate("7d", rateLimits.secondary, colorEnabled),
-    formatTokenUsage(usage.tokens, colorEnabled),
-  ].join(colorize(" | ", COLORS.dim, colorEnabled));
-  const model = statusModel(data);
-  const workspace = [formatWorkspace(data, colorEnabled), formatRuntime(data.runtime, colorEnabled)]
-    .filter(Boolean)
-    .join(" ");
-  return [
-    model ? colorize(model, COLORS.neonViolet, colorEnabled) : null,
-    workspace,
-    usageLine,
-  ].filter(Boolean).join(colorize(" | ", COLORS.dim, colorEnabled));
+  return renderFooter(data, getRenderConfig(data), options);
 }
 
 function formatText(data) {
@@ -649,17 +1166,36 @@ function parseWatchSeconds(args) {
 }
 
 function printText() {
-  console.log(formatText(collect()));
+  const data = collect();
+  emitHudWarnings(data);
+  console.log(formatText(data));
 }
 
 function printLine(options = {}) {
-  console.log(formatUsageLine(collect(), options));
+  const data = collect();
+  emitHudWarnings(data);
+  console.log(formatUsageLine(data, options));
 }
 
 function main() {
   const args = process.argv.slice(2);
   if (args.includes("--help") || args.includes("-h")) {
     console.log(usage());
+    return;
+  }
+
+  if (args.includes("--config-path")) {
+    printConfigPath();
+    return;
+  }
+
+  if (args.includes("--print-config")) {
+    printMergedConfig();
+    return;
+  }
+
+  if (args.includes("--init-config")) {
+    initConfig({ force: args.includes("--force") });
     return;
   }
 
@@ -688,4 +1224,16 @@ function main() {
   printText();
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  formatUsageLine,
+  renderFooter,
+  resolveColor,
+  nearestXterm256,
+  DEFAULT_CONFIG,
+  SEGMENTS,
+  collect,
+};

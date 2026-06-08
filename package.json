@@ -1,6 +1,6 @@
 {
   "name": "codex-hud",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Multiline local context HUD for Codex CLI sessions.",
   "license": "MIT",
   "type": "commonjs",
@@ -8,10 +8,11 @@
     "codex-hud": "./plugins/codex-hud/scripts/codex-hud.js"
   },
   "scripts": {
-    "test": "node scripts/test-codex-hud.js && node scripts/test-patched-codex-installer.js",
+    "test": "node scripts/test-codex-hud.js && node scripts/test-codex-hud-config.js && node scripts/test-patched-codex-installer.js",
     "hud": "node plugins/codex-hud/scripts/codex-hud.js",
     "patch:codex": "node scripts/install-patched-codex.js",
-    "patch:codex:dry-run": "node scripts/install-patched-codex.js --dry-run"
+    "patch:codex:dry-run": "node scripts/install-patched-codex.js --dry-run",
+    "vendor:toml": "node scripts/vendor-toml.js"
   },
   "keywords": [
     "codex",
@@ -23,5 +24,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/brandonwie/codex-hud.git"
+  },
+  "devDependencies": {
+    "smol-toml": "^1.6.1"
   }
 }
