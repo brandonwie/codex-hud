@@ -5,8 +5,18 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const VERSION = "0.2.1";
+const VERSION = "0.2.2";
 const DEFAULT_TIMEOUT_MS = 1200;
+const RESET = "\x1b[0m";
+const COLORS = {
+  dim: "\x1b[38;5;245m",
+  coral: "\x1b[38;5;203m",
+  mint: "\x1b[38;5;85m",
+  amber: "\x1b[38;5;215m",
+  cyan: "\x1b[38;5;117m",
+  violet: "\x1b[38;5;141m",
+  neonViolet: "\x1b[38;5;135m",
+};
 
 function usage() {
   return [
@@ -15,6 +25,8 @@ function usage() {
     "Usage:",
     "  codex-hud             Print a multiline Codex context HUD",
     "  codex-hud --line      Print compact model, git, and CTX/5H/7D usage",
+    "  codex-hud --line --color",
+    "                        Print compact usage with 256-color ANSI styling",
     "  codex-hud --status-line",
     "                        Alias for --line",
     "  codex-hud --json      Print the same data as JSON",
@@ -388,6 +400,17 @@ function formatPercent(value) {
   return Number.isFinite(value) ? Math.round(value) + "%" : "?";
 }
 
+function colorize(text, color, colorEnabled) {
+  return colorEnabled && color ? color + text + RESET : text;
+}
+
+function colorByPercent(value) {
+  if (!Number.isFinite(value)) return COLORS.dim;
+  if (value >= 90) return COLORS.coral;
+  if (value >= 70) return COLORS.amber;
+  return COLORS.mint;
+}
+
 function formatDurationUntil(epochSeconds) {
   const seconds = Number(epochSeconds) - Date.now() / 1000;
   if (!Number.isFinite(seconds)) return "?";
@@ -412,11 +435,21 @@ function formatReasoningEffort(value) {
   return normalized;
 }
 
-function formatRate(label, window) {
-  if (!window) return label + ":?";
-  const pct = formatPercent(window.usedPercent);
-  const remaining = window.resetsAt ? "(" + formatDurationUntil(window.resetsAt) + ")" : "";
-  return label + ":" + pct + remaining;
+function formatMetric(label, percent, remaining, colorEnabled) {
+  const labelText = colorize(label, COLORS.dim, colorEnabled);
+  const percentText = colorize(formatPercent(percent), colorByPercent(percent), colorEnabled);
+  const remainingText = remaining
+    ? colorize("(" + remaining + ")", COLORS.dim, colorEnabled)
+    : "";
+  return labelText + colorize(":", COLORS.dim, colorEnabled) + percentText + remainingText;
+}
+
+function formatRate(label, window, colorEnabled) {
+  if (!window) {
+    return colorize(label, COLORS.dim, colorEnabled) + colorize(":?", COLORS.dim, colorEnabled);
+  }
+  const remaining = window.resetsAt ? formatDurationUntil(window.resetsAt) : "";
+  return formatMetric(label, window.usedPercent, remaining, colorEnabled);
 }
 
 function statusProjectName(data) {
@@ -436,19 +469,36 @@ function statusModel(data) {
   return [model, reasoning].filter(Boolean).join(" ") || null;
 }
 
-function formatUsageLine(data) {
+function formatWorkspace(data, colorEnabled) {
+  const project = colorize(statusProjectName(data), COLORS.cyan, colorEnabled);
+  const branch = statusGitBranch(data);
+  if (!branch) return project;
+
+  const cleanBranch = branch.endsWith("*") ? branch.slice(0, -1) : branch;
+  const dirty = branch.endsWith("*") ? colorize("*", COLORS.amber, colorEnabled) : "";
+  const git = colorize(" git:(", COLORS.violet, colorEnabled)
+    + colorize(cleanBranch, COLORS.violet, colorEnabled)
+    + dirty
+    + colorize(")", COLORS.violet, colorEnabled);
+  return project + git;
+}
+
+function formatUsageLine(data, options = {}) {
+  const colorEnabled = options.color === true;
   const usage = data.usage || {};
   const context = usage.context || {};
   const rateLimits = usage.rateLimits || {};
   const usageLine = [
-    "CTX:" + formatPercent(context.usedPercent),
-    formatRate("5H", rateLimits.primary),
-    formatRate("7D", rateLimits.secondary),
-  ].join(" | ");
-  const project = statusProjectName(data);
-  const branch = statusGitBranch(data);
-  const workspace = branch ? project + " git:(" + branch + ")" : project;
-  return [statusModel(data), workspace, usageLine].filter(Boolean).join(" · ");
+    formatMetric("CTX", context.usedPercent, "", colorEnabled),
+    formatRate("5H", rateLimits.primary, colorEnabled),
+    formatRate("7D", rateLimits.secondary, colorEnabled),
+  ].join(colorize(" | ", COLORS.dim, colorEnabled));
+  const model = statusModel(data);
+  return [
+    model ? colorize(model, COLORS.neonViolet, colorEnabled) : null,
+    formatWorkspace(data, colorEnabled),
+    usageLine,
+  ].filter(Boolean).join(colorize(" · ", COLORS.dim, colorEnabled));
 }
 
 function formatText(data) {
@@ -505,8 +555,8 @@ function printText() {
   console.log(formatText(collect()));
 }
 
-function printLine() {
-  console.log(formatUsageLine(collect()));
+function printLine(options = {}) {
+  console.log(formatUsageLine(collect(), options));
 }
 
 function main() {
@@ -517,7 +567,7 @@ function main() {
   }
 
   if (args.includes("--line") || args.includes("--status-line")) {
-    printLine();
+    printLine({ color: args.includes("--color") || args.includes("--colors") });
     return;
   }
 

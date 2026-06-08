@@ -75,5 +75,7 @@ assert(coreConfig.includes("pub tui_status_line_command: Option<String>"));
 assert(coreConfig.includes("tui_status_line_command: cfg"));
 assert(statusSurfaces.includes("fn custom_status_line_from_command"));
 assert(statusSurfaces.includes("std::process::Command::new"));
+assert(statusSurfaces.includes("fn ansi_status_line_to_line"));
+assert(statusSurfaces.includes("ratatui::style::Color::Indexed"));
 
 console.log("patched Codex installer tests passed");

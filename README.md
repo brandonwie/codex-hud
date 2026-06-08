@@ -39,6 +39,7 @@ codex-hud/
 ```bash
 node plugins/codex-hud/scripts/codex-hud.js
 node plugins/codex-hud/scripts/codex-hud.js --line
+node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json
 node plugins/codex-hud/scripts/codex-hud.js --watch 5
 npm test
@@ -56,7 +57,7 @@ npm run patch:codex
 
 The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and
 installs it as `~/.local/bin/codex-hud-codex`. It also writes
-`~/.local/bin/codex-hud-tui`, a launcher that passes the HUD command through
+`~/.local/bin/codex-hud-tui`, a launcher that passes the colored HUD command through
 Codex's `-c tui.status_line_command=...` override without changing
 `~/.codex/config.toml`. It refuses to overwrite `codex` unless you explicitly
 pass `--replace-codex`.
@@ -72,6 +73,12 @@ If you prefer a persistent config, add the printed line under your existing
 
 ```toml
 status_line_command = "node /Users/brandonwie/dev/personal/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line"
+```
+
+For color, use:
+
+```toml
+status_line_command = "node /Users/brandonwie/dev/personal/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
 Run `codex-hud-tui` to see the compact footer. Homebrew or Codex updates will

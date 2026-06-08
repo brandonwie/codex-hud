@@ -112,7 +112,7 @@ function repoRoot() {
 
 function defaultStatusLineCommand() {
   const hudScript = path.join(repoRoot(), "plugins", "codex-hud", "scripts", "codex-hud.js");
-  return `node ${shellQuote(hudScript)} --line`;
+  return `node ${shellQuote(hudScript)} --line --color`;
 }
 
 function detectCodexVersion() {
@@ -133,6 +133,125 @@ function applyTextPatch(filePath, marker, anchor, replacement) {
     throw new Error(`Patch anchor not found in ${filePath}`);
   }
   fs.writeFileSync(filePath, current.replace(anchor, replacement));
+  return true;
+}
+
+function statusCommandHelperSource() {
+  return [
+    "    fn custom_status_line_from_command(&self) -> Option<ratatui::text::Line<'static>> {",
+    "        let command = self.config.tui_status_line_command.as_ref()?.trim();",
+    "        if command.is_empty() {",
+    "            return None;",
+    "        }",
+    "",
+    "        let mut process = if cfg!(windows) {",
+    "            let mut process = std::process::Command::new(\"cmd\");",
+    "            process.args([\"/C\", command]);",
+    "            process",
+    "        } else {",
+    "            let mut process = std::process::Command::new(\"sh\");",
+    "            process.args([\"-lc\", command]);",
+    "            process",
+    "        };",
+    "",
+    "        let output = process.current_dir(self.status_line_cwd()).output().ok()?;",
+    "        if !output.status.success() {",
+    "            return None;",
+    "        }",
+    "",
+    "        let text = String::from_utf8_lossy(&output.stdout)",
+    "            .lines()",
+    "            .next()",
+    "            .unwrap_or(\"\")",
+    "            .trim()",
+    "            .to_string();",
+    "        if text.is_empty() {",
+    "            return None;",
+    "        }",
+    "",
+    "        Some(Self::ansi_status_line_to_line(&text))",
+    "    }",
+    "",
+    "    fn ansi_status_line_to_line(text: &str) -> ratatui::text::Line<'static> {",
+    "        let mut spans = Vec::new();",
+    "        let mut buffer = String::new();",
+    "        let mut style = ratatui::style::Style::default();",
+    "        let mut chars = text.chars().peekable();",
+    "",
+    "        while let Some(ch) = chars.next() {",
+    "            if ch == '\\u{1b}' && chars.peek() == Some(&'[') {",
+    "                chars.next();",
+    "                let mut sequence = String::new();",
+    "                for next in chars.by_ref() {",
+    "                    if next == 'm' {",
+    "                        break;",
+    "                    }",
+    "                    sequence.push(next);",
+    "                }",
+    "",
+    "                if !buffer.is_empty() {",
+    "                    spans.push(ratatui::text::Span::styled(std::mem::take(&mut buffer), style));",
+    "                }",
+    "                Self::apply_ansi_status_style(&sequence, &mut style);",
+    "            } else {",
+    "                buffer.push(ch);",
+    "            }",
+    "        }",
+    "",
+    "        if !buffer.is_empty() {",
+    "            spans.push(ratatui::text::Span::styled(buffer, style));",
+    "        }",
+    "",
+    "        ratatui::text::Line::from(spans)",
+    "    }",
+    "",
+    "    fn apply_ansi_status_style(sequence: &str, style: &mut ratatui::style::Style) {",
+    "        let codes = if sequence.is_empty() {",
+    "            vec![0]",
+    "        } else {",
+    "            sequence",
+    "                .split(';')",
+    "                .filter_map(|part| part.parse::<u16>().ok())",
+    "                .collect::<Vec<_>>()",
+    "        };",
+    "",
+    "        let mut index = 0;",
+    "        while index < codes.len() {",
+    "            match codes[index] {",
+    "                0 | 39 => *style = ratatui::style::Style::default(),",
+    "                30..=37 => {",
+    "                    *style = (*style).fg(ratatui::style::Color::Indexed((codes[index] - 30) as u8));",
+    "                }",
+    "                90..=97 => {",
+    "                    *style = (*style).fg(ratatui::style::Color::Indexed((codes[index] - 90 + 8) as u8));",
+    "                }",
+    "                38 if index + 2 < codes.len() && codes[index + 1] == 5 => {",
+    "                    *style = (*style).fg(ratatui::style::Color::Indexed(codes[index + 2] as u8));",
+    "                    index += 2;",
+    "                }",
+    "                _ => {}",
+    "            }",
+    "            index += 1;",
+    "        }",
+    "    }",
+  ].join("\n");
+}
+
+function ensureAnsiStatusLineParser(filePath) {
+  const current = fs.readFileSync(filePath, "utf8");
+  if (current.includes("fn ansi_status_line_to_line")) {
+    return false;
+  }
+
+  const startNeedle = "    fn custom_status_line_from_command(&self) -> Option<ratatui::text::Line<'static>> {";
+  const endNeedle = "\n\n    /// Clears the terminal title Codex most recently wrote, if any.";
+  const start = current.indexOf(startNeedle);
+  const end = start === -1 ? -1 : current.indexOf(endNeedle, start);
+  if (start === -1 || end === -1) {
+    throw new Error(`ANSI parser patch anchor not found in ${filePath}`);
+  }
+
+  fs.writeFileSync(filePath, current.slice(0, start) + statusCommandHelperSource() + current.slice(end));
   return true;
 }
 
@@ -258,6 +377,10 @@ function patchSource(sourceRoot) {
     /// Clears the terminal title Codex most recently wrote, if any.`,
   )) {
     changes.push("TUI status-line command helper");
+  }
+
+  if (ensureAnsiStatusLineParser(statusSurfaces)) {
+    changes.push("TUI ANSI status-line parser");
   }
 
   return changes;
