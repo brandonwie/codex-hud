@@ -4,3 +4,7 @@ node_modules/
 *.log
 coverage/
 dist/
+docs
+docs/
+.agents/skills
+.claude/
