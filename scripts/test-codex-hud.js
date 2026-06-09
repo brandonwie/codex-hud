@@ -60,7 +60,7 @@ assert.match(colorLine.stdout, /Tkn\x1b\[0m\x1b\[38;5;245m:\x1b\[0m\x1b\[38;5;21
 assert.match(colorLine.stdout, /\(I:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
 assert.match(colorLine.stdout, /,O:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
 assert.match(colorLine.stdout, /,C:\x1b\[0m\x1b\[38;5;45m[^)\n]+\x1b\[0m/);
-assert.match(colorLine.stdout, /,\x1b\[38;5;85m\d+%\x1b\[0m\)/);
+assert.match(colorLine.stdout, /\x1b\[38;5;245m,\x1b\[0m\x1b\[38;5;85m\d+%\x1b\[0m\x1b\[38;5;245m\)\x1b\[0m/);
 assert.match(
   colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
   /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+$/

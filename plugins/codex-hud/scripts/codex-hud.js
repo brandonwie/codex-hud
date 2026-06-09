@@ -685,11 +685,17 @@ function renderRate(label, window, ctx) {
   const remainingRaw = window.resetsAt ? formatDurationUntil(window.resetsAt) : "";
   const remaining = remainingRaw === "now" ? formatDurationWindow(window.windowMinutes) || remainingRaw : remainingRaw;
   const pace = ratePacePercent(window);
-  const paceText = ctx.format.showPace && pace !== null
-    ? colorize(formatPercentCfg(pace, ctx.format), c.pace || colorByPaceDeltaCfg(window.usedPercent, pace, ctx), e)
+  const detailParts = [];
+  if (remaining) detailParts.push(colorize(remaining, c.label, e));
+  if (ctx.format.showPace && pace !== null) {
+    detailParts.push(colorize(formatPercentCfg(pace, ctx.format), c.pace || colorByPaceDeltaCfg(window.usedPercent, pace, ctx), e));
+  }
+  const detail = detailParts.length
+    ? colorize(s.open, c.label, e) + detailParts.join(colorize(s.tokenPart, c.label, e)) + colorize(s.close, c.label, e)
     : "";
-  const detail = [remaining, paceText].filter(Boolean).join(s.tokenPart);
-  return renderMetric(label, window.usedPercent, detail, ctx);
+  const labelText = colorize(label, ctx.color || c.label, e);
+  const percentText = colorize(formatPercentCfg(window.usedPercent, ctx.format), colorByPercentCfg(window.usedPercent, ctx), e);
+  return labelText + colorize(s.labelValue, c.label, e) + percentText + detail;
 }
 
 function renderTokenUsage(label, tokens, ctx) {
