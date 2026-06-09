@@ -8,9 +8,9 @@
     "codex-hud": "./plugins/codex-hud/scripts/codex-hud.js"
   },
   "scripts": {
-    "test": "node scripts/test-codex-hud.js && node scripts/test-codex-hud-config.js && node scripts/test-patched-codex-installer.js && node scripts/test-golden.js",
+    "test": "node scripts/test-codex-hud.js && node scripts/test-codex-hud-config.js && node scripts/test-patched-codex-installer.js && node scripts/test-golden.js && node scripts/test-parsing-golden.js",
     "hud": "node plugins/codex-hud/scripts/codex-hud.js",
-    "golden:update": "node scripts/test-golden.js --update",
+    "golden:update": "node scripts/test-golden.js --update && node scripts/test-parsing-golden.js --update",
     "patch:codex": "node scripts/install-patched-codex.js",
     "patch:codex:dry-run": "node scripts/install-patched-codex.js --dry-run",
     "vendor:toml": "node scripts/vendor-toml.js"
