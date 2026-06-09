@@ -9,3 +9,4 @@ dist/
 docs
 docs/
 .claude/
+.code-review-graph/
