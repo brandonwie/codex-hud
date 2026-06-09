@@ -193,9 +193,9 @@ fixtures lock them; do not "clean them up":
 ## Enforcement
 
 `scripts/test-golden.js` builds a deterministic fixture matrix (frozen clock,
-synthetic `data`), feeds it to the exported `formatUsageLine`, and diffs the
-result against `scripts/golden/hud-output.golden`. (The multiline view,
-`formatText`, is not exported and is a follow-up addition to the harness.)
+synthetic `data`), feeds it to the exported `formatUsageLine` (compact line)
+and `formatText` (multiline view), and diffs the result against
+`scripts/golden/hud-output.golden`.
 
 ```bash
 npm test                 # includes the golden parity check

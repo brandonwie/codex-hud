@@ -1268,6 +1268,7 @@ if (require.main === module) {
 
 module.exports = {
   formatUsageLine,
+  formatText,
   renderFooter,
   resolveColor,
   nearestXterm256,

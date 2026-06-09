@@ -129,3 +129,115 @@ Tkn:904k(I:533k,O:5k,C:366k)|git(main)|5.5xhigh
 
 ### line | reasoning-high | color=true
 \x1b[38;5;135m5.5High\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+
+### text | default
+Codex HUD 0.3.0 | codex-cli 0.5.5
+Generated: 2026-01-01T00:00:00.000Z
+
+Codex
+  model: gpt-5.5 / reasoning xhigh
+  sandbox: workspace-write / approval on-request
+  status line: 2 items, colors on
+  items: model, directory
+  usage: 5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+
+Workspace
+  cwd: /work/proj
+  git: ## main...origin/main | dirty 0 (clean)
+  repo: /work/proj
+  package: proj@1.0.0
+  AGENTS.md: /work/proj/AGENTS.md
+
+Hooks
+  events: PostToolUse:1 PreToolUse:2 SessionStart:1 Stop:1 UserPromptSubmit:3
+  file: /home/user/.codex/hooks.json
+
+Project Priority
+  none detected
+
+Limitations
+  Codex native status line remains authoritative for live values.
+
+### text | git-unavailable
+Codex HUD 0.3.0 | codex-cli 0.5.5
+Generated: 2026-01-01T00:00:00.000Z
+
+Codex
+  model: gpt-5.5 / reasoning xhigh
+  sandbox: workspace-write / approval on-request
+  status line: 2 items, colors on
+  items: model, directory
+  usage: 5.5xhigh|proj|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+
+Workspace
+  cwd: /work/proj
+  git: unavailable
+  repo: /work/proj
+  package: proj@1.0.0
+  AGENTS.md: /work/proj/AGENTS.md
+
+Hooks
+  events: PostToolUse:1 PreToolUse:2 SessionStart:1 Stop:1 UserPromptSubmit:3
+  file: /home/user/.codex/hooks.json
+
+Project Priority
+  none detected
+
+Limitations
+  Codex native status line remains authoritative for live values.
+
+### text | no-usage
+Codex HUD 0.3.0 | codex-cli 0.5.5
+Generated: 2026-01-01T00:00:00.000Z
+
+Codex
+  model: gpt-5.5 / reasoning xhigh
+  sandbox: workspace-write / approval on-request
+  status line: 2 items, colors on
+  items: model, directory
+  usage: 5.5xhigh|proj|git(main)|Ctx:?|5h:?|7d:?|Tkn:?
+
+Workspace
+  cwd: /work/proj
+  git: ## main...origin/main | dirty 0 (clean)
+  repo: /work/proj
+  package: proj@1.0.0
+  AGENTS.md: /work/proj/AGENTS.md
+
+Hooks
+  events: PostToolUse:1 PreToolUse:2 SessionStart:1 Stop:1 UserPromptSubmit:3
+  file: /home/user/.codex/hooks.json
+
+Project Priority
+  none detected
+
+Limitations
+  Codex native status line remains authoritative for live values.
+
+### text | many-status-items
+Codex HUD 0.3.0 | codex-cli 0.5.5
+Generated: 2026-01-01T00:00:00.000Z
+
+Codex
+  model: gpt-5.5 / reasoning xhigh
+  sandbox: workspace-write / approval on-request
+  status line: 10 items, colors on
+  items: a, b, c, d, e, f, g, h +2
+  usage: 5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+
+Workspace
+  cwd: /work/proj
+  git: ## main...origin/main | dirty 0 (clean)
+  repo: /work/proj
+  package: proj@1.0.0
+  AGENTS.md: /work/proj/AGENTS.md
+
+Hooks
+  events: PostToolUse:1 PreToolUse:2 SessionStart:1 Stop:1 UserPromptSubmit:3
+  file: /home/user/.codex/hooks.json
+
+Project Priority
+  none detected
+
+Limitations
+  Codex native status line remains authoritative for live values.

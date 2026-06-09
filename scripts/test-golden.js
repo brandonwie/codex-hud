@@ -138,12 +138,21 @@ const LINE_CASES = [
   { name: "reasoning-high", over: { config: { reasoning: "high" } } },
 ];
 
-// NOTE: the multiline view (formatText) is not exported by the renderer, so it
-// is not covered here yet. Adding multiline goldens is a follow-up that needs
-// `formatText` added to module.exports in codex-hud.js.
+// Multiline cases (formatText has no color dimension).
+const TEXT_CASES = [
+  { name: "default", over: {} },
+  { name: "git-unavailable", over: { git: { available: false } } },
+  { name: "no-usage", over: { usage: { context: null, tokens: null, rateLimits: { primary: null, secondary: null } } } },
+  { name: "many-status-items", over: { config: { nativeStatusItems: ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"], nativeStatusItemCount: 10 } } },
+];
 
 // Make ANSI escapes visible so goldens stay printable + diff-friendly.
 const esc = (s) => String(s).replace(/\x1b/g, "\\x1b");
+
+// Split the golden text back into per-case blocks. Cases are delimited by a
+// blank line before each "### " header; multiline text bodies can contain blank
+// lines, so we split on the header boundary, not on every blank line.
+const splitBlocks = (s) => s.trim().split(/\n\n(?=### )/);
 
 function build() {
   const blocks = [];
@@ -153,13 +162,17 @@ function build() {
       blocks.push(`### line | ${c.name} | color=${color}\n${esc(out)}`);
     }
   }
+  for (const c of TEXT_CASES) {
+    const out = R.formatText(makeData(c.over));
+    blocks.push(`### text | ${c.name}\n${esc(out)}`);
+  }
   return blocks.join("\n\n") + "\n";
 }
 
 function main() {
   const update = process.argv.includes("--update");
   const built = build();
-  const blockCount = built.trim().split("\n\n").length;
+  const blockCount = splitBlocks(built).length;
 
   if (update) {
     fs.mkdirSync(path.dirname(GOLDEN), { recursive: true });
@@ -179,8 +192,8 @@ function main() {
     return;
   }
 
-  const a = expected.split("\n\n");
-  const b = built.split("\n\n");
+  const a = splitBlocks(expected);
+  const b = splitBlocks(built);
   let at = -1;
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
     if (a[i] !== b[i]) {
