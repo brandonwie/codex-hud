@@ -173,7 +173,11 @@ status_line_command = "node /Users/brandonwie/dev/personal/codex-hud/plugins/cod
 
 Run `codex-hud-tui` to see the compact footer. Homebrew or Codex updates will
 not update this separate command; rerun `npm run patch:codex` after updating
-Codex.
+Codex. When the managed `codex` shim is active, the installer skips that shim
+while detecting the base Codex version and uses the next real `codex` on `PATH`;
+pass `--version <version>` if you need to pin the rebuild target explicitly. The
+rebuilt payload must pass a `--version` health check before the launcher is
+rewritten.
 
 ## Local Codex Install
 

@@ -51,15 +51,99 @@ function run(command, args, options = {}) {
     stdio: options.stdio || "pipe",
     cwd: options.cwd,
     env: options.env || process.env,
+    timeout: options.timeout,
   });
   if (result.error) {
     throw result.error;
+  }
+  if (result.signal) {
+    throw new Error(`${command} ${args.join(" ")} terminated by ${result.signal}`);
   }
   if (result.status !== 0) {
     const detail = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
     throw new Error(`${command} ${args.join(" ")} failed${detail ? `:\n${detail}` : ""}`);
   }
   return result.stdout || "";
+}
+
+function executableExists(filePath) {
+  try {
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function uniquePaths(values) {
+  const seen = new Set();
+  return values.filter((value) => {
+    if (!value || seen.has(value)) {
+      return false;
+    }
+    seen.add(value);
+    return true;
+  });
+}
+
+function findCodexCandidates(env = process.env) {
+  const names = process.platform === "win32" ? ["codex.exe", "codex.cmd", "codex.bat", "codex"] : ["codex"];
+  const candidates = [];
+  for (const entry of String(env.PATH || "").split(path.delimiter)) {
+    if (!entry) {
+      continue;
+    }
+    for (const name of names) {
+      const candidate = path.join(entry, name);
+      if (executableExists(candidate)) {
+        candidates.push(candidate);
+      }
+    }
+  }
+
+  for (const candidate of ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex"]) {
+    if (executableExists(candidate)) {
+      candidates.push(candidate);
+    }
+  }
+
+  return uniquePaths(candidates.map((candidate) => path.resolve(candidate)));
+}
+
+function hasHudManagedBasename(filePath) {
+  const basename = path.basename(filePath);
+  return basename === DEFAULT_BIN_NAME || basename === DEFAULT_LAUNCHER_NAME;
+}
+
+function isHudManagedCodexCandidate(candidate) {
+  if (hasHudManagedBasename(candidate)) {
+    return true;
+  }
+
+  try {
+    if (fs.lstatSync(candidate).isSymbolicLink()) {
+      const rawLink = fs.readlinkSync(candidate);
+      if (hasHudManagedBasename(rawLink) || hasHudManagedBasename(path.resolve(path.dirname(candidate), rawLink))) {
+        return true;
+      }
+    }
+  } catch (_) {
+    return false;
+  }
+
+  try {
+    return hasHudManagedBasename(fs.realpathSync.native(candidate));
+  } catch (_) {
+    return false;
+  }
+}
+
+function parseCodexVersion(stdout) {
+  const match = stdout.match(/(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
+  if (!match) {
+    throw new Error(`Could not parse codex version from: ${stdout}`);
+  }
+  return match[1];
 }
 
 function parseArgs(argv) {
@@ -127,13 +211,30 @@ function defaultStatusLineCommand() {
   return `node ${shellQuote(hudScript)} --line --color`;
 }
 
-function detectCodexVersion() {
-  const stdout = run("codex", ["--version"]).trim();
-  const match = stdout.match(/(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
-  if (!match) {
-    throw new Error(`Could not parse codex version from: ${stdout}`);
+function detectCodexVersion(options = {}) {
+  const runCommand = options.runCommand || run;
+  const env = options.env || process.env;
+  const candidates = findCodexCandidates(env);
+  let attemptedRealCandidate = false;
+  let lastError = null;
+
+  for (const candidate of candidates) {
+    if (isHudManagedCodexCandidate(candidate)) {
+      continue;
+    }
+    attemptedRealCandidate = true;
+    try {
+      return parseCodexVersion(runCommand(candidate, ["--version"]).trim());
+    } catch (error) {
+      lastError = error;
+    }
   }
-  return match[1];
+
+  if (attemptedRealCandidate && lastError) {
+    throw lastError;
+  }
+
+  return parseCodexVersion(runCommand("codex", ["--version"]).trim());
 }
 
 function applyTextPatch(filePath, marker, anchor, replacement) {
@@ -446,12 +547,29 @@ function installBinary(sourceDir, args) {
     env,
   });
 
+  return installBuiltBinary(sourceDir, args);
+}
+
+function installBuiltBinary(sourceDir, args) {
+  const workspace = path.join(sourceDir, "codex-rs");
   const builtBinary = path.join(workspace, "target", "release", process.platform === "win32" ? "codex.exe" : "codex");
   const target = path.join(args.prefix, args.binName);
   fs.mkdirSync(args.prefix, { recursive: true });
+  if (fs.existsSync(target) && fs.lstatSync(target).isSymbolicLink()) {
+    fs.unlinkSync(target);
+  }
   fs.copyFileSync(builtBinary, target);
   fs.chmodSync(target, 0o755);
   return target;
+}
+
+function verifyInstalledBinary(installedBinary, args) {
+  const stdout = run(installedBinary, ["--version"], { timeout: args.healthCheckTimeoutMs || 10000 }).trim();
+  const version = parseCodexVersion(stdout);
+  if (args.version && version !== args.version) {
+    throw new Error(`Patched Codex version mismatch: expected ${args.version}, got ${version}`);
+  }
+  return version;
 }
 
 function installLauncher(installedBinary, args) {
@@ -575,8 +693,10 @@ function main() {
   }
 
   const installed = installBinary(sourceDir, args);
+  const installedVersion = verifyInstalledBinary(installed, args);
   const launcher = installLauncher(installed, args);
   console.log(`Installed patched Codex as: ${installed}`);
+  console.log(`Verified patched Codex version: ${installedVersion}`);
   console.log(`Installed HUD launcher as: ${launcher}`);
   if (args.makeDefault) {
     const shim = installDefaultShim(launcher, args);
@@ -599,10 +719,13 @@ if (require.main === module) {
 module.exports = {
   defaultStatusLineCommand,
   detectCodexVersion,
+  installBuiltBinary,
+  installBinary,
   installDefaultShim,
   installLauncher,
   isManagedDefaultShim,
   parseArgs,
   patchSource,
   uninstallDefaultShim,
+  verifyInstalledBinary,
 };

@@ -5,11 +5,14 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const {
+  detectCodexVersion,
+  installBuiltBinary,
   installDefaultShim,
   isManagedDefaultShim,
   parseArgs,
   patchSource,
   uninstallDefaultShim,
+  verifyInstalledBinary,
 } = require("./install-patched-codex");
 
 function writeFile(root, relativePath, contents) {
@@ -103,6 +106,46 @@ const parsed = parseArgs(["--make-default", "--force-shim", "--prefix", shimRoot
 assert.strictEqual(parsed.makeDefault, true);
 assert.strictEqual(parsed.forceShim, true);
 assert.strictEqual(parsed.prefix, shimRoot);
+
+const versionShimRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-version-shim-test-"));
+const versionRealRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-version-real-test-"));
+const versionLauncher = path.join(versionShimRoot, "codex-hud-tui");
+const versionShim = path.join(versionShimRoot, "codex");
+const versionRealCodex = path.join(versionRealRoot, "codex");
+fs.writeFileSync(versionLauncher, "#!/usr/bin/env bash\necho codex-cli 0.137.0\n");
+fs.chmodSync(versionLauncher, 0o755);
+fs.symlinkSync(versionLauncher, versionShim);
+fs.writeFileSync(versionRealCodex, "#!/usr/bin/env bash\necho codex-cli 0.138.0\n");
+fs.chmodSync(versionRealCodex, 0o755);
+
+const detectedVersionCommands = [];
+const detectedVersion = detectCodexVersion({
+  env: { PATH: [versionShimRoot, versionRealRoot].join(path.delimiter) },
+  runCommand(command) {
+    detectedVersionCommands.push(command);
+    return command === versionRealCodex ? "codex-cli 0.138.0\n" : "codex-cli 0.137.0\n";
+  },
+});
+assert.strictEqual(detectedVersion, "0.138.0");
+assert.deepStrictEqual(detectedVersionCommands, [versionRealCodex]);
+
+const healthCheckCodex = path.join(shimRoot, "health-check-codex");
+fs.writeFileSync(healthCheckCodex, "#!/usr/bin/env bash\necho codex-cli 1.2.3\n");
+fs.chmodSync(healthCheckCodex, 0o755);
+assert.strictEqual(verifyInstalledBinary(healthCheckCodex, { version: "1.2.3" }), "1.2.3");
+assert.throws(() => verifyInstalledBinary(healthCheckCodex, { version: "1.2.4" }), /version mismatch/);
+
+const installSourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-install-source-test-"));
+const installPrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-install-prefix-test-"));
+const outsideCodex = path.join(installPrefix, "outside-codex");
+writeFile(installSourceRoot, "codex-rs/target/release/codex", "patched codex\n");
+fs.chmodSync(path.join(installSourceRoot, "codex-rs/target/release/codex"), 0o755);
+fs.writeFileSync(outsideCodex, "stock codex\n");
+fs.symlinkSync(outsideCodex, path.join(installPrefix, "codex-hud-codex"));
+const installedBinary = installBuiltBinary(installSourceRoot, { prefix: installPrefix, binName: "codex-hud-codex" });
+assert.strictEqual(fs.lstatSync(installedBinary).isSymbolicLink(), false);
+assert.strictEqual(fs.readFileSync(installedBinary, "utf8"), "patched codex\n");
+assert.strictEqual(fs.readFileSync(outsideCodex, "utf8"), "stock codex\n");
 
 const shimArgs = {
   prefix: shimRoot,
