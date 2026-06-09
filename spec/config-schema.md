@@ -38,7 +38,7 @@ line).
 | Key          | Type       | Default (see below)      | Notes                                          |
 | ------------ | ---------- | ------------------------ | ---------------------------------------------- |
 | `segments`   | `string[]` | model…tkn (see Segments) | Order is significant. Arrays replace on merge. |
-| `space`      | `bool`     | `false`                  | `true` → ` | ` segment spacing + `: ` labels.  |
+| `space`      | `bool`     | `false`                  | `true` → <code> &#124; </code> segment spacing + `: ` labels. |
 | `separators` | table      | see Separators           | Glue strings between pieces.                   |
 | `labels`     | table      | see Labels               | Per-segment / per-token label overrides.       |
 | `colors`     | table      | see Colors               | Palette name, 0–255, or `#rrggbb`.             |
@@ -60,7 +60,7 @@ Aliases expanded before validation: `workspace` → `project,branch,runtime`;
 
 | Key          | Default | Meaning                                  |
 | ------------ | ------- | ---------------------------------------- |
-| `segment`    | `"|"`   | Between segments.                        |
+| `segment`    | <code>"&#124;"</code> | Between segments.                        |
 | `tokenPart`  | `","`   | Between `I:`/`O:`/`C:` token parts.      |
 | `labelValue` | `":"`   | Between a segment label and its value.   |
 | `open`       | `"("`   | Opens a detail group (rate detail, tkn). |
