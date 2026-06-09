@@ -1,10 +1,11 @@
 node_modules/
 .serena/
+.agents/
+.worktrees/
 .DS_Store
 *.log
 coverage/
 dist/
 docs
 docs/
-.agents/skills
 .claude/
