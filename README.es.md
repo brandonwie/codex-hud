@@ -1,0 +1,219 @@
+**Language** · [English](README.md) | [Português (Brasil)](README.pt-BR.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Türkçe](README.tr.md) | [Русский](README.ru.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md) | [Deutsch](README.de.md) | Español
+
+<div align="center">
+
+# Codex HUD
+
+**Un HUD de espacio de trabajo compacto y con colores para la CLI de OpenAI Codex: modelo, proyecto, git, contexto y uso de 5h/7d en una sola línea de pie de página.**
+
+[![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
+[![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/brandonwie/codex-hud?style=for-the-badge&logo=github&logoColor=white&color=f5a623)](https://github.com/brandonwie/codex-hud/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/brandonwie/codex-hud?style=for-the-badge&logo=git&logoColor=white&color=ff6b6b)](https://github.com/brandonwie/codex-hud/commits/main)
+
+[![Node.js](https://img.shields.io/badge/Node.js-CommonJS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
+[![OpenAI Codex](https://img.shields.io/badge/OpenAI-Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
+[![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#configuración)
+[![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Linux-0db7ed?style=for-the-badge&logo=linux&logoColor=white)](#inicio-rápido)
+
+[Características](#características) · [Inicio rápido](#inicio-rápido) · [Configuración](#configuración) · [Pie de página de Codex parcheado](#pie-de-página-de-codex-parcheado) · [Hoja de ruta](#hoja-de-ruta)
+
+</div>
+
+---
+
+Codex HUD es un plugin local de Codex que renderiza un HUD de espacio de trabajo multilínea para las sesiones de la CLI de OpenAI Codex.
+
+De forma predeterminada es un complemento de la `[tui].status_line` nativa de Codex, porque Codex de fábrica expone un arreglo configurable de elementos de estado integrados, pero no un renderizador propiedad del plugin. Este repositorio también incluye una ruta de parche mantenida para quienes quieran que el script del HUD se renderice directamente en el pie de página real de Codex.
+
+```text
+5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)
+```
+
+> Los segmentos, las etiquetas, los colores y los umbrales de esa línea son todos configurables; consulta [Configuración](#configuración).
+
+## Características
+
+- Versión de Codex, modelo, esfuerzo de razonamiento, sandbox y modo de aprobación
+- Recuento de elementos de la línea de estado nativa de Codex y configuración de color
+- Uso compacto analizado a partir de los registros de rollout de Codex (el pie de página de ejemplo de arriba)
+- Directorio de trabajo actual, rama de git, recuentos de cambios sin confirmar y raíz del repositorio
+- Pistas del proyecto como el nombre del paquete, el `AGENTS.md` cercano y la prioridad de `ACTIVE-STATUS.md` de 3B cuando está presente
+- Recuentos de eventos de hooks de Codex desde `hooks.json`
+- Una nota clara de que la línea de estado nativa de Codex sigue siendo la autoridad para los valores en vivo de tokens y de límite de tasa
+
+## Inicio rápido
+
+Clona el repositorio y luego instálalo como un plugin local de Codex:
+
+```bash
+git clone https://github.com/brandonwie/codex-hud.git
+cd codex-hud
+
+# Registra este repositorio como un marketplace de plugins local y luego agrega el plugin:
+codex plugin marketplace add "$(pwd)"
+codex plugin add codex-hud@codex-hud
+```
+
+Inicia un nuevo hilo de Codex después de instalar o reinstalar para que la lista de skills se actualice.
+
+> **Consejo:** `codex plugin marketplace add "$(pwd)"` lee el directorio actual, así que ejecútalo desde la raíz del repositorio. También puedes pasar una ruta explícita en lugar de `"$(pwd)"`.
+
+## Uso
+
+Ejecuta el renderizador directamente durante el desarrollo:
+
+```bash
+node plugins/codex-hud/scripts/codex-hud.js           # HUD multilínea
+node plugins/codex-hud/scripts/codex-hud.js --line     # una sola línea compacta
+node plugins/codex-hud/scripts/codex-hud.js --line --color
+node plugins/codex-hud/scripts/codex-hud.js --json      # legible por máquina
+node plugins/codex-hud/scripts/codex-hud.js --watch 5   # actualiza cada 5s
+npm test
+```
+
+## Configuración
+
+El pie de página es configurable mediante un `codex-hud.toml` opcional. Sin un archivo de configuración obtienes el pie de página predeterminado mostrado arriba; cada clave es opcional y todo lo que omitas hereda el valor predeterminado integrado.
+
+```bash
+codex-hud --init-config     # genera ~/.codex/codex-hud.toml (--force para sobrescribir)
+codex-hud --print-config    # imprime la configuración resuelta y combinada como JSON
+codex-hud --config-path     # muestra qué archivos de configuración están en uso
+```
+
+### Orden de búsqueda
+
+Las fuentes posteriores tienen prioridad sobre las anteriores (por clave: los arreglos se reemplazan, los escalares se sobrescriben):
+
+1. valores predeterminados integrados
+2. `$CODEX_HOME/codex-hud.toml` (por usuario; `$CODEX_HOME` toma `~/.codex` por defecto)
+3. `./.codex/codex-hud.toml` (por proyecto; sube hasta la raíz de git)
+4. `$CODEX_HUD_CONFIG` (ruta de archivo explícita mediante variable de entorno)
+
+Un archivo ausente no es problema. Un archivo malformado o inválido se ignora: el HUD recurre a los valores predeterminados e imprime una nota de una línea en stderr, de modo que la línea de estado nunca se rompe. codex-hud mantiene su propio archivo en lugar de una tabla dentro del `config.toml` de Codex, así una configuración de HUD defectuosa nunca puede impedir que Codex se inicie.
+
+### Opciones
+
+```toml
+# Compacto por defecto. Establece true para espaciado de segmentos " | " y etiquetas ": ".
+space = false
+
+# Texto colocado entre segmentos. La opción space controla el relleno alrededor de este texto.
+separator = "|"
+
+# Qué segmentos mostrar, en orden. Ids:
+#   model, project, branch, runtime, ctx, 5h, 7d, tkn
+# Alias: workspace = project + branch + runtime; context = ctx; tokens = tkn.
+# (runtime / "node vX" está disponible pero desactivado por defecto; agrégalo para activarlo.)
+segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]
+
+# Renombra la etiqueta de un segmento (las claves son ids de segmento).
+[labels]
+ctx = "Ctx"
+
+# Colores: un nombre de paleta, un código de 256 colores (0-255) o "#rrggbb" (mapeado al
+# color 256 más cercano). Nombres: dim, coral, mint, amber, cyan, violet, neonViolet.
+# ok / warn / crit son los colores de umbral compartidos por ctx / 5h / 7d.
+[colors]
+model = "neonViolet"
+branch = "#5fafff"
+ok = "mint"
+warn = "amber"
+crit = "coral"
+
+# Umbrales de porcentaje (0-100) que cambian ctx/5h/7d entre ok/warn/crit.
+[thresholds.percent]
+warn = 70
+crit = 90
+
+# Conmutadores de formato.
+[format]
+tokenParts = true   # false -> solo total, oculta (I:.. O:.. C:..)
+showPace = true     # false -> oculta el % de ritmo en 5h/7d
+```
+
+Ejecuta `codex-hud --print-config` para ver el conjunto completo de opciones resueltas.
+
+## Pie de página de Codex parcheado
+
+Codex de fábrica no puede renderizar salida arbitraria de un plugin debajo del área de entrada. Para obtener un pie de página al estilo del HUD de Claude, compila un comando de Codex parcheado por separado:
+
+```bash
+npm run patch:codex:dry-run
+npm run patch:codex
+```
+
+El instalador parchea el tag de OpenAI Codex correspondiente, compila la CLI de Rust y mantiene el ejecutable real en `~/.local/bin/codex-hud-codex.d/codex`, con `~/.local/bin/codex-hud-codex` como un symlink a ese binario. También escribe `~/.local/bin/codex-hud-tui`, un lanzador que pasa el comando del HUD con colores a través del override `-c tui.status_line_command=...` de Codex sin cambiar `~/.codex/config.toml`. Tanto la ruta del ejecutable como `argv[0]` conservan nombres visibles para Codex, de modo que integraciones de terminal como Herdr puedan seguir reconociendo el panel como una sesión de Codex.
+
+El modo de lanzador seguro deja intacto tu comando `codex` normal:
+
+```bash
+codex-hud-tui
+```
+
+Para hacer que un nuevo lanzamiento de `codex` use la TUI con el HUD habilitado, opta por el shim gestionado:
+
+```bash
+npm run patch:codex -- --make-default
+rehash
+which codex
+codex
+```
+
+`which codex` debería resolverse a `~/.local/bin/codex`. El instalador se niega a reemplazar un `~/.local/bin/codex` existente a menos que pases `--force-shim`, y aun así se niega a instalar el propio binario parcheado como `codex` a menos que pases `--replace-codex`.
+
+La reversión elimina únicamente el shim gestionado de `codex`:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+Si prefieres una configuración persistente, agrega la línea impresa bajo tu tabla `[tui]` existente, pero ten en cuenta que las versiones de Codex de fábrica pueden rechazar campos desconocidos. Genera la línea exacta para tu máquina desde la raíz del repositorio:
+
+```bash
+echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
+```
+
+Luego pégala bajo `[tui]` en `~/.codex/config.toml`:
+
+```toml
+# Reemplaza /path/to/codex-hud con la ruta de tu clon local.
+status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
+```
+
+Ejecuta `codex-hud-tui` para ver el pie de página compacto. Las actualizaciones de Homebrew o de Codex no actualizarán este comando separado; vuelve a ejecutar `npm run patch:codex` después de actualizar Codex. Cuando el shim gestionado de `codex` está activo, el instalador omite ese shim mientras detecta la versión base de Codex y usa el siguiente `codex` real en el `PATH`; pasa `--version <version>` si necesitas fijar explícitamente el objetivo de la recompilación. La carga útil recompilada debe pasar una verificación de estado con `--version` antes de que se reescriba el lanzador.
+
+## Estructura del proyecto
+
+```text
+codex-hud/
+├─ plugins/
+│  └─ codex-hud/
+│     ├─ .codex-plugin/plugin.json
+│     ├─ scripts/codex-hud.js        # renderizador del HUD + cargador de configuración
+│     ├─ vendor/toml.js              # analizador TOML incluido (smol-toml)
+│     └─ skills/codex-hud/SKILL.md
+└─ scripts/
+   ├─ test-codex-hud.js
+   ├─ test-codex-hud-config.js
+   ├─ test-patched-codex-installer.js
+   ├─ vendor-toml.js                 # regenera vendor/toml.js
+   └─ install-patched-codex.js
+```
+
+## Hoja de ruta
+
+- Agregar resúmenes de transcripción de sesión más completos si Codex expone una API local estable de estado de sesión para plugins.
+- Dar seguimiento a los cambios en la línea de estado de Codex upstream para que el parche pueda retirarse si llega un renderizador personalizado compatible.
+- Agregar capturas de pantalla una vez que la tarjeta del directorio de plugins de Codex esté lista para publicarse.
+
+## Contribuir
+
+Los issues y los pull requests son bienvenidos. Después de cambiar la salida del HUD, ejecuta `npm test` y el validador de plugins de Codex; después de cambiar la versión del manifiesto, reinstala el plugin local con `codex plugin add codex-hud@codex-hud`.
+
+## Licencia
+
+[MIT](LICENSE) © Brandon Wie

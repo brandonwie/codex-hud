@@ -1,0 +1,219 @@
+**Language** · [English](README.md) | [Português (Brasil)](README.pt-BR.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Türkçe](README.tr.md) | Русский | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md) | [Deutsch](README.de.md) | [Español](README.es.md)
+
+<div align="center">
+
+# Codex HUD
+
+**Компактный цветной HUD для рабочего пространства OpenAI Codex CLI — модель, проект, git, контекст и расход за 5ч/7д в одной строке-футере.**
+
+[![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
+[![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/brandonwie/codex-hud?style=for-the-badge&logo=github&logoColor=white&color=f5a623)](https://github.com/brandonwie/codex-hud/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/brandonwie/codex-hud?style=for-the-badge&logo=git&logoColor=white&color=ff6b6b)](https://github.com/brandonwie/codex-hud/commits/main)
+
+[![Node.js](https://img.shields.io/badge/Node.js-CommonJS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
+[![OpenAI Codex](https://img.shields.io/badge/OpenAI-Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
+[![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#конфигурация)
+[![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Linux-0db7ed?style=for-the-badge&logo=linux&logoColor=white)](#быстрый-старт)
+
+[Возможности](#возможности) · [Быстрый старт](#быстрый-старт) · [Конфигурация](#конфигурация) · [Пропатченный футер Codex](#пропатченный-футер-codex) · [Дорожная карта](#дорожная-карта)
+
+</div>
+
+---
+
+Codex HUD — это локальный плагин Codex, который отрисовывает многострочный HUD рабочего пространства для сессий OpenAI Codex CLI.
+
+По умолчанию он работает как дополнение к встроенному `[tui].status_line` в Codex, поскольку штатный Codex предоставляет настраиваемый массив встроенных элементов статуса, но не отрисовщик, управляемый плагином. В этом репозитории также есть поддерживаемый путь патчинга для пользователей, которые хотят, чтобы скрипт HUD отрисовывался прямо в настоящем футере Codex.
+
+```text
+5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)
+```
+
+> Сегменты, метки, цвета и пороговые значения в этой строке полностью настраиваются — см. [Конфигурация](#конфигурация).
+
+## Возможности
+
+- Версия Codex, модель, уровень рассуждений, песочница и режим подтверждения
+- Количество и цвет встроенных элементов строки статуса Codex
+- Компактный расход, разобранный из журналов раскатки (rollout) Codex (футер из примера выше)
+- Текущий рабочий каталог, ветка git, счётчики незакоммиченных изменений и корень репозитория
+- Подсказки по проекту, такие как имя пакета, ближайший `AGENTS.md` и приоритет из 3B `ACTIVE-STATUS.md`, когда он есть
+- Счётчики событий хуков Codex из `hooks.json`
+- Чёткое уведомление о том, что встроенная строка статуса Codex остаётся авторитетной для актуальных значений токенов и лимитов скорости
+
+## Быстрый старт
+
+Клонируйте репозиторий, затем установите его как локальный плагин Codex:
+
+```bash
+git clone https://github.com/brandonwie/codex-hud.git
+cd codex-hud
+
+# Зарегистрируйте этот репозиторий как локальный маркетплейс плагинов, затем добавьте плагин:
+codex plugin marketplace add "$(pwd)"
+codex plugin add codex-hud@codex-hud
+```
+
+Запустите новый поток Codex после установки или переустановки, чтобы список навыков обновился.
+
+> **Совет:** `codex plugin marketplace add "$(pwd)"` считывает текущий каталог, поэтому запускайте команду из корня репозитория. Вместо `"$(pwd)"` можно также передать явный путь.
+
+## Использование
+
+Запускайте отрисовщик напрямую во время разработки:
+
+```bash
+node plugins/codex-hud/scripts/codex-hud.js           # многострочный HUD
+node plugins/codex-hud/scripts/codex-hud.js --line     # одна компактная строка
+node plugins/codex-hud/scripts/codex-hud.js --line --color
+node plugins/codex-hud/scripts/codex-hud.js --json      # машиночитаемый вывод
+node plugins/codex-hud/scripts/codex-hud.js --watch 5   # обновление каждые 5 с
+npm test
+```
+
+## Конфигурация
+
+Футер настраивается через необязательный файл `codex-hud.toml`. Без файла конфигурации вы получаете футер по умолчанию, показанный выше; каждый ключ является необязательным, и всё, что вы опускаете, наследует встроенное значение по умолчанию.
+
+```bash
+codex-hud --init-config     # создать заготовку ~/.codex/codex-hud.toml (--force для перезаписи)
+codex-hud --print-config    # вывести итоговую объединённую конфигурацию в формате JSON
+codex-hud --config-path     # показать, какие файлы конфигурации действуют
+```
+
+### Порядок поиска
+
+Более поздние источники переопределяют более ранние (по каждому ключу — массивы заменяются, скаляры переопределяются):
+
+1. встроенные значения по умолчанию
+2. `$CODEX_HOME/codex-hud.toml` (для пользователя; `$CODEX_HOME` по умолчанию `~/.codex`)
+3. `./.codex/codex-hud.toml` (для проекта; поднимается вверх до корня git)
+4. `$CODEX_HUD_CONFIG` (явный путь к файлу через переменную окружения)
+
+Отсутствие файла — это нормально. Некорректный или недопустимый файл игнорируется — HUD возвращается к значениям по умолчанию и выводит однострочное уведомление в stderr, поэтому строка статуса никогда не ломается. codex-hud хранит собственный файл вместо таблицы внутри `config.toml` от Codex, так что плохая конфигурация HUD никогда не помешает запуску Codex.
+
+### Параметры
+
+```toml
+# По умолчанию компактно. Установите true для разделения сегментов " | " и меток ": ".
+space = false
+
+# Текст, помещаемый между сегментами. Флаг space управляет отступами вокруг этого текста.
+separator = "|"
+
+# Какие сегменты показывать и в каком порядке. Идентификаторы:
+#   model, project, branch, runtime, ctx, 5h, 7d, tkn
+# Псевдонимы: workspace = project + branch + runtime; context = ctx; tokens = tkn.
+# (runtime / "node vX" доступен, но по умолчанию выключен — добавьте его, чтобы включить.)
+segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]
+
+# Переименовать метку сегмента (ключи — это идентификаторы сегментов).
+[labels]
+ctx = "Ctx"
+
+# Цвета: имя палитры, код 256-цветной палитры (0-255) или "#rrggbb" (сопоставляется с
+# ближайшим из 256 цветов). Имена: dim, coral, mint, amber, cyan, violet, neonViolet.
+# ok / warn / crit — пороговые цвета, общие для ctx / 5h / 7d.
+[colors]
+model = "neonViolet"
+branch = "#5fafff"
+ok = "mint"
+warn = "amber"
+crit = "coral"
+
+# Процентные пороги (0-100), которые переключают ctx/5h/7d между ok/warn/crit.
+[thresholds.percent]
+warn = 70
+crit = 90
+
+# Переключатели форматирования.
+[format]
+tokenParts = true   # false -> только итог, скрыть (I:.. O:.. C:..)
+showPace = true     # false -> скрыть процент темпа в 5h/7d
+```
+
+Запустите `codex-hud --print-config`, чтобы увидеть полный итоговый набор параметров.
+
+## Пропатченный футер Codex
+
+Штатный Codex не может отрисовывать произвольный вывод плагина под областью ввода. Чтобы получить футер в стиле Claude HUD, соберите отдельную пропатченную команду Codex:
+
+```bash
+npm run patch:codex:dry-run
+npm run patch:codex
+```
+
+Установщик патчит соответствующий тег OpenAI Codex, собирает Rust CLI и сохраняет настоящий исполняемый файл по пути `~/.local/bin/codex-hud-codex.d/codex`, а `~/.local/bin/codex-hud-codex` делает символической ссылкой на этот бинарник. Он также записывает `~/.local/bin/codex-hud-tui` — лаунчер, который передаёт цветную команду HUD через переопределение `-c tui.status_line_command=...` в Codex, не изменяя `~/.codex/config.toml`. Путь к исполняемому файлу и `argv[0]` оба сохраняют видимые для Codex имена, поэтому интеграции терминала, такие как Herdr, всё ещё могут распознать панель как сессию Codex.
+
+Безопасный режим лаунчера не трогает вашу обычную команду `codex`:
+
+```bash
+codex-hud-tui
+```
+
+Чтобы новый запуск `codex` использовал TUI с включённым HUD, подключите управляемый шим:
+
+```bash
+npm run patch:codex -- --make-default
+rehash
+which codex
+codex
+```
+
+`which codex` должен разрешаться в `~/.local/bin/codex`. Установщик отказывается заменять существующий `~/.local/bin/codex`, если вы не передадите `--force-shim`, и всё равно отказывается устанавливать сам пропатченный бинарник как `codex`, если вы не передадите `--replace-codex`.
+
+Откат удаляет только управляемый шим `codex`:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+Если вы предпочитаете постоянную конфигурацию, добавьте выведенную строку под вашу существующую таблицу `[tui]`, но учтите, что штатные версии Codex могут отклонять неизвестные поля. Сгенерируйте точную строку для вашей машины из корня репозитория:
+
+```bash
+echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
+```
+
+Затем вставьте её под `[tui]` в `~/.codex/config.toml`:
+
+```toml
+# Замените /path/to/codex-hud путём к вашему локальному клону.
+status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
+```
+
+Запустите `codex-hud-tui`, чтобы увидеть компактный футер. Обновления Homebrew или Codex не обновят эту отдельную команду; повторно запустите `npm run patch:codex` после обновления Codex. Когда управляемый шим `codex` активен, установщик пропускает этот шим при определении базовой версии Codex и использует следующий настоящий `codex` в `PATH`; передайте `--version <version>`, если нужно явно зафиксировать целевую версию пересборки. Пересобранная полезная нагрузка должна пройти проверку работоспособности `--version`, прежде чем лаунчер будет перезаписан.
+
+## Структура проекта
+
+```text
+codex-hud/
+├─ plugins/
+│  └─ codex-hud/
+│     ├─ .codex-plugin/plugin.json
+│     ├─ scripts/codex-hud.js        # отрисовщик HUD + загрузчик конфигурации
+│     ├─ vendor/toml.js              # встроенный парсер TOML (smol-toml)
+│     └─ skills/codex-hud/SKILL.md
+└─ scripts/
+   ├─ test-codex-hud.js
+   ├─ test-codex-hud-config.js
+   ├─ test-patched-codex-installer.js
+   ├─ vendor-toml.js                 # пересоздаёт vendor/toml.js
+   └─ install-patched-codex.js
+```
+
+## Дорожная карта
+
+- Добавить более насыщенные сводки стенограмм сессий, если Codex предоставит стабильный локальный API состояния сессии для плагинов.
+- Отслеживать изменения строки статуса в апстриме Codex, чтобы патч можно было упразднить, если появится поддерживаемый пользовательский отрисовщик.
+- Добавить скриншоты, как только карточка каталога плагинов Codex будет готова к публикации.
+
+## Участие в разработке
+
+Issue и pull request приветствуются. После изменения вывода HUD запустите `npm test` и валидатор плагинов Codex; после изменения версии манифеста переустановите локальный плагин командой `codex plugin add codex-hud@codex-hud`.
+
+## Лицензия
+
+[MIT](LICENSE) © Brandon Wie
