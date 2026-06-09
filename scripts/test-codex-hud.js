@@ -33,45 +33,11 @@ assert.strictEqual(Array.isArray(parsed.config.nativeStatusItems), true);
 assert.strictEqual(parsed.config.projectPath, null);
 assert.strictEqual(typeof parsed.usage, "object");
 
-const text = run([]);
-assert.strictEqual(text.status, 0, text.stderr);
-assert.match(text.stdout, /Codex HUD 0\.3\.0/);
-assert.match(text.stdout, /Workspace/);
-assert.match(text.stdout, /usage: .+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+/);
-
-const line = run(["--line"]);
-assert.strictEqual(line.status, 0, line.stderr);
-assert.match(line.stdout.trim(), /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+$/);
-assert.doesNotMatch(line.stdout, /gpt-/);
-assert.doesNotMatch(line.stdout, /git:\(/);
-assert.doesNotMatch(line.stdout, /·/);
-assert.doesNotMatch(line.stdout, /node v/);
-assert.doesNotMatch(line.stdout, / \| /);
-assert.doesNotMatch(line.stdout, /: /);
-
-const colorLine = run(["--line", "--color"]);
-assert.strictEqual(colorLine.status, 0, colorLine.stderr);
-assert.match(colorLine.stdout, /\x1b\[38;5;135m/);
-assert.match(colorLine.stdout, /\x1b\[38;5;245m/);
-assert.match(colorLine.stdout, /\|\x1b\[0m\x1b\[38;5;45mcodex-hud\x1b\[0m\x1b\[38;5;245m\|/);
-assert.match(colorLine.stdout, /git\(\x1b\[0m\x1b\[38;5;135m/);
-// Dirty-star color is covered deterministically by the golden harness
-// (scripts/test-golden.js, "dirty-repo" case). Against the live repo it is
-// only asserted when the working tree is actually dirty, so a clean checkout
-// (e.g. CI or a post-commit tree) does not fail here.
-if (/git\([^)]*\*/.test(colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, ""))) {
-  assert.match(colorLine.stdout, /\x1b\[38;5;215m\*\x1b\[0m/);
-}
-assert.match(colorLine.stdout, /Tkn\x1b\[0m\x1b\[38;5;245m:\x1b\[0m\x1b\[38;5;215m[^(\n]+\x1b\[0m/);
-assert.match(colorLine.stdout, /\(I:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
-assert.match(colorLine.stdout, /,O:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
-assert.match(colorLine.stdout, /,C:\x1b\[0m\x1b\[38;5;45m[^)\n]+\x1b\[0m/);
-assert.match(colorLine.stdout, /\x1b\[38;5;245m,\x1b\[0m\x1b\[38;5;85m\d+%\x1b\[0m\x1b\[38;5;245m\)\x1b\[0m/);
-assert.match(
-  colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
-  /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+$/
-);
-
+// Every render assertion below runs against a deterministic fixture CODEX_HOME,
+// so usage / rate-limit / token values never depend on the developer's live
+// ~/.codex sessions (CI-safe on a machine with no Codex history). Git state
+// (branch / dirty) is still the live cwd repo and is matched loosely.
+// CODEX_HUD_NOW_MS pins "now" so rate-window and pace math are deterministic.
 const tmpCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-test-"));
 try {
   const nowMs = Date.parse("2026-06-08T00:00:00.000Z");
@@ -120,18 +86,52 @@ try {
     "utf8"
   );
 
-  const fixtureLine = run(["--line"], {
-    env: {
-      CODEX_HOME: tmpCodexHome,
-      CODEX_HUD_NOW_MS: String(nowMs),
-    },
-  });
-  assert.strictEqual(fixtureLine.status, 0, fixtureLine.stderr);
+  const fixtureEnv = { CODEX_HOME: tmpCodexHome, CODEX_HUD_NOW_MS: String(nowMs) };
+
+  const text = run([], { env: fixtureEnv });
+  assert.strictEqual(text.status, 0, text.stderr);
+  assert.match(text.stdout, /Codex HUD 0\.3\.0/);
+  assert.match(text.stdout, /Workspace/);
+  assert.match(text.stdout, /usage: .+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+/);
+
+  const line = run(["--line"], { env: fixtureEnv });
+  assert.strictEqual(line.status, 0, line.stderr);
+  assert.doesNotMatch(line.stdout, /gpt-/);
+  assert.doesNotMatch(line.stdout, /git:\(/);
+  assert.doesNotMatch(line.stdout, /·/);
+  assert.doesNotMatch(line.stdout, /node v/);
+  assert.doesNotMatch(line.stdout, / \| /);
+  assert.doesNotMatch(line.stdout, /: /);
+  // Fixture-driven, so the usage/token/rate values are exact; git(...) stays
+  // loose for the live branch and optional dirty marker.
   assert.match(
-    fixtureLine.stdout.trim(),
+    line.stdout.trim(),
     /^5\.5xhigh\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,100%\)\|7d:16%\(5\.1d,27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
   );
-  assert.doesNotMatch(fixtureLine.stdout, /now/);
+  assert.doesNotMatch(line.stdout, /now/);
+
+  const colorLine = run(["--line", "--color"], { env: fixtureEnv });
+  assert.strictEqual(colorLine.status, 0, colorLine.stderr);
+  assert.match(colorLine.stdout, /\x1b\[38;5;135m/);
+  assert.match(colorLine.stdout, /\x1b\[38;5;245m/);
+  assert.match(colorLine.stdout, /\|\x1b\[0m\x1b\[38;5;45mcodex-hud\x1b\[0m\x1b\[38;5;245m\|/);
+  assert.match(colorLine.stdout, /git\(\x1b\[0m\x1b\[38;5;135m/);
+  // Dirty-star color is covered deterministically by the golden harness
+  // (scripts/test-golden.js, "dirty-repo" case). Against the live repo it is
+  // only asserted when the working tree is actually dirty, so a clean checkout
+  // (e.g. CI or a post-commit tree) does not fail here.
+  if (/git\([^)]*\*/.test(colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, ""))) {
+    assert.match(colorLine.stdout, /\x1b\[38;5;215m\*\x1b\[0m/);
+  }
+  assert.match(colorLine.stdout, /Tkn\x1b\[0m\x1b\[38;5;245m:\x1b\[0m\x1b\[38;5;215m[^(\n]+\x1b\[0m/);
+  assert.match(colorLine.stdout, /\(I:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
+  assert.match(colorLine.stdout, /,O:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
+  assert.match(colorLine.stdout, /,C:\x1b\[0m\x1b\[38;5;45m[^)\n]+\x1b\[0m/);
+  assert.match(colorLine.stdout, /\x1b\[38;5;245m,\x1b\[0m\x1b\[38;5;85m\d+%\x1b\[0m\x1b\[38;5;245m\)\x1b\[0m/);
+  assert.match(
+    colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
+    /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+$/
+  );
 } finally {
   fs.rmSync(tmpCodexHome, { recursive: true, force: true });
 }
