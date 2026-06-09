@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # 每 5 秒重新整理
 npm test
 ```
 
+預設緊湊頁尾的終端機擷取：
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+在本機執行 `node plugins/codex-hud/scripts/codex-hud.js --line --color`，即可看到帶有 ANSI 色彩樣式的同一條頁尾。
+
 ## 設定
 
 頁尾可透過選用的 `codex-hud.toml` 進行設定。若沒有設定檔，你會得到上方所示的預設頁尾；每個鍵都是選用的，任何省略的項目都會沿用內建預設值。
@@ -207,12 +216,11 @@ codex-hud/
 ## 發展藍圖
 
 - 若 Codex 為外掛公開穩定的本機 session-state API，則加入更豐富的工作階段逐字稿摘要。
-- 追蹤上游 Codex 狀態列的變更，以便在受支援的自訂渲染器登場時可以退役這條修補路徑。
-- 待 Codex 外掛目錄卡片準備好發布後，加入螢幕截圖。
+- 追蹤上游 OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827)。截至 2026-06-10，原版 Codex 仍只有內建的 `[tui].status_line` 項目，沒有命令驅動或外掛擁有的渲染器；只有在受支援的自訂渲染器發布後才退役這條修補路徑。
 
 ## 貢獻
 
-歡迎提出 issue 與 pull request。變更 HUD 輸出後，請執行 `npm test` 與 Codex 外掛驗證器；變更 manifest 版本後，請以 `codex plugin add codex-hud@codex-hud` 重新安裝本機外掛。
+歡迎提出 issue 與 pull request。變更 HUD 輸出後，請執行 `npm test` 與 Codex 外掛驗證器。變更 manifest 版本或發布 release 後，請以 `codex plugin add codex-hud@codex-hud` 重新整理本機外掛快取以進行手動測試，然後啟動新的 Codex thread 載入更新後的 skill metadata。
 
 ## 授權
 

@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # làm mới mỗi 5s
 npm test
 ```
 
+Ảnh chụp terminal của footer nhỏ gọn mặc định:
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+Chạy `node plugins/codex-hud/scripts/codex-hud.js --line --color` cục bộ để xem cùng footer với kiểu màu ANSI.
+
 ## Cấu hình
 
 Footer có thể cấu hình thông qua một tệp `codex-hud.toml` tùy chọn. Khi không có tệp cấu hình, bạn nhận được footer mặc định hiển thị phía trên; mọi khóa đều là tùy chọn và bất cứ thứ gì bạn bỏ qua sẽ kế thừa giá trị mặc định tích hợp.
@@ -207,12 +216,11 @@ codex-hud/
 ## Lộ trình
 
 - Thêm các bản tóm tắt transcript phiên phong phú hơn nếu Codex cung cấp một API trạng thái phiên cục bộ ổn định cho plugin.
-- Theo dõi các thay đổi status-line ở thượng nguồn của Codex để bản vá có thể được loại bỏ nếu một bộ render tùy chỉnh được hỗ trợ ra đời.
-- Thêm ảnh chụp màn hình khi thẻ thư mục plugin Codex sẵn sàng để xuất bản.
+- Theo dõi issue thượng nguồn OpenAI Codex [#17827](https://github.com/openai/codex/issues/17827). Tính đến 2026-06-10, Codex gốc vẫn có các mục `[tui].status_line` tích hợp nhưng chưa có bộ render dựa trên lệnh hoặc do plugin sở hữu; chỉ loại bỏ bản vá khi một bộ render tùy chỉnh được hỗ trợ được phát hành.
 
 ## Đóng góp
 
-Hoan nghênh các issue và pull request. Sau khi thay đổi đầu ra HUD, hãy chạy `npm test` và trình kiểm tra plugin Codex; sau khi thay đổi phiên bản manifest, hãy cài lại plugin cục bộ với `codex plugin add codex-hud@codex-hud`.
+Hoan nghênh các issue và pull request. Sau khi thay đổi đầu ra HUD, hãy chạy `npm test` và trình kiểm tra plugin Codex. Sau khi thay đổi phiên bản manifest hoặc phát hành release, hãy làm mới cache plugin cục bộ để kiểm thử thủ công bằng `codex plugin add codex-hud@codex-hud`, rồi mở một thread Codex mới để tải metadata skill đã cập nhật.
 
 ## Giấy phép
 

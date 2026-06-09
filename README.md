@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # refresh every 5s
 npm test
 ```
 
+Terminal capture from the default compact footer:
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+Run `node plugins/codex-hud/scripts/codex-hud.js --line --color` locally to see the same footer with ANSI color styling.
+
 ## Configuration
 
 The footer is configurable through an optional `codex-hud.toml`. With no config file you get the default footer shown above; every key is optional and anything you omit inherits the built-in default.
@@ -207,12 +216,11 @@ codex-hud/
 ## Roadmap
 
 - Add richer session transcript summaries if Codex exposes a stable local session-state API for plugins.
-- Track upstream Codex status-line changes so the patch can be retired if a supported custom renderer lands.
-- Add screenshots once the Codex plugin directory card is ready for publishing.
+- Watch upstream OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827). As of 2026-06-10, stock Codex still has built-in `[tui].status_line` items but no command-backed or plugin-owned renderer; retire the patch only when a supported custom renderer ships.
 
 ## Contributing
 
-Issues and pull requests are welcome. After changing HUD output, run `npm test` and the Codex plugin validator; after changing the manifest version, reinstall the local plugin with `codex plugin add codex-hud@codex-hud`.
+Issues and pull requests are welcome. After changing HUD output, run `npm test` and the Codex plugin validator. After changing the manifest version or cutting a release, refresh the local plugin cache for manual testing with `codex plugin add codex-hud@codex-hud`, then start a new Codex thread so the refreshed skill metadata is loaded.
 
 ## License
 

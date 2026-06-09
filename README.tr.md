@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # her 5 saniyede bir yen
 npm test
 ```
 
+Varsayilan kompakt altbilginin terminal yakalamasi:
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+Ayni altbilgiyi ANSI renk stilleriyle gormek icin yerelde `node plugins/codex-hud/scripts/codex-hud.js --line --color` calistirin.
+
 ## Yapılandırma
 
 Altbilgi, isteğe bağlı bir `codex-hud.toml` dosyası aracılığıyla yapılandırılabilir. Yapılandırma dosyası olmadığında yukarıda gösterilen varsayılan altbilgiyi alırsınız; her anahtar isteğe bağlıdır ve atladığınız her şey yerleşik varsayılanı devralır.
@@ -207,12 +216,11 @@ codex-hud/
 ## Yol Haritası
 
 - Codex, eklentiler için kararlı bir yerel oturum durumu API'si sunarsa daha zengin oturum dökümü özetleri eklemek.
-- Desteklenen bir özel oluşturucu çıkarsa yamanın kaldırılabilmesi için Codex durum satırındaki yukarı akış değişikliklerini takip etmek.
-- Codex eklenti dizini kartı yayınlanmaya hazır olduğunda ekran görüntüleri eklemek.
+- Yukarı akış OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827) takip edilsin. 2026-06-10 itibarıyla stok Codex yerleşik `[tui].status_line` öğelerine sahip, ancak komut destekli veya eklentiye ait bir oluşturucu yok; yamayı yalnızca desteklenen özel bir oluşturucu yayınlandığında emekliye ayırın.
 
 ## Katkıda Bulunma
 
-Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. HUD çıktısını değiştirdikten sonra `npm test` ve Codex eklenti doğrulayıcısını çalıştırın; manifest sürümünü değiştirdikten sonra yerel eklentiyi `codex plugin add codex-hud@codex-hud` ile yeniden kurun.
+Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. HUD çıktısını değiştirdikten sonra `npm test` ve Codex eklenti doğrulayıcısını çalıştırın. Manifest sürümünü değiştirdikten veya release aldıktan sonra manuel test için yerel eklenti önbelleğini `codex plugin add codex-hud@codex-hud` ile yenileyin, ardından güncellenmiş skill metadatasının yüklenmesi için yeni bir Codex thread başlatın.
 
 ## Lisans
 

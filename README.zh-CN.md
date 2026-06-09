@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # 每 5 秒刷新一次
 npm test
 ```
 
+默认紧凑页脚的终端捕获：
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+在本地运行 `node plugins/codex-hud/scripts/codex-hud.js --line --color` 可查看带 ANSI 彩色样式的同一页脚。
+
 ## 配置
 
 页脚可通过一个可选的 `codex-hud.toml` 进行配置。若没有配置文件，你将得到上方展示的默认页脚；每个键都是可选的，凡是省略的项都会继承内置默认值。
@@ -207,12 +216,11 @@ codex-hud/
 ## 路线图
 
 - 如果 Codex 为插件公开稳定的本地会话状态 API，则添加更丰富的会话记录摘要。
-- 跟踪上游 Codex 状态行的变更，以便在受支持的自定义渲染器落地后可以撤销该补丁。
-- 待 Codex 插件目录卡片准备好发布后，添加截图。
+- 跟踪上游 OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827)。截至 2026-06-10，原版 Codex 仍只有内置的 `[tui].status_line` 项目，没有命令驱动或插件拥有的渲染器；只有在受支持的自定义渲染器发布后才退役该补丁。
 
 ## 贡献
 
-欢迎提交 issue 和 pull request。更改 HUD 输出后，请运行 `npm test` 以及 Codex 插件验证器；更改清单版本后，请用 `codex plugin add codex-hud@codex-hud` 重新安装本地插件。
+欢迎提交 issue 和 pull request。更改 HUD 输出后，请运行 `npm test` 以及 Codex 插件验证器。更改清单版本或发布 release 后，请用 `codex plugin add codex-hud@codex-hud` 刷新本地插件缓存以进行手动测试，然后启动新的 Codex 线程以加载更新后的技能元数据。
 
 ## 许可证
 

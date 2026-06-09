@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # refresh every 5s
 npm test
 ```
 
+デフォルトのコンパクトフッターのターミナルキャプチャ:
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+ANSI カラースタイル付きの同じフッターを見るには、ローカルで `node plugins/codex-hud/scripts/codex-hud.js --line --color` を実行してください。
+
 ## 設定
 
 フッターは任意の `codex-hud.toml` を通じて設定できます。設定ファイルがない場合は上記のデフォルトフッターが表示されます。すべてのキーは任意で、省略したものは組み込みのデフォルトを継承します。
@@ -207,12 +216,11 @@ codex-hud/
 ## ロードマップ
 
 - Codex がプラグイン向けに安定したローカルのセッション状態 API を公開した場合、より充実したセッショントランスクリプトの要約を追加する。
-- 上流の Codex のステータスライン変更を追跡し、サポートされたカスタムレンダラーが登場した場合にパッチを廃止できるようにする。
-- Codex プラグインディレクトリのカードが公開準備できた段階でスクリーンショットを追加する。
+- 上流の OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827) を監視する。2026-06-10 時点では、標準の Codex には組み込みの `[tui].status_line` 項目はあるが、コマンド駆動またはプラグイン所有のレンダラーはない。サポートされたカスタムレンダラーがリリースされた場合にのみ、このパッチを廃止する。
 
 ## 貢献
 
-Issue とプルリクエストを歓迎します。HUD 出力を変更した後は `npm test` と Codex プラグインバリデーターを実行してください。マニフェストのバージョンを変更した後は `codex plugin add codex-hud@codex-hud` でローカルプラグインを再インストールしてください。
+Issue とプルリクエストを歓迎します。HUD 出力を変更した後は `npm test` と Codex プラグインバリデーターを実行してください。マニフェストのバージョン変更またはリリース後は、手動テスト用に `codex plugin add codex-hud@codex-hud` でローカルプラグインキャッシュを更新し、新しい Codex スレッドを開始して更新済みのスキルメタデータを読み込んでください。
 
 ## ライセンス
 

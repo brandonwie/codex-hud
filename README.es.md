@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # actualiza cada 5s
 npm test
 ```
 
+Captura de terminal del pie compacto predeterminado:
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+Ejecuta `node plugins/codex-hud/scripts/codex-hud.js --line --color` localmente para ver el mismo pie con estilos de color ANSI.
+
 ## Configuración
 
 El pie de página es configurable mediante un `codex-hud.toml` opcional. Sin un archivo de configuración obtienes el pie de página predeterminado mostrado arriba; cada clave es opcional y todo lo que omitas hereda el valor predeterminado integrado.
@@ -207,12 +216,11 @@ codex-hud/
 ## Hoja de ruta
 
 - Agregar resúmenes de transcripción de sesión más completos si Codex expone una API local estable de estado de sesión para plugins.
-- Dar seguimiento a los cambios en la línea de estado de Codex upstream para que el parche pueda retirarse si llega un renderizador personalizado compatible.
-- Agregar capturas de pantalla una vez que la tarjeta del directorio de plugins de Codex esté lista para publicarse.
+- Dar seguimiento al issue upstream de OpenAI Codex [#17827](https://github.com/openai/codex/issues/17827). Al 2026-06-10, Codex estándar aún tiene elementos integrados de `[tui].status_line`, pero no un renderizador basado en comandos ni propiedad de plugins; retira el parche solo cuando se publique un renderizador personalizado compatible.
 
 ## Contribuir
 
-Los issues y los pull requests son bienvenidos. Después de cambiar la salida del HUD, ejecuta `npm test` y el validador de plugins de Codex; después de cambiar la versión del manifiesto, reinstala el plugin local con `codex plugin add codex-hud@codex-hud`.
+Los issues y los pull requests son bienvenidos. Después de cambiar la salida del HUD, ejecuta `npm test` y el validador de plugins de Codex. Después de cambiar la versión del manifiesto o publicar una release, actualiza la caché local del plugin para pruebas manuales con `codex plugin add codex-hud@codex-hud` e inicia un nuevo hilo de Codex para cargar los metadatos actualizados de la skill.
 
 ## Licencia
 

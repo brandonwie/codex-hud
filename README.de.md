@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # alle 5s aktualisieren
 npm test
 ```
 
+Terminal-Mitschnitt der standardmäßigen kompakten Fußzeile:
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+Führe lokal `node plugins/codex-hud/scripts/codex-hud.js --line --color` aus, um dieselbe Fußzeile mit ANSI-Farbstilen zu sehen.
+
 ## Konfiguration
 
 Die Fußzeile ist über eine optionale `codex-hud.toml` konfigurierbar. Ohne Konfigurationsdatei erhältst du die oben gezeigte Standard-Fußzeile; jeder Schlüssel ist optional, und alles, was du weglässt, erbt den eingebauten Standardwert.
@@ -207,12 +216,11 @@ codex-hud/
 ## Roadmap
 
 - Reichhaltigere Zusammenfassungen von Sitzungs-Transkripten hinzufügen, falls Codex eine stabile lokale Session-State-API für Plugins bereitstellt.
-- Änderungen an der Upstream-Codex-Status-Line verfolgen, damit der Patch ausgemustert werden kann, sobald ein unterstützter benutzerdefinierter Renderer verfügbar ist.
-- Screenshots hinzufügen, sobald die Karte im Codex-Plugin-Verzeichnis zur Veröffentlichung bereit ist.
+- Das Upstream-OpenAI-Codex-Issue [#17827](https://github.com/openai/codex/issues/17827) beobachten. Stand 2026-06-10 hat Stock Codex weiterhin eingebaute `[tui].status_line`-Elemente, aber keinen command-basierten oder plugin-eigenen Renderer; mustere den Patch erst aus, wenn ein unterstützter benutzerdefinierter Renderer veröffentlicht ist.
 
 ## Mitwirken
 
-Issues und Pull Requests sind willkommen. Führe nach dem Ändern der HUD-Ausgabe `npm test` und den Codex-Plugin-Validator aus; installiere das lokale Plugin nach dem Ändern der Manifest-Version mit `codex plugin add codex-hud@codex-hud` neu.
+Issues und Pull Requests sind willkommen. Führe nach dem Ändern der HUD-Ausgabe `npm test` und den Codex-Plugin-Validator aus. Aktualisiere nach einer Manifest-Versionsänderung oder einem Release den lokalen Plugin-Cache für manuelle Tests mit `codex plugin add codex-hud@codex-hud` und starte danach einen neuen Codex-Thread, damit die aktualisierten Skill-Metadaten geladen werden.
 
 ## Lizenz
 

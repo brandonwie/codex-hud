@@ -72,6 +72,15 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # atualiza a cada 5s
 npm test
 ```
 
+Captura de terminal do rodape compacto padrao:
+
+```text
+$ node plugins/codex-hud/scripts/codex-hud.js --line
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+```
+
+Execute `node plugins/codex-hud/scripts/codex-hud.js --line --color` localmente para ver o mesmo rodape com estilos de cor ANSI.
+
 ## Configuração
 
 O rodapé é configurável através de um `codex-hud.toml` opcional. Sem arquivo de configuração, você obtém o rodapé padrão mostrado acima; toda chave é opcional e tudo o que você omitir herda o padrão embutido.
@@ -207,12 +216,11 @@ codex-hud/
 ## Roadmap
 
 - Adicionar resumos mais ricos de transcrições de sessão se o Codex expor uma API local estável de estado de sessão para plugins.
-- Acompanhar mudanças na status line do Codex upstream para que o patch possa ser aposentado caso um renderizador customizado suportado seja lançado.
-- Adicionar capturas de tela assim que o card do diretório de plugins do Codex estiver pronto para publicação.
+- Acompanhar a issue upstream do OpenAI Codex [#17827](https://github.com/openai/codex/issues/17827). Em 2026-06-10, o Codex padrao ainda tem itens embutidos em `[tui].status_line`, mas nao um renderizador baseado em comando ou pertencente a plugin; aposente o patch apenas quando um renderizador customizado suportado for lançado.
 
 ## Contribuindo
 
-Issues e pull requests são bem-vindos. Após alterar a saída do HUD, execute `npm test` e o validador de plugins do Codex; após alterar a versão do manifesto, reinstale o plugin local com `codex plugin add codex-hud@codex-hud`.
+Issues e pull requests são bem-vindos. Após alterar a saída do HUD, execute `npm test` e o validador de plugins do Codex. Após alterar a versão do manifesto ou publicar uma release, atualize o cache do plugin local para teste manual com `codex plugin add codex-hud@codex-hud` e inicie uma nova thread do Codex para carregar os metadados atualizados da skill.
 
 ## Licença
 
