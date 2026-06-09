@@ -8,6 +8,7 @@ const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const hudScript = path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js");
+const expectedVersion = require(path.join(repoRoot, "package.json")).version;
 
 function run(args, options = {}) {
   return spawnSync(process.execPath, [hudScript, ...args], {
@@ -25,7 +26,7 @@ const json = run(["--json"]);
 assert.strictEqual(json.status, 0, json.stderr);
 
 const parsed = JSON.parse(json.stdout);
-assert.strictEqual(parsed.codexHudVersion, "0.3.0");
+assert.strictEqual(parsed.codexHudVersion, expectedVersion);
 assert.strictEqual(typeof parsed.cwd, "string");
 assert.strictEqual(typeof parsed.config, "object");
 assert.strictEqual(typeof parsed.git, "object");
@@ -90,7 +91,7 @@ try {
 
   const text = run([], { env: fixtureEnv });
   assert.strictEqual(text.status, 0, text.stderr);
-  assert.match(text.stdout, /Codex HUD 0\.3\.0/);
+  assert.match(text.stdout, new RegExp(`Codex HUD ${expectedVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   assert.match(text.stdout, /Workspace/);
   assert.match(text.stdout, /usage: .+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+/);
 

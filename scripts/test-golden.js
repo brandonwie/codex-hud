@@ -58,7 +58,7 @@ function deepMerge(base, over) {
 // collect() output so every segment and the multiline view have real inputs.
 function baseData() {
   return {
-    codexHudVersion: "0.3.0",
+    codexHudVersion: "0.0.0",
     hud: { config: clone(R.DEFAULT_CONFIG), contributors: [], warnings: [] },
     generatedAt: FIXED_ISO,
     cwd: "/work/proj",

@@ -131,7 +131,7 @@ Tkn:904k(I:533k,O:5k,C:366k)|git(main)|5.5xhigh
 \x1b[38;5;135m5.5High\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### text | default
-Codex HUD 0.3.0 | codex-cli 0.5.5
+Codex HUD 0.0.0 | codex-cli 0.5.5
 Generated: 2026-01-01T00:00:00.000Z
 
 Codex
@@ -159,7 +159,7 @@ Limitations
   Codex native status line remains authoritative for live values.
 
 ### text | git-unavailable
-Codex HUD 0.3.0 | codex-cli 0.5.5
+Codex HUD 0.0.0 | codex-cli 0.5.5
 Generated: 2026-01-01T00:00:00.000Z
 
 Codex
@@ -187,7 +187,7 @@ Limitations
   Codex native status line remains authoritative for live values.
 
 ### text | no-usage
-Codex HUD 0.3.0 | codex-cli 0.5.5
+Codex HUD 0.0.0 | codex-cli 0.5.5
 Generated: 2026-01-01T00:00:00.000Z
 
 Codex
@@ -215,7 +215,7 @@ Limitations
   Codex native status line remains authoritative for live values.
 
 ### text | many-status-items
-Codex HUD 0.3.0 | codex-cli 0.5.5
+Codex HUD 0.0.0 | codex-cli 0.5.5
 Generated: 2026-01-01T00:00:00.000Z
 
 Codex
