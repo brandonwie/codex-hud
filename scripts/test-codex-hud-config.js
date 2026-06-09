@@ -44,17 +44,34 @@ try {
   {
     const config = printConfig(baseEnv);
     assert.deepStrictEqual(config.config.segments, DEFAULT_SEGMENTS);
+    assert.strictEqual(config.config.space, false);
     assert.deepStrictEqual(config.contributors, []);
     assert.deepStrictEqual(config.warnings, []);
 
     const line = run(["--line"], baseEnv);
     assert.strictEqual(line.status, 0, line.stderr);
     assert.doesNotMatch(line.stdout, /node v/);
+    assert.doesNotMatch(line.stdout, / \| /);
+    assert.doesNotMatch(line.stdout, /: /);
     assert.match(line.stdout, /Ctx/);
     assert.match(line.stdout, /Tkn/);
   }
 
-  // 2. Reorder + rename + recolor via the env-tier config (also proves the
+  // 2. space=true restores padded segment and label separators.
+  {
+    const dir = tmpdir();
+    const cfg = writeConfig(dir, "space.toml", "space = true\n");
+    const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
+    assert.strictEqual(config.config.space, true);
+
+    const line = run(["--line"], { ...baseEnv, CODEX_HUD_CONFIG: cfg });
+    assert.strictEqual(line.status, 0, line.stderr);
+    assert.match(line.stdout, / \| /);
+    assert.match(line.stdout, /Ctx: /);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  // 3. Reorder + rename + recolor via the env-tier config (also proves the
   //    vendored TOML parser loads — a clean parse with no warnings).
   {
     const dir = tmpdir();
@@ -68,7 +85,7 @@ try {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  // 3. Threshold + format overrides.
+  // 4. Threshold + format overrides.
   {
     const dir = tmpdir();
     const cfg = writeConfig(dir, "t.toml", "[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenParts = false\n");
@@ -79,7 +96,7 @@ try {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  // 4. Alias expansion ("workspace" -> project/branch/runtime) + unknown id dropped.
+  // 5. Alias expansion ("workspace" -> project/branch/runtime) + unknown id dropped.
   {
     const dir = tmpdir();
     const cfg = writeConfig(dir, "a.toml", 'segments = ["workspace","bogus","ctx"]\n');
@@ -89,7 +106,7 @@ try {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  // 5. Malformed TOML -> exit 0, still renders, stderr note, defaults used.
+  // 6. Malformed TOML -> exit 0, still renders, stderr note, defaults used.
   {
     const dir = tmpdir();
     const cfg = writeConfig(dir, "bad.toml", "segments = [unclosed\n");
@@ -104,7 +121,7 @@ try {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  // 6. Ill-typed values are dropped with a note; defaults survive.
+  // 7. Ill-typed values are dropped with a note; defaults survive.
   {
     const dir = tmpdir();
     const cfg = writeConfig(dir, "inv.toml", "[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n");
@@ -115,7 +132,7 @@ try {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  // 7. Precedence: env tier overrides user tier (CODEX_HOME file).
+  // 8. Precedence: env tier overrides user tier (CODEX_HOME file).
   {
     writeConfig(home, "codex-hud.toml", 'separator = "USER"\n');
     const envDir = tmpdir();
@@ -127,7 +144,7 @@ try {
     fs.rmSync(envDir, { recursive: true, force: true });
   }
 
-  // 8. --config-path reports the three tiers.
+  // 9. --config-path reports the three tiers.
   {
     const result = run(["--config-path"], baseEnv);
     assert.strictEqual(result.status, 0, result.stderr);
@@ -136,7 +153,7 @@ try {
     assert.match(result.stdout, /env/);
   }
 
-  // 9. --init-config scaffolds, refuses overwrite, then --force overwrites; the
+  // 10. --init-config scaffolds, refuses overwrite, then --force overwrites; the
   //    scaffold itself must load cleanly (no warnings).
   {
     const initHome = tmpdir();

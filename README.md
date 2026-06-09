@@ -13,7 +13,7 @@ HUD script to render in the real Codex footer.
 - Codex version, model, reasoning effort, sandbox, and approval mode
 - Native Codex status-line item count and color setting
 - Compact usage parsed from Codex rollout logs, for example
-  `5.5 xhigh | codex-hud main* | Ctx: 26% | 5h: 0%(4.4h,12%) | 7d: 6%(6.4d,9%) | Tkn: 36.1M(I:399k,O:583k,C:35.1M)`
+  `5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)`
   (segments, labels, colors, and thresholds are configurable — see
   [Configuration](#configuration))
 - Current working directory, git branch, dirty counts, and repo root
@@ -81,8 +81,11 @@ breaks. codex-hud keeps its own file instead of a table inside Codex's
 ### Options
 
 ```toml
-# Text placed between segments.
-separator = " | "
+# Compact by default. Set true for " | " segment spacing and ": " labels.
+space = false
+
+# Text placed between segments. The space flag controls padding around this text.
+separator = "|"
 
 # Which segments to show, in order. Ids:
 #   model, project, branch, runtime, ctx, 5h, 7d, tkn

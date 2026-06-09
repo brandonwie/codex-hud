@@ -23,8 +23,8 @@ const COLORS = {
   coral: "\x1b[38;5;203m",
   mint: "\x1b[38;5;85m",
   amber: "\x1b[38;5;215m",
-  cyan: "\x1b[38;5;117m",
-  violet: "\x1b[38;5;141m",
+  cyan: "\x1b[38;5;45m",
+  violet: "\x1b[38;5;135m",
   neonViolet: "\x1b[38;5;135m",
 };
 
@@ -479,6 +479,16 @@ function formatDurationUntil(epochSeconds) {
   return (days < 10 ? days.toFixed(1) : Math.round(days).toString()) + "d";
 }
 
+function formatDurationWindow(minutes) {
+  const value = Number(minutes);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const hours = value / 60;
+  if (hours < 24) return (hours < 10 ? hours.toFixed(1) : Math.round(hours).toString()).replace(/\.0$/, "") + "h";
+
+  const days = hours / 24;
+  return (days < 10 ? days.toFixed(1) : Math.round(days).toString()).replace(/\.0$/, "") + "d";
+}
+
 function formatReasoningEffort(value) {
   if (!value) return null;
   const normalized = String(value).trim();
@@ -513,7 +523,7 @@ function statusModel(data) {
   const rawModel = data.config.model || (data.codexVersion || "").split(/\s+/)[0] || null;
   const model = rawModel ? String(rawModel).replace(/^gpt-/i, "") : null;
   const reasoning = formatReasoningEffort(data.config.reasoning);
-  return [model, reasoning].filter(Boolean).join(" ") || null;
+  return [model, reasoning].filter(Boolean).join("") || null;
 }
 
 // ── Config-driven footer rendering ──────────────────────────────────────────
@@ -589,20 +599,22 @@ function resolveColorSet(colorsCfg) {
 // render byte-for-byte identically.
 const DEFAULT_CONFIG = {
   segments: ["model", "project", "branch", "ctx", "5h", "7d", "tkn"],
-  separators: { segment: " | ", tokenPart: ",", labelValue: ": ", open: "(", close: ")" },
+  space: false,
+  separators: { segment: "|", tokenPart: ",", labelValue: ":", open: "(", close: ")" },
   labels: { ctx: "Ctx", "5h": "5h", "7d": "7d", tkn: "Tkn", tokenInput: "I:", tokenOutput: "O:", tokenCache: "C:" },
   colors: {
     model: "neonViolet",
     project: "cyan",
-    branch: "violet",
+    branch: "neonViolet",
     runtime: "dim",
     dirty: "amber",
     label: "dim",
     separator: "dim",
-    tokenTotal: "cyan",
-    tokenInput: "mint",
-    tokenOutput: "violet",
-    tokenCache: "amber",
+    tokenTotal: "amber",
+    tokenInput: "cyan",
+    tokenOutput: "cyan",
+    tokenCache: "cyan",
+    pace: "mint",
     ok: "mint",
     warn: "amber",
     crit: "coral",
@@ -670,10 +682,11 @@ function renderRate(label, window, ctx) {
   if (!window) {
     return colorize(label, ctx.color || c.label, e) + colorize(s.labelValue + "?", c.label, e);
   }
-  const remaining = window.resetsAt ? formatDurationUntil(window.resetsAt) : "";
+  const remainingRaw = window.resetsAt ? formatDurationUntil(window.resetsAt) : "";
+  const remaining = remainingRaw === "now" ? formatDurationWindow(window.windowMinutes) || remainingRaw : remainingRaw;
   const pace = ratePacePercent(window);
   const paceText = ctx.format.showPace && pace !== null
-    ? colorize(formatPercentCfg(pace, ctx.format), colorByPaceDeltaCfg(window.usedPercent, pace, ctx), e)
+    ? colorize(formatPercentCfg(pace, ctx.format), c.pace || colorByPaceDeltaCfg(window.usedPercent, pace, ctx), e)
     : "";
   const detail = [remaining, paceText].filter(Boolean).join(s.tokenPart);
   return renderMetric(label, window.usedPercent, detail, ctx);
@@ -720,14 +733,16 @@ const SEGMENTS = {
   },
   branch: {
     id: "branch",
-    joinWithPrevious: " ",
     render(data, ctx) {
       const branch = statusGitBranch(data);
       if (!branch) return null;
       const isDirty = branch.endsWith("*");
       const clean = isDirty ? branch.slice(0, -1) : branch;
       const dirty = isDirty ? colorize("*", ctx.colors.dirty, ctx.colorEnabled) : "";
-      return colorize(clean, ctx.color, ctx.colorEnabled) + dirty;
+      return colorize("git(", ctx.colors.label, ctx.colorEnabled)
+        + colorize(clean, ctx.color, ctx.colorEnabled)
+        + dirty
+        + colorize(")", ctx.colors.label, ctx.colorEnabled);
     },
   },
   runtime: {
@@ -778,11 +793,21 @@ function getRenderConfig(data) {
   return (data && data.hud && data.hud.config) || DEFAULT_CONFIG;
 }
 
+function effectiveSeparators(config) {
+  const separators = clone(config.separators);
+  if (config.space) {
+    separators.segment = " " + separators.segment.trim() + " ";
+    separators.labelValue = separators.labelValue.trimEnd() + " ";
+  }
+  return separators;
+}
+
 function renderFooter(data, config, options = {}) {
   const colorEnabled = options.color === true;
   const colors = resolveColorSet(config.colors);
   const sepColor = resolveColor(config.colors.separator, COLORS.dim);
-  const separator = colorize(config.separators.segment, sepColor, colorEnabled);
+  const separators = effectiveSeparators(config);
+  const separator = colorize(separators.segment, sepColor, colorEnabled);
 
   const pieces = [];
   for (const id of config.segments) {
@@ -794,7 +819,7 @@ function renderFooter(data, config, options = {}) {
       colors,
       thresholds: config.thresholds,
       format: config.format,
-      separators: config.separators,
+      separators,
       labels: config.labels,
       colorEnabled,
     };
@@ -835,8 +860,11 @@ const CONFIG_SCAFFOLD = `# codex-hud.toml — Codex HUD footer configuration (ev
 # A malformed or invalid file is ignored (defaults used) with a note on stderr.
 # Inspect the resolved result with:  codex-hud --print-config
 
-# Text placed between segments.
-separator = " | "
+# Compact by default. Set space = true for " | " segment spacing and ": " labels.
+space = false
+
+# Text placed between segments. The space flag controls padding around this text.
+separator = "|"
 
 # Which segments to show, in order. Remove, reorder, or add any of these ids:
 #   model, project, branch, runtime, ctx, 5h, 7d, tkn
@@ -858,7 +886,7 @@ tkn = "Tkn"
 [colors]
 model = "neonViolet"
 project = "cyan"
-branch = "violet"
+branch = "neonViolet"
 ok = "mint"
 warn = "amber"
 crit = "coral"
@@ -978,6 +1006,10 @@ function validateAndCoerce(raw, warnings, source) {
   if ("separator" in raw) {
     if (typeof raw.separator === "string") out.separators = { segment: raw.separator };
     else note("separator must be a string; ignored");
+  }
+  if ("space" in raw) {
+    if (typeof raw.space === "boolean") out.space = raw.space;
+    else note("space must be a boolean; ignored");
   }
   if (isPlainObject(raw.separators)) {
     out.separators = out.separators || {};

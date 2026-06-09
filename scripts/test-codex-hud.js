@@ -37,23 +37,33 @@ const text = run([]);
 assert.strictEqual(text.status, 0, text.stderr);
 assert.match(text.stdout, /Codex HUD 0\.3\.0/);
 assert.match(text.stdout, /Workspace/);
-assert.match(text.stdout, /usage: .+ \| .+ .+\*? \| Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+/);
+assert.match(text.stdout, /usage: .+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+/);
 
 const line = run(["--line"]);
 assert.strictEqual(line.status, 0, line.stderr);
-assert.match(line.stdout.trim(), /^.+ \| .+ .+\*? \| Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+$/);
+assert.match(line.stdout.trim(), /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+$/);
 assert.doesNotMatch(line.stdout, /gpt-/);
 assert.doesNotMatch(line.stdout, /git:\(/);
 assert.doesNotMatch(line.stdout, /·/);
 assert.doesNotMatch(line.stdout, /node v/);
+assert.doesNotMatch(line.stdout, / \| /);
+assert.doesNotMatch(line.stdout, /: /);
 
 const colorLine = run(["--line", "--color"]);
 assert.strictEqual(colorLine.status, 0, colorLine.stderr);
 assert.match(colorLine.stdout, /\x1b\[38;5;135m/);
 assert.match(colorLine.stdout, /\x1b\[38;5;245m/);
+assert.match(colorLine.stdout, /\|\x1b\[0m\x1b\[38;5;45mcodex-hud\x1b\[0m\x1b\[38;5;245m\|/);
+assert.match(colorLine.stdout, /git\(\x1b\[0m\x1b\[38;5;135m/);
+assert.match(colorLine.stdout, /\x1b\[38;5;215m\*\x1b\[0m/);
+assert.match(colorLine.stdout, /Tkn\x1b\[0m\x1b\[38;5;245m:\x1b\[0m\x1b\[38;5;215m[^(\n]+\x1b\[0m/);
+assert.match(colorLine.stdout, /\(I:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
+assert.match(colorLine.stdout, /,O:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
+assert.match(colorLine.stdout, /,C:\x1b\[0m\x1b\[38;5;45m[^)\n]+\x1b\[0m/);
+assert.match(colorLine.stdout, /,\x1b\[38;5;85m\d+%\x1b\[0m\)/);
 assert.match(
   colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
-  /^.+ \| .+ .+\*? \| Ctx: .+ \| 5h: .+ \| 7d: .+ \| Tkn: .+$/
+  /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+$/
 );
 
 const tmpCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-test-"));
@@ -74,29 +84,29 @@ try {
         type: "token_count",
         info: {
           total_token_usage: {
-            input_tokens: 399000,
-            cached_input_tokens: 35100000,
-            output_tokens: 583000,
-            total_tokens: 982000,
+            input_tokens: 533000,
+            cached_input_tokens: 366000,
+            output_tokens: 5000,
+            total_tokens: 904000,
           },
           last_token_usage: {
-            input_tokens: 260,
+            input_tokens: 210,
             cached_input_tokens: 0,
             output_tokens: 0,
-            total_tokens: 260,
+            total_tokens: 210,
           },
           model_context_window: 1000,
         },
         rate_limits: {
           primary: {
-            used_percent: 0,
+            used_percent: 17,
             window_minutes: 300,
-            resets_at: Math.floor((nowMs + 4.4 * 3600000) / 1000),
+            resets_at: Math.floor(nowMs / 1000),
           },
           secondary: {
-            used_percent: 6,
+            used_percent: 16,
             window_minutes: 10080,
-            resets_at: Math.floor((nowMs + 6.4 * 24 * 3600000) / 1000),
+            resets_at: Math.floor((nowMs + 5.1 * 24 * 3600000) / 1000),
           },
         },
       },
@@ -113,8 +123,9 @@ try {
   assert.strictEqual(fixtureLine.status, 0, fixtureLine.stderr);
   assert.match(
     fixtureLine.stdout.trim(),
-    /^5\.5 xhigh \| codex-hud .+\*? \| Ctx: 26% \| 5h: 0%\(4\.4h,12%\) \| 7d: 6%\(6\.4d,9%\) \| Tkn: 36\.1M\(I:399k,O:583k,C:35\.1M\)$/
+    /^5\.5xhigh\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,100%\)\|7d:16%\(5\.1d,27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
   );
+  assert.doesNotMatch(fixtureLine.stdout, /now/);
 } finally {
   fs.rmSync(tmpCodexHome, { recursive: true, force: true });
 }
