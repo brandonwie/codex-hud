@@ -30,6 +30,8 @@ const repoRoot = path.resolve(__dirname, "..");
 const hudScript = path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js");
 const GOLDEN = path.join(__dirname, "golden", "collect-parsing.golden");
 const NOW_MS = Date.parse("2026-06-08T00:00:00.000Z");
+// Deliberately tiny so context percentage math is readable in the golden.
+const TEST_CONTEXT_WINDOW = 1000;
 
 function git(cwd, args) {
   const r = spawnSync(
@@ -94,7 +96,7 @@ const ROLLOUTS = {
     info: {
       total_token_usage: { input_tokens: 533000, cached_input_tokens: 366000, output_tokens: 5000, total_tokens: 904000 },
       last_token_usage: { input_tokens: 210, cached_input_tokens: 0, output_tokens: 0, total_tokens: 210 },
-      model_context_window: 1000,
+      model_context_window: TEST_CONTEXT_WINDOW,
     },
     rates: {
       primary: { used_percent: 17, window_minutes: 300, resets_at: Math.floor(NOW_MS / 1000) },
@@ -105,7 +107,7 @@ const ROLLOUTS = {
     info: {
       total_token_usage: { input_tokens: 533000, cached_input_tokens: 366000, output_tokens: 5000, total_tokens: 904000 },
       last_token_usage: { input_tokens: 210, cached_input_tokens: 0, output_tokens: 0, total_tokens: 210 },
-      model_context_window: 1000,
+      model_context_window: TEST_CONTEXT_WINDOW,
     },
     rates: {},
   },
@@ -113,7 +115,7 @@ const ROLLOUTS = {
     info: {
       total_token_usage: { input_tokens: 1200000, cached_input_tokens: 250000, output_tokens: 50000, total_tokens: 1500000 },
       last_token_usage: { input_tokens: 990, cached_input_tokens: 0, output_tokens: 0, total_tokens: 990 },
-      model_context_window: 1000,
+      model_context_window: TEST_CONTEXT_WINDOW,
     },
     rates: {
       primary: { used_percent: 93, window_minutes: 300, resets_at: Math.floor(NOW_MS / 1000) },
@@ -127,11 +129,18 @@ const ROLLOUTS = {
 function collectParsed(gitState, rolloutKey) {
   const gitDir = makeGitRepo(gitState);
   const homeDir = makeCodexHome(ROLLOUTS[rolloutKey]);
+  const childEnv = {
+    CODEX_HOME: homeDir,
+    CODEX_HUD_NOW_MS: String(NOW_MS),
+    HOME: process.env.HOME,
+    PATH: process.env.PATH,
+    USERPROFILE: process.env.USERPROFILE,
+  };
   try {
     const r = spawnSync(process.execPath, [hudScript, "--json"], {
       cwd: gitDir,
       encoding: "utf8",
-      env: { ...process.env, CODEX_HOME: homeDir, CODEX_HUD_NOW_MS: String(NOW_MS) },
+      env: Object.fromEntries(Object.entries(childEnv).filter(([, value]) => value)),
     });
     if (r.status !== 0) throw new Error("--json failed: " + (r.stderr || ""));
     const data = JSON.parse(r.stdout);
@@ -164,6 +173,7 @@ function collectParsed(gitState, rolloutKey) {
         rateLimits: data.usage.rateLimits,
         sourceFile: redact(data.usage.sourceFile),
       },
+      // Temp repos intentionally omit package.json; project-name parsing is outside this golden's scope.
       project: { name: data.project && data.project.package ? data.project.package.name : null },
     };
   } finally {
