@@ -128,12 +128,13 @@ npm run patch:codex
 ```
 
 The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and
-installs it as `~/.local/bin/codex-hud-codex`. It also writes
+keeps the real executable under `~/.local/bin/codex-hud-codex.d/codex`, with
+`~/.local/bin/codex-hud-codex` as a symlink to that binary. It also writes
 `~/.local/bin/codex-hud-tui`, a launcher that passes the colored HUD command through
 Codex's `-c tui.status_line_command=...` override without changing
-`~/.codex/config.toml`. The launcher runs the patched binary with `argv[0]` set
-to `codex`, so terminal integrations such as Herdr can still recognize the pane
-as a Codex session.
+`~/.codex/config.toml`. The executable path and `argv[0]` both keep Codex-visible
+names, so terminal integrations such as Herdr can still recognize the pane as a
+Codex session.
 
 Safe launcher mode leaves your normal `codex` command alone:
 

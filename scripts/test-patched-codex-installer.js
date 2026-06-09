@@ -143,7 +143,10 @@ fs.chmodSync(path.join(installSourceRoot, "codex-rs/target/release/codex"), 0o75
 fs.writeFileSync(outsideCodex, "stock codex\n");
 fs.symlinkSync(outsideCodex, path.join(installPrefix, "codex-hud-codex"));
 const installedBinary = installBuiltBinary(installSourceRoot, { prefix: installPrefix, binName: "codex-hud-codex" });
-assert.strictEqual(fs.lstatSync(installedBinary).isSymbolicLink(), false);
+const installedBackingBinary = path.join(installPrefix, "codex-hud-codex.d", process.platform === "win32" ? "codex.exe" : "codex");
+assert.strictEqual(fs.lstatSync(installedBinary).isSymbolicLink(), true);
+assert.strictEqual(fs.realpathSync.native(installedBinary), fs.realpathSync.native(installedBackingBinary));
+assert.strictEqual(path.basename(fs.realpathSync.native(installedBinary)), process.platform === "win32" ? "codex.exe" : "codex");
 assert.strictEqual(fs.readFileSync(installedBinary, "utf8"), "patched codex\n");
 assert.strictEqual(fs.readFileSync(outsideCodex, "utf8"), "stock codex\n");
 

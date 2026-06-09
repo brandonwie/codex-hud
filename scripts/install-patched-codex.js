@@ -552,14 +552,25 @@ function installBinary(sourceDir, args) {
 
 function installBuiltBinary(sourceDir, args) {
   const workspace = path.join(sourceDir, "codex-rs");
-  const builtBinary = path.join(workspace, "target", "release", process.platform === "win32" ? "codex.exe" : "codex");
+  const binaryName = process.platform === "win32" ? "codex.exe" : "codex";
+  const builtBinary = path.join(workspace, "target", "release", binaryName);
   const target = path.join(args.prefix, args.binName);
+  const backingDir = `${target}.d`;
+  const backingBinary = path.join(backingDir, binaryName);
   fs.mkdirSync(args.prefix, { recursive: true });
-  if (fs.existsSync(target) && fs.lstatSync(target).isSymbolicLink()) {
+
+  fs.mkdirSync(backingDir, { recursive: true });
+  fs.copyFileSync(builtBinary, backingBinary);
+  fs.chmodSync(backingBinary, 0o755);
+
+  if (fs.existsSync(target)) {
+    if (fs.lstatSync(target).isDirectory()) {
+      throw new Error(`Refusing to replace directory at ${target}.`);
+    }
     fs.unlinkSync(target);
   }
-  fs.copyFileSync(builtBinary, target);
-  fs.chmodSync(target, 0o755);
+
+  fs.symlinkSync(backingBinary, target);
   return target;
 }
 
