@@ -55,7 +55,13 @@ assert.match(colorLine.stdout, /\x1b\[38;5;135m/);
 assert.match(colorLine.stdout, /\x1b\[38;5;245m/);
 assert.match(colorLine.stdout, /\|\x1b\[0m\x1b\[38;5;45mcodex-hud\x1b\[0m\x1b\[38;5;245m\|/);
 assert.match(colorLine.stdout, /git\(\x1b\[0m\x1b\[38;5;135m/);
-assert.match(colorLine.stdout, /\x1b\[38;5;215m\*\x1b\[0m/);
+// Dirty-star color is covered deterministically by the golden harness
+// (scripts/test-golden.js, "dirty-repo" case). Against the live repo it is
+// only asserted when the working tree is actually dirty, so a clean checkout
+// (e.g. CI or a post-commit tree) does not fail here.
+if (/git\([^)]*\*/.test(colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, ""))) {
+  assert.match(colorLine.stdout, /\x1b\[38;5;215m\*\x1b\[0m/);
+}
 assert.match(colorLine.stdout, /Tkn\x1b\[0m\x1b\[38;5;245m:\x1b\[0m\x1b\[38;5;215m[^(\n]+\x1b\[0m/);
 assert.match(colorLine.stdout, /\(I:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
 assert.match(colorLine.stdout, /,O:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
