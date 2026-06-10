@@ -6,6 +6,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
+  defaultStatusLineCommand,
   detectCodexVersion,
   detectLegacyLayout,
   detectStockCodex,
@@ -14,6 +15,7 @@ const {
   installBuiltBinary,
   installDefaultShim,
   installLauncher,
+  installRustRenderer,
   isManagedDefaultShim,
   migrateLegacyLayout,
   parseArgs,
@@ -21,9 +23,12 @@ const {
   patchSource,
   pruneVersionDirs,
   renderLauncherScript,
+  resolveRenderer,
   reviewLegacyBinEntry,
+  statusLineCommandFor,
   uninstallDefaultShim,
   verifyInstalledBinary,
+  verifyRustRenderer,
 } = require("./install-patched-codex");
 
 function writeFile(root, relativePath, contents) {
@@ -182,6 +187,12 @@ assert.throws(() => parseArgs(["--keep-versions", "0"]), /--keep-versions/);
 assert.throws(() => parseArgs(["--bin-name", "../codex"]), /--bin-name must contain only/);
 assert.throws(() => parseArgs(["--launcher-name", "codex*"]), /--launcher-name must contain only/);
 assert.throws(() => parseArgs(["--version", "../../0.139.0"]), /--version must be a semver-like/);
+assert.strictEqual(parsed.renderer, "auto", "default renderer must be auto");
+assert.strictEqual(parseArgs(["--renderer", "rust"]).renderer, "rust");
+assert.strictEqual(parseArgs(["--renderer", "js"]).renderer, "js");
+assert.throws(() => parseArgs(["--renderer", "python"]), /--renderer must be auto, rust, or js/);
+assert.throws(() => parseArgs(["--bin-name", "codex-hud-rs"]), /Refusing to use codex-hud-rs/);
+assert.throws(() => parseArgs(["--launcher-name", "codex-hud-rs"]), /Refusing to use codex-hud-rs/);
 
 // --- stock discovery: HUD-managed candidates skipped ---
 const versionShimRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-version-shim-test-"));
@@ -329,6 +340,141 @@ const fallbackRun = spawnSync("bash", [fallbackWrapperPath, "again"], { encoding
 assert.strictEqual(fallbackRun.status, 0, `fallback wrapper failed: ${fallbackRun.stderr}`);
 assert.match(fallbackRun.stdout, /STOCK-RAN again/);
 assert(!fs.existsSync(sentinel), "fallback discovery must never execute a HUD-managed payload");
+
+// --- rust renderer: verify / install / resolve ---
+const rendererRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-renderer-test-"));
+const rendererSource = path.join(rendererRoot, "source", "codex-hud-rs");
+const missingSource = path.join(rendererRoot, "source", "not-built");
+writeExecutable(rendererSource, '#!/usr/bin/env bash\necho "codex-hud 0.2.0"\n');
+const rendererPrefix = path.join(rendererRoot, "bin");
+const rendererArgs = { prefix: rendererPrefix, renderer: "auto" };
+
+assert.strictEqual(verifyRustRenderer(rendererSource), "0.2.0");
+const gibberishRenderer = path.join(rendererRoot, "source", "gibberish");
+writeExecutable(gibberishRenderer, "#!/usr/bin/env bash\necho not-a-hud\n");
+assert.throws(() => verifyRustRenderer(gibberishRenderer), /Could not parse codex-hud-rs version/);
+
+const installedRenderer = installRustRenderer(rendererArgs, { sourcePath: rendererSource });
+assert.deepStrictEqual(installedRenderer, {
+  status: "installed",
+  path: path.join(rendererPrefix, "codex-hud-rs"),
+  version: "0.2.0",
+});
+assert(fs.statSync(installedRenderer.path).mode & 0o111, "installed renderer must be executable");
+
+const existingRenderer = installRustRenderer(rendererArgs, { sourcePath: missingSource });
+assert.deepStrictEqual(existingRenderer, {
+  status: "existing",
+  path: path.join(rendererPrefix, "codex-hud-rs"),
+  version: "0.2.0",
+});
+assert.deepStrictEqual(resolveRenderer(rendererArgs, { sourcePath: missingSource }), {
+  kind: "rust",
+  path: path.join(rendererPrefix, "codex-hud-rs"),
+});
+
+writeExecutable(path.join(rendererPrefix, "codex-hud-rs"), "#!/usr/bin/env bash\nexit 1\n");
+assert.deepStrictEqual(installRustRenderer(rendererArgs, { sourcePath: missingSource }), {
+  status: "broken",
+  path: path.join(rendererPrefix, "codex-hud-rs"),
+});
+assert.deepStrictEqual(
+  resolveRenderer(rendererArgs, { sourcePath: missingSource }),
+  { kind: "js" },
+  "auto must fall back to js when the installed renderer is broken",
+);
+
+const emptyRendererPrefix = path.join(rendererRoot, "empty-bin");
+assert.deepStrictEqual(installRustRenderer({ prefix: emptyRendererPrefix }, { sourcePath: missingSource }), {
+  status: "missing",
+  path: path.join(emptyRendererPrefix, "codex-hud-rs"),
+});
+assert.deepStrictEqual(
+  resolveRenderer({ prefix: emptyRendererPrefix, renderer: "auto" }, { sourcePath: missingSource }),
+  { kind: "js" },
+  "auto must fall back to js when nothing is built",
+);
+assert.deepStrictEqual(resolveRenderer({ prefix: emptyRendererPrefix, renderer: "js" }, { sourcePath: rendererSource }), { kind: "js" });
+assert.throws(
+  () => resolveRenderer({ prefix: emptyRendererPrefix, renderer: "rust" }, { sourcePath: missingSource }),
+  /npm run build:rust/,
+);
+
+// preview mode (install:false) must write nothing and track machine state
+const previewPrefix = path.join(rendererRoot, "preview-bin");
+assert.deepStrictEqual(
+  resolveRenderer({ prefix: previewPrefix, renderer: "auto" }, { install: false, sourcePath: rendererSource }),
+  { kind: "rust", path: path.join(previewPrefix, "codex-hud-rs"), preview: true },
+);
+assert(!fs.existsSync(path.join(previewPrefix, "codex-hud-rs")), "resolveRenderer install:false must not write to the prefix");
+assert(!fs.existsSync(previewPrefix), "resolveRenderer install:false must not create the prefix");
+assert.deepStrictEqual(
+  resolveRenderer({ prefix: previewPrefix, renderer: "auto" }, { install: false, sourcePath: missingSource }),
+  { kind: "js" },
+);
+
+// --- statusLineCommandFor ---
+assert.strictEqual(
+  statusLineCommandFor({ kind: "rust", path: "/x/bin/codex-hud-rs" }),
+  "'/x/bin/codex-hud-rs' --line --color",
+);
+assert.strictEqual(statusLineCommandFor({ kind: "js" }), defaultStatusLineCommand());
+assert.match(statusLineCommandFor({ kind: "js" }), /^node '.*codex-hud\.js' --line --color$/);
+
+// --- launcher renderer marker round-trips; stock stays free of status_line_command ---
+const rustStatusLineCommand = statusLineCommandFor({ kind: "rust", path: path.join(rendererPrefix, "codex-hud-rs") });
+const rustPatchedScript = renderLauncherScript({
+  mode: "patched",
+  prefix: rendererPrefix,
+  patchedBinary: path.join(rendererPrefix, "codex-hud-codex"),
+  patchedVersion: "0.139.0",
+  statusLineCommand: rustStatusLineCommand,
+  renderer: "rust",
+});
+assert(rustPatchedScript.includes("# renderer=rust"));
+assert(rustPatchedScript.includes("exec -a codex "), "rust-renderer patched launcher must preserve argv[0] as codex");
+assert(rustPatchedScript.includes("codex-hud-rs"), "patched -c override must carry the rust renderer");
+assert.strictEqual(parseLauncherMetadata(rustPatchedScript).renderer, "rust");
+
+const rustStockScript = renderLauncherScript({
+  mode: "stock",
+  prefix: rendererPrefix,
+  stockPath: "/opt/homebrew/bin/codex",
+  renderer: "rust",
+});
+assert(rustStockScript.includes("# renderer=rust"));
+assert(rustStockScript.includes('exec -a codex "$stock"'));
+assert(!rustStockScript.includes("status_line_command"), "stock launcher must not inject patched-only config even with a renderer marker");
+assert.strictEqual(parseLauncherMetadata(rustStockScript).renderer, "rust");
+assert.strictEqual(parseLauncherMetadata(stockScript).renderer, undefined, "older launchers without the marker carry no renderer");
+
+// --- generated patched wrapper: real exec carries the rust -c override and verbatim user args ---
+const patchedExecPrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-patched-exec-test-"));
+const fakePatchedCodex = path.join(patchedExecPrefix, "fake-patched-codex");
+writeExecutable(fakePatchedCodex, "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\"\n");
+const patchedExecCommand = statusLineCommandFor({ kind: "rust", path: path.join(patchedExecPrefix, "codex-hud-rs") });
+const patchedExecLauncher = installLauncher(
+  { prefix: patchedExecPrefix, binName: "codex-hud-codex", launcherName: "codex-hud-tui" },
+  {
+    mode: "patched",
+    patchedBinary: fakePatchedCodex,
+    patchedVersion: "0.139.0",
+    statusLineCommand: patchedExecCommand,
+    renderer: "rust",
+  },
+);
+assert.strictEqual(parseLauncherMetadata(fs.readFileSync(patchedExecLauncher, "utf8")).renderer, "rust");
+const patchedExecRun = spawnSync("bash", [patchedExecLauncher, "resume", "--last"], { encoding: "utf8" });
+assert.strictEqual(patchedExecRun.status, 0, `patched wrapper failed: ${patchedExecRun.stderr}`);
+const patchedExecArgv = patchedExecRun.stdout.split("\n").filter(Boolean);
+assert.strictEqual(patchedExecArgv[0], "-c");
+assert.strictEqual(
+  patchedExecArgv[1],
+  `tui.status_line_command=${JSON.stringify(patchedExecCommand)}`,
+  "layered quoting must survive bash and deliver the exact TOML override",
+);
+assert(patchedExecArgv[1].includes("codex-hud-rs"));
+assert.deepStrictEqual(patchedExecArgv.slice(2), ["resume", "--last"], "user args must arrive verbatim after the -c override");
 
 // --- pruneVersionDirs ---
 const pruneRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prune-test-"));
