@@ -5,7 +5,7 @@ use std::collections::HashMap;
 pub const RESET: &str = "\x1b[0m";
 
 /// Named palette — byte-identical to the JS COLORS map.
-pub fn palette(name: &str) -> Option<&'static str> {
+fn palette(name: &str) -> Option<&'static str> {
     match name {
         "dim" => Some("\x1b[38;5;245m"),
         "coral" => Some("\x1b[38;5;203m"),
@@ -46,9 +46,9 @@ pub fn resolve_color(input: Option<&Value>, fallback: Option<String>) -> Option<
     if let Value::String(s) = input {
         let hex = s.strip_prefix('#').unwrap_or(s);
         if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
-            let r = u8::from_str_radix(&hex[0..2], 16).unwrap();
-            let g = u8::from_str_radix(&hex[2..4], 16).unwrap();
-            let b = u8::from_str_radix(&hex[4..6], 16).unwrap();
+            let r = u8::from_str_radix(&hex[0..2], 16).expect("guarded: 6 ascii hex digits");
+            let g = u8::from_str_radix(&hex[2..4], 16).expect("guarded: 6 ascii hex digits");
+            let b = u8::from_str_radix(&hex[4..6], 16).expect("guarded: 6 ascii hex digits");
             return Some(format!("\x1b[38;5;{}m", nearest_xterm256(r, g, b)));
         }
     }

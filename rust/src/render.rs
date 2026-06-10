@@ -203,10 +203,11 @@ pub fn status_model(data: &Value) -> Option<String> {
                 .map(|s| s.to_string())
         });
     let model = raw_model.map(|m| {
-        if m.len() >= 4 && m[..4].eq_ignore_ascii_case("gpt-") {
-            m[4..].to_string()
-        } else {
-            m
+        // SECURITY: get(..4) avoids a char-boundary panic when an untrusted
+        // model string has a multibyte char at byte 4 (oracle regex never crashes).
+        match m.get(..4) {
+            Some(prefix) if prefix.eq_ignore_ascii_case("gpt-") => m[4..].to_string(),
+            _ => m,
         }
     });
     let reasoning = format_reasoning_effort(js::get(config, "reasoning"));

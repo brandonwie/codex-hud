@@ -199,21 +199,17 @@ pub fn list_session_files(codex_home: &Path) -> Vec<PathBuf> {
     }
 
     walk(&sessions_root, &mut files);
-    files.sort_by(|a, b| {
-        mtime_ms(b)
-            .partial_cmp(&mtime_ms(a))
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    files.sort_by_cached_key(|f| std::cmp::Reverse(mtime_ms(f)));
     files
 }
 
-fn mtime_ms(path: &Path) -> f64 {
+fn mtime_ms(path: &Path) -> i64 {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as f64)
-        .unwrap_or(0.0)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// Port of readTailLines(): last maxLines lines of a trimmed file.

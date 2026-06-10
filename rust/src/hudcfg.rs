@@ -3,6 +3,8 @@ use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
 pub const HUD_CONFIG_FILENAME: &str = "codex-hud.toml";
+// Oracle truncates labels via String(value).slice(0, 40).
+const MAX_LABEL_LEN: usize = 40;
 
 pub fn default_config() -> Value {
     json!({
@@ -199,8 +201,10 @@ pub fn deep_merge(base: &Value, over: &Value) -> Value {
         return over.clone();
     }
     let mut out = base.clone();
-    let out_map = out.as_object_mut().unwrap();
-    for (key, over_value) in over.as_object().unwrap() {
+    let out_map = out
+        .as_object_mut()
+        .expect("guarded by is_plain_object above");
+    for (key, over_value) in over.as_object().expect("guarded by is_plain_object above") {
         let merged = match out_map.get(key) {
             Some(base_value) => deep_merge(base_value, over_value),
             None => over_value.clone(),
@@ -334,11 +338,17 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         for (key, value) in labels {
             match value {
                 Value::String(s) => {
-                    coerced.insert(key.clone(), Value::String(s.chars().take(40).collect()));
+                    coerced.insert(
+                        key.clone(),
+                        Value::String(s.chars().take(MAX_LABEL_LEN).collect()),
+                    );
                 }
                 Value::Number(n) => {
                     let text = crate::js::num_to_string(n.as_f64().unwrap_or(f64::NAN));
-                    coerced.insert(key.clone(), Value::String(text.chars().take(40).collect()));
+                    coerced.insert(
+                        key.clone(),
+                        Value::String(text.chars().take(MAX_LABEL_LEN).collect()),
+                    );
                 }
                 _ => note(
                     warnings,
@@ -381,7 +391,10 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
             for key in ["warn", "crit"] {
                 match group_map.get(key) {
                     Some(value) if value.as_f64().map(|f| f.is_finite()).unwrap_or(false) => {
-                        let clamped = value.as_f64().unwrap().clamp(0.0, 100.0);
+                        let clamped = value
+                            .as_f64()
+                            .expect("guarded by is_finite above")
+                            .clamp(0.0, 100.0);
                         coerced.insert(key.into(), crate::js::number_value(clamped));
                     }
                     Some(_) => note(
