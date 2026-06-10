@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+次に HUD ランチャーをインストールします(推奨)。デフォルトモードは**実際の Codex インストールに委譲**するため、Homebrew/npm の Codex 更新が自動的に反映されます — 再ビルドもパッチ済みバイナリも不要です:
+
+```bash
+npm run install:launcher                    # ~/.local/bin/codex-hud-tui をインストール
+npm run install:launcher -- --make-default  # 任意: `codex` をランチャーに解決させる
+rehash
+```
+
+詳細は後述の「HUD ランチャー」セクションを、診断は `npm run doctor` を参照してください。
 
 スキルリストが更新されるよう、インストールまたは再インストール後は新しい Codex スレッドを開始してください。
 
@@ -146,26 +154,65 @@ showPace = true     # false -> hide the pace % in 5h/7d
 
 `codex-hud --print-config` を実行すると、解決された全オプションセットを確認できます。
 
-## パッチ適用版 Codex フッター
+## HUD ランチャー(ストック委譲 — デフォルト)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher` は `~/.local/bin/codex-hud-tui` を書き込みます。この小さなランチャーは実際の(ストック)Codex インストールを見つけて `exec -a codex` で実行するため、Herdr などのターミナル統合は引き続きそのペインを Codex セッションとして認識します。ストックバイナリのパスはインストール時に埋め込まれ、見つからない場合は `PATH` 上で Codex を再探索するランタイムフォールバックが働きます(HUD 管理のエントリはすべてスキップするため、ランチャーが自分自身を再帰的に実行することはありません)。
 
-標準の Codex は、入力エリアの下に任意のプラグイン出力を描画できません。Claude HUD スタイルのフッターを得るには、別途パッチ適用版の Codex コマンドをビルドします。
+ランチャーはストック Codex に委譲するため:
+
+- Homebrew/npm の Codex 更新は自動的に反映されます — 再ビルド不要。
+- Homebrew/ストック Codex のファイルは決して変更・置換されません。
+- `npm run install:launcher -- --make-default` は管理対象の `~/.local/bin/codex` シムをインストールします。管理外の `codex` は `--force-shim` を渡さない限り置換を拒否します。
+
+管理対象シムのみを削除するには:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor` は起動チェーン全体の状態を表示します — シム、ランチャーモード(stock/patched/legacy)、ストック Codex のパスとバージョン、パッチ済みペイロードのバージョン、鮮度、残存アーティファクト:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+アクティブなエントリポイントチェーンが壊れている場合にのみ非ゼロで終了します。
+
+### 旧 codex-hud インストールからの移行
+
+以前に `npm run patch:codex`(旧デフォルトフロー)を実行していた場合は、`npm run install:launcher` を一度実行してください。`codex-hud-tui` をストック委譲に書き換え、既存の `codex` シムはそのまま機能し続けます。正常な旧 `codex-hud-codex` コマンドは(古くなる旨の注記とともに)そのまま残され、壊れたものは `codex-hud-codex.broken-<timestamp>` として隔離され、起動中に死ぬ代わりに即座に失敗します。次回の `npm run patch:codex` で旧フラットペイロードはバージョン別レイアウトへ自動移行されます。残存物は `npm run doctor` で確認できます。
+
+## 実験的機能: パッチ済み Codex フッター
+
+> **警告 — 実験的機能です。** このモードはローカルでパッチした未署名の Codex バイナリをビルドします。macOS が未署名の再ビルドを強制終了することがあり(インストーラーは有効化の*前に*すべてのペイロードをヘルスチェックするため、ビルド失敗がアクティブな `codex` を壊すことはありません)、パッチ済みバイナリは**ストック Codex の更新で古くなります** — Codex 更新後は `npm run patch:codex` の再実行が必要です。TUI 内フッターがどうしても必要な場合を除き、デフォルトのストック委譲ランチャーを使ってください。
+
+ストック Codex は入力エリアの下に任意のプラグイン出力を描画できません。Claude HUD スタイルのフッターを得るには、別個のパッチ済み Codex コマンドをビルドします:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-インストーラーは一致する OpenAI Codex タグにパッチを適用し、Rust CLI をビルドして、実際の実行ファイルを `~/.local/bin/codex-hud-codex.d/codex` に保持し、`~/.local/bin/codex-hud-codex` をそのバイナリへのシンボリックリンクにします。また `~/.local/bin/codex-hud-tui` も書き込みます。これは、`~/.codex/config.toml` を変更せずに色付き HUD コマンドを Codex の `-c tui.status_line_command=...` オーバーライド経由で渡すランチャーです。実行ファイルのパスと `argv[0]` はどちらも Codex から認識できる名前を保つため、Herdr のようなターミナル統合は引き続きそのペインを Codex セッションとして認識できます。
+インストーラーは一致する OpenAI Codex タグにパッチを当てて Rust CLI をビルドし、実行ファイルを `~/.local/bin/codex-hud-codex.d/<version>/codex` にステージングします。ステージされたペイロードは有効化の**前に** `--version` ヘルスチェックに合格する必要があり、合格した場合にのみ `~/.local/bin/codex-hud-codex` が新しいペイロードへ原子的に付け替えられ、以前のバージョンはロールバック用にディスク上へ保持されます。失敗したビルドは `<version>.failed` として退避され、アクティブなランタイムは手つかずのまま残ります。またパッチモードの `~/.local/bin/codex-hud-tui` ランチャーも書き込みます。これは `~/.codex/config.toml` を変更せずに、Codex の `-c tui.status_line_command=...` オーバーライドでカラー HUD コマンドを渡します。実行ファイルのパスと `argv[0]` はどちらも Codex に見える名前を保つため、Herdr などのターミナル統合は引き続きそのペインを Codex セッションとして認識します。
 
-セーフランチャーモードは、通常の `codex` コマンドには手を加えません。
+セーフランチャーモードは通常の `codex` コマンドに手を付けません:
 
 ```bash
 codex-hud-tui
 ```
 
-新しい `codex` の起動で HUD 対応の TUI を使うようにするには、管理対象のシムをオプトインします。
+新しい `codex` 起動で HUD 対応 TUI を使うには、管理対象シムにオプトインします:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,9 +221,9 @@ which codex
 codex
 ```
 
-`which codex` は `~/.local/bin/codex` に解決されるはずです。インストーラーは、`--force-shim` を渡さない限り既存の `~/.local/bin/codex` の置き換えを拒否し、さらに `--replace-codex` を渡さない限りパッチ適用版バイナリ自体を `codex` としてインストールすることも拒否します。
+`which codex` は `~/.local/bin/codex` に解決されるはずです。インストーラーは `--force-shim` を渡さない限り既存の `~/.local/bin/codex` の置換を拒否し、`--replace-codex` を渡さない限りパッチ済みバイナリ自体を `codex` としてインストールすることも拒否します。
 
-ロールバックは、管理対象の `codex` シムのみを削除します。
+ロールバックは管理対象の `codex` シムのみを削除します:
 
 ```bash
 node scripts/install-patched-codex.js --uninstall-shim
@@ -184,21 +231,20 @@ rehash
 which codex
 ```
 
-永続的な設定を好む場合は、表示された行を既存の `[tui]` テーブルの下に追加します。ただし、標準の Codex バージョンは未知のフィールドを拒否する場合があることに注意してください。リポジトリのルートから、自分のマシン向けの正確な行を生成します。
+永続的な設定を好む場合は、出力された行を既存の `[tui]` テーブルの下に追加してください。ただしストックの Codex バージョンは未知のフィールドを拒否することがあります。リポジトリルートで、お使いのマシン向けの正確な行を生成します:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
 ```
 
-そして `~/.codex/config.toml` の `[tui]` の下に貼り付けます。
+その後 `~/.codex/config.toml` の `[tui]` の下に貼り付けます:
 
 ```toml
-# Replace /path/to/codex-hud with your local clone path.
+# /path/to/codex-hud をローカルクローンのパスに置き換えてください。
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-`codex-hud-tui` を実行するとコンパクトなフッターが表示されます。Homebrew や Codex のアップデートでこの別コマンドが更新されることはありません。Codex を更新した後は `npm run patch:codex` を再実行してください。管理対象の `codex` シムが有効な場合、インストーラーはベースの Codex バージョンを検出する際にそのシムをスキップし、`PATH` 上の次の実際の `codex` を使用します。リビルド対象を明示的に固定する必要がある場合は `--version <version>` を渡してください。リビルドされたペイロードは、ランチャーが書き換えられる前に `--version` のヘルスチェックに合格する必要があります。
-
+`codex-hud-tui` を実行するとコンパクトフッターが表示されます。パッチ済みバイナリはストック Codex の更新を追跡しません。ビルド後にストック Codex が変わると、パッチランチャーは起動時に 1 行の警告を出力します(オプトインしたパッチ済みバイナリはそのまま実行されます)— `npm run patch:codex` で再ビルドするか、`npm run install:launcher` でストック委譲に戻ってください。再ビルドは毎回ステージング → ヘルスチェック → 原子的有効化の順で行われ、直前の正常バージョンはロールバック用に `~/.local/bin/codex-hud-codex.d/` 配下に残り、`npm run doctor` が鮮度や壊れたペイロードを報告します。管理対象の `codex` シムが有効な場合、インストーラーはベースの Codex バージョン検出時にそのシムをスキップし、`PATH` 上の次の実際の `codex` を使います。再ビルド対象を明示的に固定するには `--version <version>` を渡してください。
 ## プロジェクト構成
 
 ```text

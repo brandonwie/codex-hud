@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+A continuación instala el lanzador HUD (recomendado). El modo predeterminado **delega en tu instalación real de Codex**, de modo que las actualizaciones de Codex vía Homebrew/npm se aplican automáticamente — sin recompilaciones ni binarios parcheados:
+
+```bash
+npm run install:launcher                    # instala ~/.local/bin/codex-hud-tui
+npm run install:launcher -- --make-default  # opcional: que `codex` resuelva al lanzador
+rehash
+```
+
+Consulta la sección «Lanzador HUD» más abajo para los detalles y `npm run doctor` para diagnósticos.
 
 Inicia un nuevo hilo de Codex después de instalar o reinstalar para que la lista de skills se actualice.
 
@@ -146,26 +154,65 @@ showPace = true     # false -> oculta el % de ritmo en 5h/7d
 
 Ejecuta `codex-hud --print-config` para ver el conjunto completo de opciones resueltas.
 
-## Pie de página de Codex parcheado
+## Lanzador HUD (delegación al Codex original — predeterminado)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher` escribe `~/.local/bin/codex-hud-tui`, un pequeño lanzador que localiza tu instalación real (original) de Codex y la ejecuta con `exec -a codex`, de modo que integraciones de terminal como Herdr siguen reconociendo el panel como una sesión de Codex. La ruta del binario original se fija en el momento de la instalación, con un mecanismo de respaldo en tiempo de ejecución que vuelve a buscar Codex en el `PATH` (omitiendo todas las entradas gestionadas por el HUD, así el lanzador nunca puede ejecutarse a sí mismo de forma recursiva).
 
-Codex de fábrica no puede renderizar salida arbitraria de un plugin debajo del área de entrada. Para obtener un pie de página al estilo del HUD de Claude, compila un comando de Codex parcheado por separado:
+Como el lanzador delega en el Codex original:
+
+- Las actualizaciones de Codex vía Homebrew/npm se aplican automáticamente — sin recompilaciones.
+- Tus archivos de Codex original/Homebrew nunca se modifican ni se reemplazan.
+- `npm run install:launcher -- --make-default` instala el shim gestionado `~/.local/bin/codex`; el instalador se niega a reemplazar un `codex` no gestionado salvo que pases `--force-shim`.
+
+Para eliminar solo el shim gestionado:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor` imprime el estado completo de la cadena de arranque — shim, modo del lanzador (stock/patched/legacy), ruta y versión del Codex original, versiones de payloads parcheados, obsolescencia y artefactos residuales:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+Solo devuelve un código distinto de cero cuando la cadena de entrada activa está rota.
+
+### Migración desde una instalación anterior de codex-hud
+
+Si antes ejecutabas `npm run patch:codex` (el flujo predeterminado antiguo), ejecuta una vez `npm run install:launcher`: reescribe `codex-hud-tui` a delegación al original y tu shim `codex` existente sigue funcionando. Un comando legado `codex-hud-codex` sano se conserva (con un aviso de obsolescencia); uno roto se pone en cuarentena como `codex-hud-codex.broken-<timestamp>` para que falle rápido en lugar de morir a mitad del arranque. El siguiente `npm run patch:codex` migra automáticamente un payload plano legado al diseño por versiones. `npm run doctor` muestra cualquier resto.
+
+## Experimental: pie de página de Codex parcheado
+
+> **Advertencia — experimental.** Este modo compila un binario de Codex parcheado localmente y sin firmar. macOS puede matar recompilaciones sin firma (el instalador verifica cada payload *antes* de activarlo, así que una compilación fallida nunca puede romper tu `codex` activo), y el binario parcheado **queda obsoleto cuando el Codex original se actualiza** — debes volver a ejecutar `npm run patch:codex` tras cada actualización de Codex. Prefiere el lanzador con delegación predeterminado salvo que necesites específicamente el pie de página dentro de la TUI.
+
+El Codex original no puede renderizar salida arbitraria de plugins bajo el área de entrada. Para obtener un pie de página al estilo Claude HUD, compila un comando de Codex parcheado independiente:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-El instalador parchea el tag de OpenAI Codex correspondiente, compila la CLI de Rust y mantiene el ejecutable real en `~/.local/bin/codex-hud-codex.d/codex`, con `~/.local/bin/codex-hud-codex` como un symlink a ese binario. También escribe `~/.local/bin/codex-hud-tui`, un lanzador que pasa el comando del HUD con colores a través del override `-c tui.status_line_command=...` de Codex sin cambiar `~/.codex/config.toml`. Tanto la ruta del ejecutable como `argv[0]` conservan nombres visibles para Codex, de modo que integraciones de terminal como Herdr puedan seguir reconociendo el panel como una sesión de Codex.
+El instalador parchea la etiqueta de OpenAI Codex correspondiente, compila la CLI en Rust y deja el ejecutable preparado en `~/.local/bin/codex-hud-codex.d/<version>/codex`. El payload preparado debe superar una verificación `--version` **antes** de activarse; solo entonces `~/.local/bin/codex-hud-codex` se redirige atómicamente al nuevo payload, y la versión anterior se conserva en disco para reversión. Una compilación fallida se aparta como `<version>.failed` y el runtime activo queda intacto. También escribe `~/.local/bin/codex-hud-tui` en modo parcheado, un lanzador que pasa el comando HUD a color mediante el override `-c tui.status_line_command=...` de Codex sin tocar `~/.codex/config.toml`. Tanto la ruta del ejecutable como `argv[0]` conservan nombres visibles como Codex, de modo que integraciones como Herdr siguen reconociendo el panel como sesión de Codex.
 
-El modo de lanzador seguro deja intacto tu comando `codex` normal:
+El modo de lanzador seguro no toca tu comando `codex` habitual:
 
 ```bash
 codex-hud-tui
 ```
 
-Para hacer que un nuevo lanzamiento de `codex` use la TUI con el HUD habilitado, opta por el shim gestionado:
+Para que un arranque nuevo de `codex` use la TUI con HUD, activa el shim gestionado de forma explícita:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,9 +221,9 @@ which codex
 codex
 ```
 
-`which codex` debería resolverse a `~/.local/bin/codex`. El instalador se niega a reemplazar un `~/.local/bin/codex` existente a menos que pases `--force-shim`, y aun así se niega a instalar el propio binario parcheado como `codex` a menos que pases `--replace-codex`.
+`which codex` debería resolver a `~/.local/bin/codex`. El instalador se niega a reemplazar un `~/.local/bin/codex` existente salvo que pases `--force-shim`, y también se niega a instalar el binario parcheado como `codex` salvo que pases `--replace-codex`.
 
-La reversión elimina únicamente el shim gestionado de `codex`:
+La reversión elimina solo el shim `codex` gestionado:
 
 ```bash
 node scripts/install-patched-codex.js --uninstall-shim
@@ -184,7 +231,7 @@ rehash
 which codex
 ```
 
-Si prefieres una configuración persistente, agrega la línea impresa bajo tu tabla `[tui]` existente, pero ten en cuenta que las versiones de Codex de fábrica pueden rechazar campos desconocidos. Genera la línea exacta para tu máquina desde la raíz del repositorio:
+Si prefieres una configuración persistente, añade la línea impresa bajo tu tabla `[tui]` existente, aunque ten en cuenta que las versiones originales de Codex pueden rechazar campos desconocidos. Genera la línea exacta para tu máquina desde la raíz del repositorio:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
@@ -197,8 +244,7 @@ Luego pégala bajo `[tui]` en `~/.codex/config.toml`:
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-Ejecuta `codex-hud-tui` para ver el pie de página compacto. Las actualizaciones de Homebrew o de Codex no actualizarán este comando separado; vuelve a ejecutar `npm run patch:codex` después de actualizar Codex. Cuando el shim gestionado de `codex` está activo, el instalador omite ese shim mientras detecta la versión base de Codex y usa el siguiente `codex` real en el `PATH`; pasa `--version <version>` si necesitas fijar explícitamente el objetivo de la recompilación. La carga útil recompilada debe pasar una verificación de estado con `--version` antes de que se reescriba el lanzador.
-
+Ejecuta `codex-hud-tui` para ver el pie de página compacto. El binario parcheado no sigue las actualizaciones del Codex original: si el Codex original cambia tras una compilación, el lanzador parcheado imprime una advertencia de una línea al arrancar (y aun así ejecuta el binario parcheado que elegiste) — recompila con `npm run patch:codex` o vuelve a la delegación con `npm run install:launcher`. Cada recompilación se prepara, se verifica y se activa atómicamente; la versión anterior funcional queda bajo `~/.local/bin/codex-hud-codex.d/` para reversión, y `npm run doctor` informa de obsolescencia y payloads rotos. Con el shim `codex` gestionado activo, el instalador lo omite al detectar la versión base de Codex y usa el siguiente `codex` real del `PATH`; pasa `--version <version>` si necesitas fijar explícitamente el objetivo de recompilación.
 ## Estructura del proyecto
 
 ```text

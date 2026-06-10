@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+Затем установите лаунчер HUD (рекомендуется). Режим по умолчанию **делегирует вашей настоящей установке Codex**, поэтому обновления Codex через Homebrew/npm подхватываются автоматически — без пересборок и пропатченных бинарников:
+
+```bash
+npm run install:launcher                    # устанавливает ~/.local/bin/codex-hud-tui
+npm run install:launcher -- --make-default  # опционально: `codex` будет указывать на лаунчер
+rehash
+```
+
+Подробности — в разделе «Лаунчер HUD» ниже; диагностика — `npm run doctor`.
 
 Запустите новый поток Codex после установки или переустановки, чтобы список навыков обновился.
 
@@ -146,18 +154,57 @@ showPace = true     # false -> скрыть процент темпа в 5h/7d
 
 Запустите `codex-hud --print-config`, чтобы увидеть полный итоговый набор параметров.
 
-## Пропатченный футер Codex
+## Лаунчер HUD (делегирование стоковому Codex — режим по умолчанию)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher` записывает `~/.local/bin/codex-hud-tui` — небольшой лаунчер, который находит вашу настоящую (стоковую) установку Codex и запускает её через `exec -a codex`, поэтому терминальные интеграции вроде Herdr по-прежнему распознают панель как сессию Codex. Путь к стоковому бинарнику фиксируется при установке; если он исчезает, срабатывает рантайм-фолбэк, заново ищущий Codex в `PATH` (все управляемые HUD записи пропускаются, поэтому лаунчер никогда не запустит сам себя рекурсивно).
 
-Штатный Codex не может отрисовывать произвольный вывод плагина под областью ввода. Чтобы получить футер в стиле Claude HUD, соберите отдельную пропатченную команду Codex:
+Поскольку лаунчер делегирует стоковому Codex:
+
+- Обновления Codex через Homebrew/npm подхватываются автоматически — без пересборок.
+- Ваши файлы Homebrew/стокового Codex никогда не изменяются и не заменяются.
+- `npm run install:launcher -- --make-default` устанавливает управляемый шим `~/.local/bin/codex`; установщик откажется заменять неуправляемый `codex`, если не передать `--force-shim`.
+
+Удалить только управляемый шим:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor` выводит полное состояние цепочки запуска — шим, режим лаунчера (stock/patched/legacy), путь и версию стокового Codex, версии пропатченных пэйлоадов, устаревание и оставшиеся артефакты:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+Ненулевой код возврата — только когда активная цепочка запуска сломана.
+
+### Миграция со старой установки codex-hud
+
+Если раньше вы запускали `npm run patch:codex` (старый поток по умолчанию), выполните один раз `npm run install:launcher`: он перепишет `codex-hud-tui` на делегирование стоковому Codex, а ваш существующий шим `codex` продолжит работать. Исправный устаревший `codex-hud-codex` остаётся на месте (с пометкой об устаревании); сломанный отправляется в карантин как `codex-hud-codex.broken-<timestamp>` и быстро падает вместо смерти посреди запуска. Следующий `npm run patch:codex` автоматически перенесёт старый плоский пэйлоад в версионированную раскладку. Всё оставшееся покажет `npm run doctor`.
+
+## Экспериментально: пропатченный футер Codex
+
+> **Внимание — экспериментальная функция.** Этот режим собирает локально пропатченный неподписанный бинарник Codex. macOS может убивать неподписанные пересборки (установщик проверяет каждый пэйлоад health-чеком *до* активации, поэтому неудачная сборка никогда не сломает ваш активный `codex`), а пропатченный бинарник **устаревает при обновлении стокового Codex** — после обновлений Codex нужно заново запускать `npm run patch:codex`. Предпочитайте делегирующий лаунчер по умолчанию, если вам не нужен именно футер внутри TUI.
+
+Стоковый Codex не умеет отображать произвольный вывод плагинов под областью ввода. Чтобы получить футер в стиле Claude HUD, соберите отдельную пропатченную команду Codex:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-Установщик патчит соответствующий тег OpenAI Codex, собирает Rust CLI и сохраняет настоящий исполняемый файл по пути `~/.local/bin/codex-hud-codex.d/codex`, а `~/.local/bin/codex-hud-codex` делает символической ссылкой на этот бинарник. Он также записывает `~/.local/bin/codex-hud-tui` — лаунчер, который передаёт цветную команду HUD через переопределение `-c tui.status_line_command=...` в Codex, не изменяя `~/.codex/config.toml`. Путь к исполняемому файлу и `argv[0]` оба сохраняют видимые для Codex имена, поэтому интеграции терминала, такие как Herdr, всё ещё могут распознать панель как сессию Codex.
+Установщик патчит соответствующий тег OpenAI Codex, собирает Rust CLI и складывает исполняемый файл в стейджинг `~/.local/bin/codex-hud-codex.d/<version>/codex`. Стейджинговый пэйлоад обязан пройти health-чек `--version` **до** любой активации; только после этого `~/.local/bin/codex-hud-codex` атомарно перенаправляется на новый пэйлоад, а предыдущая версия остаётся на диске для отката. Неудачная сборка откладывается как `<version>.failed`, активный рантайм не трогается. Также записывается `~/.local/bin/codex-hud-tui` в пропатченном режиме — лаунчер, передающий цветную команду HUD через переопределение Codex `-c tui.status_line_command=...` без изменения `~/.codex/config.toml`. Путь исполняемого файла и `argv[0]` сохраняют видимые как Codex имена, поэтому терминальные интеграции вроде Herdr по-прежнему распознают панель как сессию Codex.
 
 Безопасный режим лаунчера не трогает вашу обычную команду `codex`:
 
@@ -165,7 +212,7 @@ npm run patch:codex
 codex-hud-tui
 ```
 
-Чтобы новый запуск `codex` использовал TUI с включённым HUD, подключите управляемый шим:
+Чтобы новый запуск `codex` использовал TUI с HUD, явно включите управляемый шим:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,7 +221,7 @@ which codex
 codex
 ```
 
-`which codex` должен разрешаться в `~/.local/bin/codex`. Установщик отказывается заменять существующий `~/.local/bin/codex`, если вы не передадите `--force-shim`, и всё равно отказывается устанавливать сам пропатченный бинарник как `codex`, если вы не передадите `--replace-codex`.
+`which codex` должен указывать на `~/.local/bin/codex`. Установщик откажется заменять существующий `~/.local/bin/codex` без `--force-shim` и откажется устанавливать сам пропатченный бинарник как `codex` без `--replace-codex`.
 
 Откат удаляет только управляемый шим `codex`:
 
@@ -184,7 +231,7 @@ rehash
 which codex
 ```
 
-Если вы предпочитаете постоянную конфигурацию, добавьте выведенную строку под вашу существующую таблицу `[tui]`, но учтите, что штатные версии Codex могут отклонять неизвестные поля. Сгенерируйте точную строку для вашей машины из корня репозитория:
+Если предпочитаете постоянную конфигурацию, добавьте выведенную строку под существующую таблицу `[tui]`, но учтите: стоковые версии Codex могут отвергать неизвестные поля. Сгенерируйте точную строку для вашей машины из корня репозитория:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
@@ -197,8 +244,7 @@ echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-Запустите `codex-hud-tui`, чтобы увидеть компактный футер. Обновления Homebrew или Codex не обновят эту отдельную команду; повторно запустите `npm run patch:codex` после обновления Codex. Когда управляемый шим `codex` активен, установщик пропускает этот шим при определении базовой версии Codex и использует следующий настоящий `codex` в `PATH`; передайте `--version <version>`, если нужно явно зафиксировать целевую версию пересборки. Пересобранная полезная нагрузка должна пройти проверку работоспособности `--version`, прежде чем лаунчер будет перезаписан.
-
+Запустите `codex-hud-tui`, чтобы увидеть компактный футер. Пропатченный бинарник не следует за обновлениями стокового Codex: если стоковый Codex изменился после сборки, пропатченный лаунчер печатает однострочное предупреждение при запуске (и всё равно запускает выбранный вами пропатченный бинарник) — пересоберите через `npm run patch:codex` или вернитесь к делегированию через `npm run install:launcher`. Каждая пересборка проходит стейджинг, health-чек и атомарную активацию; предыдущая рабочая версия остаётся в `~/.local/bin/codex-hud-codex.d/` для отката, а `npm run doctor` сообщает об устаревании и сломанных пэйлоадах. Когда управляемый шим `codex` активен, установщик пропускает его при определении базовой версии Codex и использует следующий настоящий `codex` в `PATH`; передайте `--version <version>`, если нужно явно зафиксировать цель пересборки.
 ## Структура проекта
 
 ```text

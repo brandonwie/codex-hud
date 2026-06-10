@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+จากนั้นติดตั้งตัวเรียกใช้ HUD (แนะนำ) โหมดเริ่มต้นจะ**ส่งต่อไปยัง Codex ตัวจริงที่คุณติดตั้งไว้** ดังนั้นการอัปเดต Codex ผ่าน Homebrew/npm จะถูกนำมาใช้โดยอัตโนมัติ — ไม่ต้องคอมไพล์ใหม่ ไม่มีไบนารีที่ถูกแพตช์:
+
+```bash
+npm run install:launcher                    # ติดตั้ง ~/.local/bin/codex-hud-tui
+npm run install:launcher -- --make-default  # ตัวเลือก: ให้ `codex` ชี้ไปที่ตัวเรียกใช้
+rehash
+```
+
+ดูรายละเอียดที่หัวข้อ "ตัวเรียกใช้ HUD" ด้านล่าง และใช้ `npm run doctor` สำหรับการวินิจฉัย
 
 เริ่มเธรด Codex ใหม่หลังจากติดตั้งหรือติดตั้งใหม่ เพื่อให้รายการสกิลได้รับการรีเฟรช
 
@@ -146,26 +154,65 @@ showPace = true     # false -> ซ่อน pace % ใน 5h/7d
 
 รัน `codex-hud --print-config` เพื่อดูชุดตัวเลือกที่ถูกแก้ไขรวมแล้วทั้งหมด
 
-## Footer ของ Codex ที่แพตช์แล้ว
+## ตัวเรียกใช้ HUD (ส่งต่อไปยัง Codex ดั้งเดิม — ค่าเริ่มต้น)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher` จะเขียน `~/.local/bin/codex-hud-tui` ซึ่งเป็นตัวเรียกใช้ขนาดเล็กที่ค้นหา Codex ตัวจริง (ดั้งเดิม) ที่คุณติดตั้งไว้ แล้วรันด้วย `exec -a codex` ทำให้การเชื่อมต่อกับเทอร์มินัลอย่าง Herdr ยังคงจดจำหน้าต่างนั้นเป็นเซสชัน Codex ได้ เส้นทางของไบนารีดั้งเดิมจะถูกบันทึกตอนติดตั้ง พร้อมกลไกสำรองตอนรันที่ค้นหา Codex บน `PATH` อีกครั้งหากเส้นทางหายไป (โดยข้ามรายการทั้งหมดที่ HUD จัดการ ตัวเรียกใช้จึงไม่มีทางเรียกตัวเองซ้ำแบบวนลูป)
 
-Codex รุ่นมาตรฐานไม่สามารถเรนเดอร์เอาต์พุตของปลั๊กอินตามอำเภอใจใต้พื้นที่ป้อนข้อมูลได้ หากต้องการ footer สไตล์ Claude-HUD ให้สร้างคำสั่ง Codex ที่แพตช์แล้วแยกต่างหาก:
+เนื่องจากตัวเรียกใช้ส่งต่อไปยัง Codex ดั้งเดิม:
+
+- การอัปเดต Codex ผ่าน Homebrew/npm จะถูกนำมาใช้โดยอัตโนมัติ — ไม่ต้องคอมไพล์ใหม่
+- ไฟล์ Codex ดั้งเดิม/Homebrew ของคุณจะไม่ถูกแก้ไขหรือแทนที่เด็ดขาด
+- `npm run install:launcher -- --make-default` ติดตั้ง shim ที่ถูกจัดการ `~/.local/bin/codex`; ตัวติดตั้งจะปฏิเสธการแทนที่ `codex` ที่ไม่ได้ถูกจัดการ เว้นแต่คุณจะส่ง `--force-shim`
+
+ลบเฉพาะ shim ที่ถูกจัดการ:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor` แสดงสถานะทั้งหมดของห่วงโซ่การเรียกใช้ — shim, โหมดตัวเรียกใช้ (stock/patched/legacy), เส้นทางและเวอร์ชันของ Codex ดั้งเดิม, เวอร์ชันของ payload ที่ถูกแพตช์, ความล้าสมัย และไฟล์ตกค้าง:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+จะออกด้วยรหัสที่ไม่ใช่ศูนย์ก็ต่อเมื่อห่วงโซ่จุดเข้าใช้งานที่ใช้อยู่เสียหายเท่านั้น
+
+### การย้ายจากการติดตั้ง codex-hud รุ่นเก่า
+
+หากก่อนหน้านี้คุณใช้ `npm run patch:codex` (ขั้นตอนเริ่มต้นแบบเก่า) ให้รัน `npm run install:launcher` หนึ่งครั้ง: มันจะเขียน `codex-hud-tui` ใหม่เป็นโหมดส่งต่อไปยัง Codex ดั้งเดิม และ shim `codex` เดิมของคุณยังใช้งานได้ตามปกติ คำสั่ง `codex-hud-codex` รุ่นเก่าที่ยังทำงานได้จะถูกเก็บไว้ (พร้อมหมายเหตุเรื่องความล้าสมัย) ส่วนตัวที่เสียหายจะถูกกักไว้เป็น `codex-hud-codex.broken-<timestamp>` เพื่อให้ล้มเหลวทันทีแทนที่จะตายกลางคันตอนเรียกใช้ การรัน `npm run patch:codex` ครั้งถัดไปจะย้าย payload แบบแบนรุ่นเก่าไปยังโครงสร้างแยกตามเวอร์ชันโดยอัตโนมัติ ใช้ `npm run doctor` เพื่อดูสิ่งที่ตกค้าง
+
+## ฟีเจอร์ทดลอง: แถบท้าย Codex ที่ถูกแพตช์
+
+> **คำเตือน — ฟีเจอร์ทดลอง** โหมดนี้คอมไพล์ไบนารี Codex ที่ถูกแพตช์ในเครื่องและไม่มีลายเซ็น macOS อาจปิดโปรเซสไบนารีที่คอมไพล์ใหม่โดยไม่มีลายเซ็น (ตัวติดตั้งตรวจสุขภาพทุก payload *ก่อน* เปิดใช้งาน ดังนั้นการคอมไพล์ที่ล้มเหลวจะไม่มีทางทำให้ `codex` ที่ใช้อยู่เสียหาย) และไบนารีที่ถูกแพตช์**จะล้าสมัยเมื่อ Codex ดั้งเดิมอัปเดต** — คุณต้องรัน `npm run patch:codex` ใหม่หลังการอัปเดต Codex ทุกครั้ง แนะนำให้ใช้ตัวเรียกใช้แบบส่งต่อที่เป็นค่าเริ่มต้น เว้นแต่คุณต้องการแถบท้ายใน TUI จริง ๆ
+
+Codex ดั้งเดิมไม่สามารถแสดงผลลัพธ์ของปลั๊กอินใต้พื้นที่พิมพ์ได้ หากต้องการแถบท้ายสไตล์ Claude HUD ให้คอมไพล์คำสั่ง Codex ที่ถูกแพตช์แยกต่างหาก:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-ตัวติดตั้งจะแพตช์แท็ก OpenAI Codex ที่ตรงกัน, บิลด์ Rust CLI และเก็บไฟล์ปฏิบัติการจริงไว้ใต้ `~/.local/bin/codex-hud-codex.d/codex` โดยมี `~/.local/bin/codex-hud-codex` เป็นซิมลิงก์ไปยังไบนารีนั้น นอกจากนี้ยังเขียน `~/.local/bin/codex-hud-tui` ซึ่งเป็นตัวเรียกใช้ที่ส่งคำสั่ง HUD แบบมีสีผ่านการ override `-c tui.status_line_command=...` ของ Codex โดยไม่เปลี่ยน `~/.codex/config.toml` ทั้งพาธของไฟล์ปฏิบัติการและ `argv[0]` ต่างคงชื่อที่ Codex มองเห็นไว้ ดังนั้นการผสานรวมกับเทอร์มินัลเช่น Herdr จึงยังสามารถจดจำ pane นี้เป็นเซสชัน Codex ได้
+ตัวติดตั้งจะแพตช์แท็ก OpenAI Codex ที่ตรงกัน คอมไพล์ Rust CLI แล้วนำไฟล์ปฏิบัติการไปพักไว้ที่ `~/.local/bin/codex-hud-codex.d/<version>/codex` โดย payload ที่พักไว้ต้องผ่านการตรวจสุขภาพ `--version` **ก่อน** การเปิดใช้งานใด ๆ; เมื่อผ่านแล้วเท่านั้น `~/.local/bin/codex-hud-codex` จึงถูกชี้ไปยัง payload ใหม่แบบอะตอมมิก และเวอร์ชันก่อนหน้าถูกเก็บไว้บนดิสก์สำหรับย้อนกลับ การคอมไพล์ที่ล้มเหลวจะถูกแยกเก็บเป็น `<version>.failed` และรันไทม์ที่ใช้อยู่ไม่ถูกแตะต้อง นอกจากนี้ยังเขียน `~/.local/bin/codex-hud-tui` ในโหมดแพตช์ ซึ่งเป็นตัวเรียกใช้ที่ส่งคำสั่ง HUD แบบมีสีผ่านการ override `-c tui.status_line_command=...` ของ Codex โดยไม่แก้ไข `~/.codex/config.toml` ทั้งเส้นทางไฟล์ปฏิบัติการและ `argv[0]` ยังคงใช้ชื่อที่มองเห็นเป็น Codex ทำให้การเชื่อมต่อเทอร์มินัลอย่าง Herdr ยังจดจำหน้าต่างเป็นเซสชัน Codex ได้
 
-โหมดตัวเรียกใช้แบบปลอดภัยจะไม่ยุ่งกับคำสั่ง `codex` ปกติของคุณ:
+โหมดตัวเรียกใช้แบบปลอดภัยไม่แตะต้องคำสั่ง `codex` ปกติของคุณ:
 
 ```bash
 codex-hud-tui
 ```
 
-หากต้องการให้การเรียกใช้ `codex` ใหม่ใช้ TUI ที่เปิดใช้งาน HUD ให้เลือกใช้ shim ที่ถูกจัดการ:
+หากต้องการให้การเรียก `codex` ครั้งใหม่ใช้ TUI ที่เปิด HUD ให้เลือกใช้ shim ที่ถูกจัดการอย่างชัดเจน:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,9 +221,9 @@ which codex
 codex
 ```
 
-`which codex` ควรชี้ไปยัง `~/.local/bin/codex` ตัวติดตั้งจะปฏิเสธที่จะแทนที่ `~/.local/bin/codex` ที่มีอยู่ เว้นแต่คุณจะส่ง `--force-shim` และยังคงปฏิเสธที่จะติดตั้งไบนารีที่แพตช์แล้วในชื่อ `codex` เว้นแต่คุณจะส่ง `--replace-codex`
+`which codex` ควรชี้ไปที่ `~/.local/bin/codex` ตัวติดตั้งจะปฏิเสธการแทนที่ `~/.local/bin/codex` ที่มีอยู่ เว้นแต่คุณส่ง `--force-shim` และยังปฏิเสธการติดตั้งไบนารีที่ถูกแพตช์เป็น `codex` โดยตรง เว้นแต่คุณส่ง `--replace-codex`
 
-การย้อนกลับจะลบเฉพาะ shim `codex` ที่ถูกจัดการเท่านั้น:
+การย้อนกลับลบเฉพาะ shim `codex` ที่ถูกจัดการ:
 
 ```bash
 node scripts/install-patched-codex.js --uninstall-shim
@@ -184,7 +231,7 @@ rehash
 which codex
 ```
 
-หากคุณชอบ config แบบถาวร ให้เพิ่มบรรทัดที่พิมพ์ออกมาไว้ใต้ตาราง `[tui]` ที่มีอยู่ของคุณ แต่โปรดทราบว่า Codex รุ่นมาตรฐานอาจปฏิเสธฟิลด์ที่ไม่รู้จัก สร้างบรรทัดที่แม่นยำสำหรับเครื่องของคุณจากรากของรีโป:
+หากต้องการการตั้งค่าแบบถาวร ให้เพิ่มบรรทัดที่พิมพ์ออกมาไว้ใต้ตาราง `[tui]` ที่มีอยู่ แต่โปรดทราบว่า Codex ดั้งเดิมบางเวอร์ชันอาจปฏิเสธฟิลด์ที่ไม่รู้จัก สร้างบรรทัดที่ถูกต้องสำหรับเครื่องของคุณจากรากของ repo:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
@@ -197,8 +244,7 @@ echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-รัน `codex-hud-tui` เพื่อดู footer แบบกะทัดรัด การอัปเดต Homebrew หรือ Codex จะไม่อัปเดตคำสั่งแยกต่างหากนี้ ให้รัน `npm run patch:codex` อีกครั้งหลังอัปเดต Codex เมื่อ shim `codex` ที่ถูกจัดการทำงานอยู่ ตัวติดตั้งจะข้าม shim นั้นขณะตรวจหาเวอร์ชัน Codex พื้นฐานและใช้ `codex` จริงตัวถัดไปบน `PATH` ให้ส่ง `--version <version>` หากคุณต้องการกำหนดเป้าหมายการรีบิลด์อย่างชัดเจน เพย์โหลดที่รีบิลด์ใหม่ต้องผ่านการตรวจสุขภาพด้วย `--version` ก่อนที่ตัวเรียกใช้จะถูกเขียนใหม่
-
+รัน `codex-hud-tui` เพื่อดูแถบท้ายแบบกะทัดรัด ไบนารีที่ถูกแพตช์จะไม่ตามการอัปเดตของ Codex ดั้งเดิม: หาก Codex ดั้งเดิมเปลี่ยนไปหลังการคอมไพล์ ตัวเรียกใช้แบบแพตช์จะพิมพ์คำเตือนหนึ่งบรรทัดตอนเรียกใช้ (และยังคงรันไบนารีแพตช์ที่คุณเลือกไว้) — คอมไพล์ใหม่ด้วย `npm run patch:codex` หรือกลับไปใช้การส่งต่อด้วย `npm run install:launcher` การคอมไพล์ใหม่ทุกครั้งผ่านการพักไฟล์ ตรวจสุขภาพ และเปิดใช้งานแบบอะตอมมิก; เวอร์ชันที่ใช้งานได้ก่อนหน้ายังอยู่ใต้ `~/.local/bin/codex-hud-codex.d/` สำหรับย้อนกลับ และ `npm run doctor` รายงานความล้าสมัยกับ payload ที่เสียหาย เมื่อ shim `codex` ที่ถูกจัดการเปิดใช้อยู่ ตัวติดตั้งจะข้าม shim นั้นตอนตรวจหาเวอร์ชัน Codex ฐาน แล้วใช้ `codex` ตัวจริงถัดไปบน `PATH`; ส่ง `--version <version>` หากต้องการกำหนดเป้าหมายการคอมไพล์ใหม่อย่างชัดเจน
 ## โครงสร้างโปรเจกต์
 
 ```text

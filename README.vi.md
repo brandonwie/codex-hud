@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+Tiếp theo, cài launcher HUD (khuyến nghị). Chế độ mặc định **ủy quyền cho bản cài Codex thật của bạn**, nên các bản cập nhật Codex qua Homebrew/npm được áp dụng tự động — không cần build lại, không có nhị phân vá:
+
+```bash
+npm run install:launcher                    # cài ~/.local/bin/codex-hud-tui
+npm run install:launcher -- --make-default  # tùy chọn: để `codex` trỏ tới launcher
+rehash
+```
+
+Xem mục "Launcher HUD" bên dưới để biết chi tiết và chạy `npm run doctor` để chẩn đoán.
 
 Bắt đầu một thread Codex mới sau khi cài đặt hoặc cài lại để danh sách skill được làm mới.
 
@@ -146,26 +154,65 @@ showPace = true     # false -> ẩn % tốc độ trong 5h/7d
 
 Chạy `codex-hud --print-config` để xem toàn bộ tập tùy chọn đã được phân giải.
 
-## Footer Codex đã vá
+## Launcher HUD (ủy quyền cho Codex gốc — mặc định)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher` ghi `~/.local/bin/codex-hud-tui`, một launcher nhỏ tìm bản cài Codex thật (gốc) của bạn và thực thi nó bằng `exec -a codex`, nhờ đó các tích hợp terminal như Herdr vẫn nhận diện pane là một phiên Codex. Đường dẫn nhị phân gốc được ghi lại lúc cài đặt, kèm cơ chế dự phòng lúc chạy sẽ tìm lại Codex trên `PATH` (bỏ qua mọi mục do HUD quản lý, nên launcher không bao giờ tự gọi đệ quy chính nó).
 
-Codex bản gốc không thể render đầu ra plugin tùy ý dưới vùng nhập liệu. Để có một footer kiểu Claude-HUD, hãy build một lệnh Codex đã vá riêng:
+Vì launcher ủy quyền cho Codex gốc:
+
+- Cập nhật Codex qua Homebrew/npm được áp dụng tự động — không cần build lại.
+- Các tệp Codex gốc/Homebrew của bạn không bao giờ bị sửa hay thay thế.
+- `npm run install:launcher -- --make-default` cài shim được quản lý `~/.local/bin/codex`; trình cài đặt từ chối thay thế `codex` không do nó quản lý trừ khi bạn truyền `--force-shim`.
+
+Chỉ gỡ shim được quản lý:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor` in toàn bộ trạng thái chuỗi khởi chạy — shim, chế độ launcher (stock/patched/legacy), đường dẫn + phiên bản Codex gốc, các phiên bản payload đã vá, độ cũ và tệp còn sót:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+Chỉ thoát với mã khác 0 khi chuỗi điểm vào đang hoạt động bị hỏng.
+
+### Di chuyển từ bản cài codex-hud cũ
+
+Nếu trước đây bạn chạy `npm run patch:codex` (luồng mặc định cũ), hãy chạy `npm run install:launcher` một lần: nó ghi lại `codex-hud-tui` sang chế độ ủy quyền gốc và giữ shim `codex` hiện có hoạt động bình thường. Lệnh cũ `codex-hud-codex` còn hoạt động tốt sẽ được giữ nguyên (kèm ghi chú về độ cũ); lệnh hỏng bị cách ly thành `codex-hud-codex.broken-<timestamp>` để thất bại nhanh thay vì chết giữa chừng khi khởi chạy. Lần `npm run patch:codex` kế tiếp sẽ tự động di chuyển payload phẳng cũ sang bố cục theo phiên bản. Chạy `npm run doctor` để xem mọi thứ còn sót lại.
+
+## Thử nghiệm: Footer Codex đã vá
+
+> **Cảnh báo — tính năng thử nghiệm.** Chế độ này build một nhị phân Codex vá cục bộ, không có chữ ký. macOS có thể diệt các bản build lại không chữ ký (trình cài đặt kiểm tra sức khỏe từng payload *trước khi* kích hoạt, nên build hỏng không bao giờ phá được `codex` đang hoạt động của bạn), và nhị phân vá **sẽ lỗi thời khi Codex gốc cập nhật** — bạn phải chạy lại `npm run patch:codex` sau mỗi lần Codex cập nhật. Hãy ưu tiên launcher ủy quyền mặc định trừ khi bạn thật sự cần footer trong TUI.
+
+Codex gốc không thể hiển thị đầu ra plugin tùy ý bên dưới vùng nhập. Để có footer kiểu Claude HUD, hãy build một lệnh Codex vá riêng:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-Trình cài đặt vá tag OpenAI Codex tương ứng, build Rust CLI, và giữ tệp thực thi thật dưới `~/.local/bin/codex-hud-codex.d/codex`, với `~/.local/bin/codex-hud-codex` là một symlink trỏ tới binary đó. Nó cũng ghi `~/.local/bin/codex-hud-tui`, một launcher truyền lệnh HUD có màu qua override `-c tui.status_line_command=...` của Codex mà không thay đổi `~/.codex/config.toml`. Cả đường dẫn tệp thực thi lẫn `argv[0]` đều giữ tên mà Codex nhận diện được, nên các tích hợp terminal như Herdr vẫn có thể nhận ra pane là một phiên Codex.
+Trình cài đặt vá tag OpenAI Codex tương ứng, build Rust CLI và đặt tệp thực thi vào khu vực chờ `~/.local/bin/codex-hud-codex.d/<version>/codex`. Payload chờ phải vượt qua kiểm tra `--version` **trước** mọi thao tác kích hoạt; chỉ khi đó `~/.local/bin/codex-hud-codex` mới được trỏ lại nguyên tử sang payload mới, và phiên bản trước được giữ trên đĩa để hoàn tác. Build hỏng được để riêng thành `<version>.failed` và runtime đang hoạt động không bị đụng tới. Nó cũng ghi `~/.local/bin/codex-hud-tui` ở chế độ vá — launcher truyền lệnh HUD có màu qua cơ chế ghi đè `-c tui.status_line_command=...` của Codex mà không sửa `~/.codex/config.toml`. Đường dẫn tệp thực thi và `argv[0]` đều giữ tên hiển thị như Codex, nên các tích hợp terminal như Herdr vẫn nhận diện pane là phiên Codex.
 
-Chế độ launcher an toàn để nguyên lệnh `codex` thông thường của bạn:
+Chế độ launcher an toàn không đụng tới lệnh `codex` thông thường của bạn:
 
 ```bash
 codex-hud-tui
 ```
 
-Để một lần khởi chạy `codex` mới dùng TUI đã bật HUD, hãy chọn dùng shim được quản lý:
+Để lần khởi chạy `codex` mới dùng TUI có HUD, hãy chủ động bật shim được quản lý:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,9 +221,9 @@ which codex
 codex
 ```
 
-`which codex` sẽ phân giải tới `~/.local/bin/codex`. Trình cài đặt từ chối thay thế một `~/.local/bin/codex` đang tồn tại trừ khi bạn truyền `--force-shim`, và nó vẫn từ chối cài đặt chính binary đã vá dưới tên `codex` trừ khi bạn truyền `--replace-codex`.
+`which codex` phải trỏ tới `~/.local/bin/codex`. Trình cài đặt từ chối thay thế `~/.local/bin/codex` hiện có trừ khi bạn truyền `--force-shim`, và cũng từ chối cài chính nhị phân vá làm `codex` trừ khi bạn truyền `--replace-codex`.
 
-Rollback chỉ gỡ bỏ shim `codex` được quản lý:
+Hoàn tác chỉ gỡ shim `codex` được quản lý:
 
 ```bash
 node scripts/install-patched-codex.js --uninstall-shim
@@ -184,21 +231,20 @@ rehash
 which codex
 ```
 
-Nếu bạn thích một cấu hình lâu dài, hãy thêm dòng được in ra dưới bảng `[tui]` đang tồn tại của bạn, nhưng lưu ý rằng các phiên bản Codex bản gốc có thể từ chối các trường không xác định. Tạo dòng chính xác cho máy của bạn từ thư mục gốc của repo:
+Nếu thích cấu hình bền vững, thêm dòng được in ra vào dưới bảng `[tui]` hiện có; lưu ý các phiên bản Codex gốc có thể từ chối trường không xác định. Tạo dòng chính xác cho máy của bạn từ thư mục gốc repo:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
 ```
 
-Sau đó dán nó dưới `[tui]` trong `~/.codex/config.toml`:
+Rồi dán vào dưới `[tui]` trong `~/.codex/config.toml`:
 
 ```toml
 # Thay /path/to/codex-hud bằng đường dẫn clone cục bộ của bạn.
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-Chạy `codex-hud-tui` để xem footer nhỏ gọn. Các bản cập nhật Homebrew hoặc Codex sẽ không cập nhật lệnh riêng này; hãy chạy lại `npm run patch:codex` sau khi cập nhật Codex. Khi shim `codex` được quản lý đang hoạt động, trình cài đặt bỏ qua shim đó trong lúc dò phiên bản Codex nền và dùng `codex` thật kế tiếp trên `PATH`; truyền `--version <version>` nếu bạn cần ghim mục tiêu rebuild một cách tường minh. Payload được build lại phải vượt qua một kiểm tra sức khỏe `--version` trước khi launcher được ghi lại.
-
+Chạy `codex-hud-tui` để xem footer gọn. Nhị phân vá không bám theo cập nhật của Codex gốc: nếu Codex gốc thay đổi sau khi build, launcher vá sẽ in cảnh báo một dòng lúc khởi chạy (và vẫn chạy nhị phân vá bạn đã chọn) — build lại bằng `npm run patch:codex` hoặc quay về ủy quyền bằng `npm run install:launcher`. Mỗi lần build lại đều qua khu vực chờ, kiểm tra sức khỏe rồi kích hoạt nguyên tử; phiên bản hoạt động trước đó nằm trong `~/.local/bin/codex-hud-codex.d/` để hoàn tác, và `npm run doctor` báo cáo độ cũ cùng payload hỏng. Khi shim `codex` được quản lý đang bật, trình cài đặt bỏ qua shim đó lúc dò phiên bản Codex cơ sở và dùng `codex` thật kế tiếp trên `PATH`; truyền `--version <version>` nếu cần cố định rõ mục tiêu build lại.
 ## Bố cục dự án
 
 ```text

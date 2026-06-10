@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+Installiere anschließend den HUD-Launcher (empfohlen). Der Standardmodus **delegiert an deine echte Codex-Installation**, sodass Homebrew-/npm-Updates von Codex automatisch übernommen werden — keine Rebuilds, keine gepatchten Binaries:
+
+```bash
+npm run install:launcher                    # installiert ~/.local/bin/codex-hud-tui
+npm run install:launcher -- --make-default  # optional: `codex` auf den Launcher auflösen
+rehash
+```
+
+Details im Abschnitt „HUD-Launcher" weiter unten; Diagnose mit `npm run doctor`.
 
 Starte nach dem Installieren oder Neuinstallieren einen neuen Codex-Thread, damit die Skill-Liste aktualisiert wird.
 
@@ -146,26 +154,65 @@ showPace = true     # false -> die Pace-% in 5h/7d ausblenden
 
 Führe `codex-hud --print-config` aus, um den vollständigen aufgelösten Optionssatz zu sehen.
 
-## Gepatchte Codex-Fußzeile
+## HUD-Launcher (Stock-Delegation — Standard)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher` schreibt `~/.local/bin/codex-hud-tui`, einen kleinen Launcher, der deine echte (Stock-)Codex-Installation findet und sie mit `exec -a codex` ausführt — Terminal-Integrationen wie Herdr erkennen das Pane also weiterhin als Codex-Session. Der Pfad des Stock-Binaries wird bei der Installation eingebettet; fehlt er, greift ein Laufzeit-Fallback, der Codex erneut auf dem `PATH` sucht (alle HUD-verwalteten Einträge werden übersprungen, der Launcher kann sich daher nie rekursiv selbst ausführen).
 
-Das Standard-Codex kann keine beliebige Plugin-Ausgabe unter dem Eingabebereich darstellen. Um eine Fußzeile im Claude-HUD-Stil zu erhalten, baue einen separaten gepatchten Codex-Befehl:
+Weil der Launcher an Stock-Codex delegiert:
+
+- Homebrew-/npm-Updates von Codex werden automatisch übernommen — keine Rebuilds.
+- Deine Homebrew-/Stock-Codex-Dateien werden niemals verändert oder ersetzt.
+- `npm run install:launcher -- --make-default` installiert das verwaltete Shim `~/.local/bin/codex`; ein nicht verwaltetes `codex` ersetzt der Installer nur mit `--force-shim`.
+
+Nur das verwaltete Shim entfernen:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor` zeigt den vollständigen Zustand der Startkette — Shim, Launcher-Modus (stock/patched/legacy), Pfad + Version von Stock-Codex, Versionen der gepatchten Payloads, Veraltung und übrig gebliebene Artefakte:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+Der Befehl endet nur dann mit einem Exit-Code ungleich null, wenn die aktive Startkette defekt ist.
+
+### Migration von einer älteren codex-hud-Installation
+
+Wenn du früher `npm run patch:codex` (den alten Standard-Flow) verwendet hast, führe einmal `npm run install:launcher` aus: Es schreibt `codex-hud-tui` auf Stock-Delegation um und dein bestehendes `codex`-Shim funktioniert weiter. Ein funktionierendes Legacy-Kommando `codex-hud-codex` bleibt erhalten (mit Veraltungshinweis); ein defektes wird als `codex-hud-codex.broken-<timestamp>` in Quarantäne verschoben und schlägt sofort fehl, statt mitten im Start zu sterben. Das nächste `npm run patch:codex` migriert eine alte flache Payload automatisch in das versionierte Layout. `npm run doctor` zeigt alles Übriggebliebene.
+
+## Experimentell: Gepatchter Codex-Footer
+
+> **Warnung — experimentell.** Dieser Modus baut ein lokal gepatchtes, unsigniertes Codex-Binary. macOS kann unsignierte Rebuilds beenden (der Installer prüft jede Payload *vor* der Aktivierung per Health-Check, ein fehlgeschlagener Build kann dein aktives `codex` also nie beschädigen), und das gepatchte Binary **veraltet, sobald Stock-Codex aktualisiert wird** — nach Codex-Updates musst du `npm run patch:codex` erneut ausführen. Bevorzuge den standardmäßigen Stock-Delegations-Launcher, sofern du den Footer in der TUI nicht ausdrücklich brauchst.
+
+Stock-Codex kann unterhalb des Eingabebereichs keine beliebige Plugin-Ausgabe rendern. Für einen Footer im Claude-HUD-Stil baust du ein separates gepatchtes Codex-Kommando:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-Der Installer patcht das passende OpenAI-Codex-Tag, baut die Rust-CLI und behält die echte ausführbare Datei unter `~/.local/bin/codex-hud-codex.d/codex`, wobei `~/.local/bin/codex-hud-codex` ein Symlink auf diese Binärdatei ist. Er schreibt außerdem `~/.local/bin/codex-hud-tui`, einen Launcher, der den farbigen HUD-Befehl über das `-c tui.status_line_command=...`-Override von Codex durchreicht, ohne `~/.codex/config.toml` zu ändern. Sowohl der Pfad der ausführbaren Datei als auch `argv[0]` behalten für Codex sichtbare Namen, sodass Terminal-Integrationen wie Herdr das Fenster weiterhin als Codex-Sitzung erkennen können.
+Der Installer patcht den passenden OpenAI-Codex-Tag, baut die Rust-CLI und staged das Executable unter `~/.local/bin/codex-hud-codex.d/<version>/codex`. Die gestagte Payload muss **vor** jeder Aktivierung einen `--version`-Health-Check bestehen; erst dann wird `~/.local/bin/codex-hud-codex` atomar auf die neue Payload umgehängt, und die vorherige Version bleibt für Rollbacks auf der Platte. Ein fehlgeschlagener Build wird als `<version>.failed` beiseitegelegt, die aktive Laufzeit bleibt unangetastet. Außerdem wird `~/.local/bin/codex-hud-tui` im Patched-Modus geschrieben — ein Launcher, der das farbige HUD-Kommando über Codex' Override `-c tui.status_line_command=...` übergibt, ohne `~/.codex/config.toml` zu ändern. Executable-Pfad und `argv[0]` behalten Codex-sichtbare Namen, sodass Terminal-Integrationen wie Herdr das Pane weiterhin als Codex-Session erkennen.
 
-Der sichere Launcher-Modus lässt deinen normalen `codex`-Befehl unangetastet:
+Der sichere Launcher-Modus lässt dein normales `codex`-Kommando in Ruhe:
 
 ```bash
 codex-hud-tui
 ```
 
-Damit ein frischer `codex`-Start die HUD-fähige TUI verwendet, aktiviere den verwalteten Shim:
+Damit ein frischer `codex`-Start die HUD-fähige TUI nutzt, aktiviere das verwaltete Shim ausdrücklich:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,9 +221,9 @@ which codex
 codex
 ```
 
-`which codex` sollte zu `~/.local/bin/codex` aufgelöst werden. Der Installer weigert sich, eine bestehende `~/.local/bin/codex` zu ersetzen, sofern du nicht `--force-shim` übergibst, und er weigert sich weiterhin, die gepatchte Binärdatei selbst als `codex` zu installieren, sofern du nicht `--replace-codex` übergibst.
+`which codex` sollte auf `~/.local/bin/codex` auflösen. Der Installer ersetzt ein vorhandenes `~/.local/bin/codex` nur mit `--force-shim` und installiert das gepatchte Binary selbst nur mit `--replace-codex` als `codex`.
 
-Das Rollback entfernt nur den verwalteten `codex`-Shim:
+Das Rollback entfernt nur das verwaltete `codex`-Shim:
 
 ```bash
 node scripts/install-patched-codex.js --uninstall-shim
@@ -184,7 +231,7 @@ rehash
 which codex
 ```
 
-Wenn du eine dauerhafte Konfiguration bevorzugst, füge die ausgegebene Zeile unter deiner bestehenden `[tui]`-Tabelle hinzu, beachte aber, dass Standard-Codex-Versionen unbekannte Felder ablehnen können. Generiere die exakte Zeile für deine Maschine aus dem Repo-Root:
+Wenn du eine dauerhafte Konfiguration bevorzugst, füge die ausgegebene Zeile unter deine bestehende `[tui]`-Tabelle ein — beachte aber, dass Stock-Codex-Versionen unbekannte Felder ablehnen können. Erzeuge die exakte Zeile für deinen Rechner im Repo-Root:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
@@ -197,8 +244,7 @@ Füge sie dann unter `[tui]` in `~/.codex/config.toml` ein:
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-Führe `codex-hud-tui` aus, um die kompakte Fußzeile zu sehen. Homebrew- oder Codex-Updates aktualisieren diesen separaten Befehl nicht; führe `npm run patch:codex` nach einem Codex-Update erneut aus. Wenn der verwaltete `codex`-Shim aktiv ist, überspringt der Installer diesen Shim beim Ermitteln der Basis-Codex-Version und verwendet die nächste echte `codex` auf dem `PATH`; übergib `--version <version>`, falls du das Rebuild-Ziel explizit fixieren musst. Die neu gebaute Payload muss eine `--version`-Integritätsprüfung bestehen, bevor der Launcher neu geschrieben wird.
-
+Führe `codex-hud-tui` aus, um den kompakten Footer zu sehen. Das gepatchte Binary folgt Stock-Codex-Updates nicht: Ändert sich Stock-Codex nach einem Build, gibt der gepatchte Launcher beim Start eine einzeilige Warnung aus (und führt weiterhin das von dir gewählte gepatchte Binary aus) — baue mit `npm run patch:codex` neu oder wechsle mit `npm run install:launcher` zurück zur Stock-Delegation. Jeder Rebuild wird gestaged, health-gecheckt und atomar aktiviert; die vorherige funktionierende Version bleibt für Rollbacks unter `~/.local/bin/codex-hud-codex.d/`, und `npm run doctor` meldet Veraltung und defekte Payloads. Ist das verwaltete `codex`-Shim aktiv, überspringt der Installer es bei der Erkennung der Basis-Codex-Version und nutzt das nächste echte `codex` auf dem `PATH`; mit `--version <version>` kannst du das Rebuild-Ziel explizit festlegen.
 ## Projektstruktur
 
 ```text

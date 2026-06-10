@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+接下来安装 HUD 启动器(推荐)。默认模式**委派给你真实安装的 Codex**,因此 Homebrew/npm 的 Codex 更新会被自动拾取 — 无需重新构建,也没有补丁二进制:
+
+```bash
+npm run install:launcher                    # 安装 ~/.local/bin/codex-hud-tui
+npm run install:launcher -- --make-default  # 可选:让 `codex` 解析到该启动器
+rehash
+```
+
+详情见下文「HUD 启动器」一节;诊断请运行 `npm run doctor`。
 
 安装或重新安装后请启动一个新的 Codex 线程，以便刷新技能列表。
 
@@ -146,26 +154,65 @@ showPace = true     # false -> 隐藏 5h/7d 中的 pace %
 
 运行 `codex-hud --print-config` 以查看完整解析后的选项集。
 
-## 打补丁的 Codex 页脚
+## HUD 启动器(委派原生 Codex — 默认模式)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher` 会写入 `~/.local/bin/codex-hud-tui`:一个小型启动器,它找到你真实(原生)的 Codex 安装并用 `exec -a codex` 执行,因此 Herdr 等终端集成仍会把该窗格识别为 Codex 会话。原生二进制的路径在安装时写入,若路径失效则有运行时回退逻辑在 `PATH` 上重新发现 Codex(会跳过所有 HUD 管理的条目,因此启动器永远不会递归执行自身)。
 
-原生 Codex 无法在输入区下方渲染任意插件输出。若想获得 Claude-HUD 风格的页脚，请构建一个独立的、打过补丁的 Codex 命令：
+由于启动器委派给原生 Codex:
+
+- Homebrew/npm 的 Codex 更新会被自动拾取 — 无需重新构建。
+- 你的 Homebrew/原生 Codex 文件永远不会被修改或替换。
+- `npm run install:launcher -- --make-default` 安装受管的 `~/.local/bin/codex` 垫片;除非传入 `--force-shim`,安装器拒绝替换非受管的 `codex`。
+
+仅移除受管垫片:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor` 打印完整启动链状态 — 垫片、启动器模式(stock/patched/legacy)、原生 Codex 路径与版本、补丁负载版本、是否过期以及遗留产物:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+仅当活动入口链损坏时才以非零码退出。
+
+### 从旧版 codex-hud 安装迁移
+
+如果你以前运行过 `npm run patch:codex`(旧的默认流程),请运行一次 `npm run install:launcher`:它会把 `codex-hud-tui` 重写为委派原生模式,并保持现有的 `codex` 垫片继续工作。健康的旧 `codex-hud-codex` 命令会被保留(附带过期提示);损坏的则被隔离为 `codex-hud-codex.broken-<timestamp>`,从而快速失败而不是启动到一半崩溃。下一次 `npm run patch:codex` 会把旧的扁平负载自动迁移到按版本分目录的布局。运行 `npm run doctor` 可查看所有遗留项。
+
+## 实验性功能:补丁版 Codex 页脚
+
+> **警告 — 实验性功能。** 此模式会构建本地打补丁的未签名 Codex 二进制。macOS 可能杀掉未签名的重新构建产物(安装器会在激活*之前*对每个负载做健康检查,因此构建失败永远不会破坏你当前可用的 `codex`),并且补丁二进制**会在原生 Codex 更新后过期** — Codex 更新后你必须重新运行 `npm run patch:codex`。除非你确实需要 TUI 内嵌页脚,否则请使用默认的委派启动器。
+
+原生 Codex 无法在输入区下方渲染任意插件输出。要获得 Claude-HUD 风格的页脚,需要构建一个独立的补丁版 Codex 命令:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-安装器会为匹配的 OpenAI Codex tag 打补丁、构建 Rust CLI，并将真实可执行文件保留在 `~/.local/bin/codex-hud-codex.d/codex` 下，同时把 `~/.local/bin/codex-hud-codex` 作为指向该二进制的符号链接。它还会写入 `~/.local/bin/codex-hud-tui`，这是一个启动器，通过 Codex 的 `-c tui.status_line_command=...` 覆盖项传入彩色 HUD 命令，而无需更改 `~/.codex/config.toml`。可执行文件路径与 `argv[0]` 都保持 Codex 可见的名称，因此 Herdr 等终端集成仍能将该面板识别为 Codex 会话。
+安装器会对匹配的 OpenAI Codex 标签打补丁、构建 Rust CLI,并把可执行文件暂存到 `~/.local/bin/codex-hud-codex.d/<version>/codex`。暂存负载必须在任何激活动作**之前**通过 `--version` 健康检查;只有通过后,`~/.local/bin/codex-hud-codex` 才会被原子地重定向到新负载,且上一版本保留在磁盘上用于回滚。失败的构建会被搁置为 `<version>.failed`,活动运行时保持原样。它还会写入补丁模式的 `~/.local/bin/codex-hud-tui` 启动器,通过 Codex 的 `-c tui.status_line_command=...` 覆盖把彩色 HUD 命令传入,而不修改 `~/.codex/config.toml`。可执行路径和 `argv[0]` 都保持 Codex 可见的名称,因此 Herdr 等终端集成仍会把该窗格识别为 Codex 会话。
 
-安全启动器模式不会影响你正常的 `codex` 命令：
+安全启动器模式不会动你常规的 `codex` 命令:
 
 ```bash
 codex-hud-tui
 ```
 
-若要让全新的 `codex` 启动使用启用了 HUD 的 TUI，请选择启用受管理的 shim：
+要让新的 `codex` 启动使用启用 HUD 的 TUI,请主动启用受管垫片:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,9 +221,9 @@ which codex
 codex
 ```
 
-`which codex` 应解析为 `~/.local/bin/codex`。除非你传入 `--force-shim`，否则安装器拒绝替换已存在的 `~/.local/bin/codex`；并且除非你传入 `--replace-codex`，否则它仍拒绝把打过补丁的二进制本身安装为 `codex`。
+`which codex` 应解析到 `~/.local/bin/codex`。除非传入 `--force-shim`,安装器拒绝替换已存在的 `~/.local/bin/codex`;除非传入 `--replace-codex`,它也拒绝把补丁二进制本身安装为 `codex`。
 
-回滚仅移除受管理的 `codex` shim：
+回滚只会移除受管的 `codex` 垫片:
 
 ```bash
 node scripts/install-patched-codex.js --uninstall-shim
@@ -184,21 +231,20 @@ rehash
 which codex
 ```
 
-如果你更倾向于持久化配置，可将打印出来的那一行添加到你现有的 `[tui]` 表下，但请注意原生 Codex 版本可能会拒绝未知字段。从仓库根目录为你的机器生成确切的那一行：
+如果你偏好持久配置,把打印出的行添加到现有 `[tui]` 表下;注意原生 Codex 版本可能拒绝未知字段。在仓库根目录生成适合你机器的精确配置行:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
 ```
 
-然后将其粘贴到 `~/.codex/config.toml` 的 `[tui]` 下：
+然后粘贴到 `~/.codex/config.toml` 的 `[tui]` 下:
 
 ```toml
 # 将 /path/to/codex-hud 替换为你的本地克隆路径。
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-运行 `codex-hud-tui` 即可看到紧凑页脚。Homebrew 或 Codex 更新不会更新这个独立命令；更新 Codex 后请重新运行 `npm run patch:codex`。当受管理的 `codex` shim 处于激活状态时，安装器会在检测基础 Codex 版本时跳过该 shim，并使用 `PATH` 上下一个真实的 `codex`；若你需要显式固定重建目标，请传入 `--version <version>`。重建后的载荷必须先通过一次 `--version` 健康检查，然后才会重写启动器。
-
+运行 `codex-hud-tui` 即可看到紧凑页脚。补丁二进制不会跟随原生 Codex 更新:构建后若原生 Codex 发生变化,补丁启动器会在启动时打印一行警告(仍会运行你主动选择的补丁二进制)— 运行 `npm run patch:codex` 重新构建,或运行 `npm run install:launcher` 切回委派模式。每次重新构建都会经过暂存、健康检查、原子激活;上一个可用版本保留在 `~/.local/bin/codex-hud-codex.d/` 下用于回滚,`npm run doctor` 会报告过期与损坏的负载。当受管 `codex` 垫片处于激活状态时,安装器在检测基础 Codex 版本时会跳过该垫片,使用 `PATH` 上下一个真实的 `codex`;如需显式固定重建目标,请传入 `--version <version>`。
 ## 项目结构
 
 ```text

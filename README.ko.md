@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+다음으로 HUD 런처를 설치하세요(권장). 기본 모드는 **실제 Codex 설치에 위임**하므로 Homebrew/npm Codex 업데이트가 자동으로 반영됩니다 — 재빌드도, 패치된 바이너리도 필요 없습니다:
+
+```bash
+npm run install:launcher                    # ~/.local/bin/codex-hud-tui 설치
+npm run install:launcher -- --make-default  # 선택: `codex`가 런처로 해석되게 함
+rehash
+```
+
+자세한 내용은 아래 HUD 런처 섹션을, 진단은 `npm run doctor`를 참고하세요.
 
 설치하거나 재설치한 후에는 스킬 목록이 새로고침되도록 새로운 Codex 스레드를 시작하세요.
 
@@ -146,26 +154,65 @@ showPace = true     # false -> 5h/7d의 pace % 숨김
 
 해석된 전체 옵션 집합을 보려면 `codex-hud --print-config`를 실행하세요.
 
-## 패치된 Codex 푸터
+## HUD 런처 (스톡 위임 — 기본값)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher`는 `~/.local/bin/codex-hud-tui`를 설치합니다. 이 작은 런처는 실제(스톡) Codex 설치를 찾아 `exec -a codex`로 실행하므로, Herdr 같은 터미널 통합이 해당 창을 계속 Codex 세션으로 인식합니다. 스톡 바이너리 경로는 설치 시점에 기록되며, 경로가 사라지면 `PATH`에서 Codex를 다시 탐색하는 런타임 폴백이 동작합니다(HUD가 관리하는 항목은 모두 건너뛰므로 런처가 자기 자신을 재귀 실행할 수 없습니다).
 
-기본 Codex는 입력 영역 아래에 임의의 플러그인 출력을 렌더링할 수 없습니다. Claude HUD 스타일의 푸터를 얻으려면 별도의 패치된 Codex 명령을 빌드하세요.
+런처가 스톡 Codex에 위임하기 때문에:
+
+- Homebrew/npm Codex 업데이트가 자동으로 반영됩니다 — 재빌드가 필요 없습니다.
+- Homebrew/스톡 Codex 파일은 절대 수정되거나 교체되지 않습니다.
+- `npm run install:launcher -- --make-default`는 관리형 `~/.local/bin/codex` 심을 설치합니다. 관리형이 아닌 기존 `codex`는 `--force-shim`을 전달하지 않는 한 교체를 거부합니다.
+
+관리형 심만 제거하려면:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor`는 실행 체인 전체 상태를 출력합니다 — 심, 런처 모드(stock/patched/legacy), 스톡 Codex 경로와 버전, 패치 페이로드 버전, 최신 여부, 남은 잔여 파일:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+활성 진입 체인이 손상된 경우에만 0이 아닌 코드로 종료합니다.
+
+### 이전 codex-hud 설치에서 마이그레이션
+
+이전에 `npm run patch:codex`(과거 기본 흐름)를 사용했다면 `npm run install:launcher`를 한 번 실행하세요. `codex-hud-tui`를 스톡 위임 방식으로 다시 작성하고 기존 `codex` 심은 그대로 유지합니다. 정상 동작하는 레거시 `codex-hud-codex` 명령은 그대로 남기고(구버전이 될 수 있다는 안내와 함께), 손상된 명령은 `codex-hud-codex.broken-<timestamp>`로 격리해 실행 중 죽는 대신 빠르게 실패하게 합니다. 다음 `npm run patch:codex` 실행 시 레거시 평면 페이로드는 버전별 레이아웃으로 자동 마이그레이션됩니다. 남은 항목은 `npm run doctor`로 확인하세요.
+
+## 실험 기능: 패치된 Codex 푸터
+
+> **경고 — 실험 기능입니다.** 이 모드는 로컬에서 패치한 서명되지 않은 Codex 바이너리를 빌드합니다. macOS가 서명되지 않은 재빌드를 종료시킬 수 있고(설치기는 활성화 *전에* 모든 페이로드를 헬스 체크하므로, 빌드 실패가 활성 `codex`를 망가뜨리지는 못합니다), 패치된 바이너리는 **스톡 Codex가 업데이트되면 구버전이 됩니다** — Codex 업데이트 후 `npm run patch:codex`를 다시 실행해야 합니다. TUI 내부 푸터가 꼭 필요한 경우가 아니라면 기본 스톡 위임 런처를 사용하세요.
+
+기본 Codex는 입력 영역 아래에 임의의 플러그인 출력을 렌더링할 수 없습니다. Claude HUD 스타일의 푸터를 사용하려면 별도의 패치된 Codex 명령을 빌드하세요:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-설치 프로그램은 일치하는 OpenAI Codex 태그를 패치하고 Rust CLI를 빌드한 다음, 실제 실행 파일을 `~/.local/bin/codex-hud-codex.d/codex`에 보관하며 `~/.local/bin/codex-hud-codex`를 해당 바이너리에 대한 심링크로 둡니다. 또한 `~/.local/bin/codex-hud-tui`를 작성합니다. 이는 `~/.codex/config.toml`을 변경하지 않고 Codex의 `-c tui.status_line_command=...` 재정의를 통해 색상이 입혀진 HUD 명령을 전달하는 런처입니다. 실행 파일 경로와 `argv[0]`는 모두 Codex가 인식할 수 있는 이름을 유지하므로, Herdr 같은 터미널 통합 도구가 여전히 해당 페인(pane)을 Codex 세션으로 인식할 수 있습니다.
+설치기는 일치하는 OpenAI Codex 태그를 패치하고 Rust CLI를 빌드한 뒤, 실행 파일을 `~/.local/bin/codex-hud-codex.d/<version>/codex` 아래에 스테이징합니다. 스테이징된 페이로드는 활성화 **이전에** `--version` 헬스 체크를 통과해야 하며, 통과한 경우에만 `~/.local/bin/codex-hud-codex`가 새 페이로드로 원자적으로 재지정되고 이전 버전은 롤백용으로 디스크에 보존됩니다. 실패한 빌드는 `<version>.failed`로 따로 보관되고 활성 런타임은 그대로 유지됩니다. 또한 패치 모드의 `~/.local/bin/codex-hud-tui` 런처를 작성하는데, 이 런처는 `~/.codex/config.toml`을 변경하지 않고 Codex의 `-c tui.status_line_command=...` 오버라이드로 컬러 HUD 명령을 전달합니다. 실행 파일 경로와 `argv[0]` 모두 Codex로 보이는 이름을 유지하므로 Herdr 같은 터미널 통합이 해당 창을 계속 Codex 세션으로 인식합니다.
 
-안전 런처 모드는 평소의 `codex` 명령을 그대로 둡니다.
+안전 런처 모드는 일반 `codex` 명령을 건드리지 않습니다:
 
 ```bash
 codex-hud-tui
 ```
 
-새로운 `codex` 실행 시 HUD가 활성화된 TUI를 사용하려면, 관리형 shim을 사용하도록 설정하세요.
+새 `codex` 실행이 HUD가 활성화된 TUI를 사용하게 하려면 관리형 심을 옵트인하세요:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,9 +221,9 @@ which codex
 codex
 ```
 
-`which codex`는 `~/.local/bin/codex`로 해석되어야 합니다. 설치 프로그램은 `--force-shim`을 전달하지 않는 한 기존 `~/.local/bin/codex`를 교체하지 않으며, `--replace-codex`를 전달하지 않는 한 패치된 바이너리 자체를 `codex`로 설치하는 것도 거부합니다.
+`which codex`가 `~/.local/bin/codex`로 해석되어야 합니다. 설치기는 `--force-shim`을 전달하지 않는 한 기존 `~/.local/bin/codex` 교체를 거부하고, `--replace-codex`를 전달하지 않는 한 패치된 바이너리 자체를 `codex`로 설치하는 것도 거부합니다.
 
-롤백은 관리형 `codex` shim만 제거합니다.
+롤백은 관리형 `codex` 심만 제거합니다:
 
 ```bash
 node scripts/install-patched-codex.js --uninstall-shim
@@ -184,21 +231,20 @@ rehash
 which codex
 ```
 
-지속적인 설정을 선호한다면 기존 `[tui]` 테이블 아래에 출력된 라인을 추가하세요. 다만 기본 Codex 버전이 알 수 없는 필드를 거부할 수 있다는 점에 유의하세요. 저장소 루트에서 사용자의 머신에 맞는 정확한 라인을 생성하세요.
+영구 설정을 선호한다면 출력된 라인을 기존 `[tui]` 테이블 아래에 추가하세요. 다만 스톡 Codex 버전은 알 수 없는 필드를 거부할 수 있습니다. 저장소 루트에서 머신에 맞는 정확한 라인을 생성하세요:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
 ```
 
-그런 다음 `~/.codex/config.toml`의 `[tui]` 아래에 붙여넣으세요.
+그다음 `~/.codex/config.toml`의 `[tui]` 아래에 붙여넣으세요:
 
 ```toml
 # /path/to/codex-hud를 로컬 클론 경로로 교체하세요.
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-`codex-hud-tui`를 실행하면 간결한 푸터를 볼 수 있습니다. Homebrew나 Codex 업데이트는 이 별도의 명령을 업데이트하지 않으니, Codex를 업데이트한 후에는 `npm run patch:codex`를 다시 실행하세요. 관리형 `codex` shim이 활성화되어 있으면, 설치 프로그램은 기본 Codex 버전을 감지하는 동안 해당 shim을 건너뛰고 `PATH`상의 다음 실제 `codex`를 사용합니다. 리빌드 대상을 명시적으로 고정해야 한다면 `--version <version>`을 전달하세요. 리빌드된 페이로드는 런처가 다시 작성되기 전에 `--version` 헬스 체크를 통과해야 합니다.
-
+`codex-hud-tui`를 실행하면 컴팩트 푸터를 볼 수 있습니다. 패치된 바이너리는 스톡 Codex 업데이트를 따라가지 않습니다. 빌드 후 스톡 Codex가 변경되면 패치 런처가 실행 시 한 줄 경고를 출력합니다(옵트인한 패치 바이너리는 계속 실행합니다) — `npm run patch:codex`로 재빌드하거나 `npm run install:launcher`로 스톡 위임으로 돌아가세요. 모든 재빌드는 스테이징 → 헬스 체크 → 원자적 활성화 순서로 진행되며, 이전 정상 버전은 롤백용으로 `~/.local/bin/codex-hud-codex.d/` 아래에 남고 `npm run doctor`가 구버전 여부와 손상된 페이로드를 보고합니다. 관리형 `codex` 심이 활성화된 경우 설치기는 기준 Codex 버전을 감지할 때 해당 심을 건너뛰고 `PATH`의 다음 실제 `codex`를 사용합니다. 재빌드 대상을 명시적으로 고정해야 하면 `--version <version>`을 전달하세요.
 ## 프로젝트 구조
 
 ```text
