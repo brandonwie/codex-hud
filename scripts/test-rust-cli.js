@@ -20,12 +20,17 @@ const { spawnSync } = require("child_process");
 
 const FIXED = Date.UTC(2026, 0, 1, 0, 0, 0); // matches test-golden.js
 
+function rustBinaryName() {
+  return process.platform === "win32" ? "codex-hud-rs.exe" : "codex-hud-rs";
+}
+
 function resolveBinary() {
+  const binName = rustBinaryName();
   const candidates = [
     process.argv[2],
     process.env.CODEX_HUD_RUST_BIN,
-    path.join(__dirname, "..", "rust", "target", "release", "codex-hud-rs"),
-    path.join(__dirname, "..", "rust", "target", "debug", "codex-hud-rs"),
+    path.join(__dirname, "..", "rust", "target", "release", binName),
+    path.join(__dirname, "..", "rust", "target", "debug", binName),
   ].filter(Boolean);
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;

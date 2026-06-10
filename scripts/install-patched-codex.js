@@ -270,11 +270,13 @@ function parseArgs(argv) {
   if (args.renderer !== "auto" && args.renderer !== "rust" && args.renderer !== "js") {
     throw new Error(`--renderer must be auto, rust, or js, got: ${args.renderer}`);
   }
+  const reservedRendererNames = new Set([RUST_RENDERER_BIN_NAME, rendererBinaryName()]);
+  if (reservedRendererNames.has(args.binName) || reservedRendererNames.has(args.launcherName)) {
+    const reservedName = reservedRendererNames.has(args.binName) ? args.binName : args.launcherName;
+    throw new Error(`Refusing to use ${reservedName} as --bin-name/--launcher-name; it is reserved for the rust renderer binary.`);
+  }
   validateCommandName(args.binName, "--bin-name");
   validateCommandName(args.launcherName, "--launcher-name");
-  if (args.binName === RUST_RENDERER_BIN_NAME || args.launcherName === RUST_RENDERER_BIN_NAME) {
-    throw new Error("Refusing to use codex-hud-rs as --bin-name/--launcher-name; it is reserved for the rust renderer binary.");
-  }
   if (args.version) {
     validateCodexVersion(args.version, "--version");
   }
@@ -302,7 +304,7 @@ function rustRendererSourcePath() {
 
 function verifyRustRenderer(binPath, options = {}) {
   const runCommand = options.runCommand || run;
-  const firstLine = runCommand(binPath, ["--help"], { timeout: 10000 }).trim().split("\n")[0];
+  const firstLine = runCommand(binPath, ["--help"], { timeout: 10000 }).trim().split(/\r?\n/)[0];
   const match = firstLine.match(/^codex-hud (\d+\.\d+\.\d+\S*)$/);
   if (!match) {
     throw new Error(`Could not parse codex-hud-rs version from: ${firstLine}`);
