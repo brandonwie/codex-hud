@@ -1270,6 +1270,7 @@ function doctor(args, options = {}) {
     launcher: { path: launcherPath, status: "missing", mode: null, metadata: null },
     stock: null,
     patched: { dir: versionsDir(args), versions: [], active: null, flatPayload: null },
+    renderer: { configured: null, binPath: path.join(args.prefix, RUST_RENDERER_BIN_NAME), installed: false, version: null },
     anomalies: [],
     recommendations: [],
     healthy: true,
@@ -1315,6 +1316,19 @@ function doctor(args, options = {}) {
     report.launcher.status = metadata.format;
     report.launcher.mode = metadata.mode || null;
     report.launcher.metadata = metadata;
+    report.renderer.configured = metadata.renderer || (metadata.format === "v2" ? "js" : null);
+  }
+
+  if (executableExists(report.renderer.binPath)) {
+    try {
+      report.renderer.version = verifyRustRenderer(report.renderer.binPath, {
+        runCommand: (command, commandArgs, commandOptions) =>
+          runCommand(command, commandArgs, { ...commandOptions, timeout: args.healthCheckTimeoutMs || 10000 }),
+      });
+      report.renderer.installed = true;
+    } catch (error) {
+      report.anomalies.push(`installed codex-hud-rs failed --help health check: ${error.message}`);
+    }
   }
 
   try {
@@ -1420,6 +1434,21 @@ function doctor(args, options = {}) {
     }
   }
 
+  if (report.renderer.configured === "rust" && !report.renderer.installed && report.launcher.mode === "patched") {
+    report.recommendations.push(
+      `launcher renderer=rust but ${report.renderer.binPath} is missing -> run: npm run build:rust && npm run patch:codex`,
+    );
+  }
+
+  if (report.renderer.installed) {
+    const repoVersion = require(path.join(repoRoot(), "package.json")).version;
+    if (report.renderer.version !== repoVersion) {
+      report.recommendations.push(
+        `codex-hud-rs is v${report.renderer.version} but the repo is v${repoVersion} -> rebuild: npm run build:rust && rerun the installer`,
+      );
+    }
+  }
+
   if (report.shim.status === "managed" && report.launcher.status === "missing") {
     report.healthy = false;
     report.anomalies.push("codex shim points at a missing launcher");
@@ -1445,6 +1474,16 @@ function printDoctorReport(report) {
   lines.push(report.stock
     ? `stock codex: ${report.stock.path} (${report.stock.version}, realpath ${report.stock.realpath})`
     : "stock codex: not found");
+  if (report.renderer && report.renderer.configured) {
+    const stockQualifier = "used by --print-config/patched mode only — stock launcher does not invoke it";
+    if (report.renderer.configured === "js") {
+      lines.push("renderer: js (node renderer)");
+    } else if (report.renderer.installed) {
+      lines.push(`renderer: rust (${report.renderer.binPath}, v${report.renderer.version}${report.launcher.mode === "stock" ? `; ${stockQualifier}` : ""})`);
+    } else {
+      lines.push(`renderer: rust configured but codex-hud-rs missing${report.launcher.mode === "stock" ? ` (${stockQualifier})` : ""}`);
+    }
+  }
   lines.push(`patched payload dir: ${report.patched.dir}`);
   lines.push(`patched versions: ${report.patched.versions.length ? report.patched.versions.join(", ") : "(none)"}`);
   if (report.patched.active) {

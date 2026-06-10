@@ -675,4 +675,99 @@ const forcedShim = installDefaultShim(launcher, { ...shimArgs, forceShim: true }
 assert.deepStrictEqual(forcedShim, { target: shim, status: "installed" });
 assert.strictEqual(isManagedDefaultShim(shim, launcher), true);
 
+// --- doctor renderer reporting ---
+const repoPackageVersion = require("../package.json").version;
+
+// (1a) stock launcher with renderer=rust marker, no codex-hud-rs binary: informational only.
+const doctorRendererStockRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-renderer-stock-test-"));
+const doctorRendererStockArgs = { prefix: doctorRendererStockRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
+installLauncher(doctorRendererStockArgs, {
+  mode: "stock",
+  stockPath: doctorFakeStock,
+  stockRealpath: doctorFakeStock,
+  stockVersion: "0.139.0",
+  renderer: "rust",
+});
+const rendererStockReport = doctor(doctorRendererStockArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: () => "codex-cli 0.139.0\n",
+});
+assert.strictEqual(rendererStockReport.renderer.configured, "rust");
+assert.strictEqual(rendererStockReport.renderer.installed, false);
+assert.strictEqual(rendererStockReport.renderer.binPath, path.join(doctorRendererStockRoot, "codex-hud-rs"));
+assert.strictEqual(rendererStockReport.healthy, true, "missing renderer must not break a stock entrypoint chain");
+assert(
+  !rendererStockReport.recommendations.some((entry) => entry.includes("codex-hud-rs")),
+  "stock-mode missing renderer must stay informational, not a recommendation",
+);
+
+const rendererDoctorRun = spawnSync(
+  process.execPath,
+  [path.join(__dirname, "install-patched-codex.js"), "--doctor", "--prefix", doctorRendererStockRoot],
+  { encoding: "utf8", env: { ...process.env, PATH: `${doctorStockBin}:${process.env.PATH}` } },
+);
+assert.strictEqual(rendererDoctorRun.status, 0, "stock-mode doctor with missing renderer must exit healthy");
+assert(
+  rendererDoctorRun.stdout.includes("renderer: rust configured but codex-hud-rs missing (used by --print-config/patched mode only"),
+  "stock-mode renderer line must carry the stock qualifier",
+);
+assert(!rendererDoctorRun.stdout.includes("recommendation:"));
+assert(rendererDoctorRun.stdout.includes("status: healthy"));
+
+// (1b) patched launcher with renderer=rust marker, no binary: rebuild recommendation, still healthy.
+const doctorRendererPatchedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-renderer-patched-test-"));
+const doctorRendererPatchedArgs = { prefix: doctorRendererPatchedRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
+writeExecutable(path.join(doctorRendererPatchedRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
+fs.symlinkSync(path.join(doctorRendererPatchedRoot, "codex-hud-codex.d", "0.139.0", "codex"), path.join(doctorRendererPatchedRoot, "codex-hud-codex"));
+installLauncher(doctorRendererPatchedArgs, {
+  mode: "patched",
+  patchedBinary: path.join(doctorRendererPatchedRoot, "codex-hud-codex"),
+  patchedVersion: "0.139.0",
+  stockPath: doctorFakeStock,
+  stockRealpath: doctorFakeStock,
+  stockVersion: "0.139.0",
+  renderer: "rust",
+});
+const rendererPatchedReport = doctor(doctorRendererPatchedArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: () => "codex-cli 0.139.0\n",
+});
+assert.strictEqual(rendererPatchedReport.renderer.configured, "rust");
+assert.strictEqual(rendererPatchedReport.renderer.installed, false);
+assert.strictEqual(rendererPatchedReport.healthy, true, "missing renderer must not break a patched entrypoint chain");
+assert(
+  rendererPatchedReport.recommendations.some((entry) => /codex-hud-rs.*missing/.test(entry)),
+  "patched-mode missing renderer must recommend a rebuild",
+);
+
+// (2) installed codex-hud-rs matching the repo version: no renderer recommendation.
+writeExecutable(path.join(doctorRendererPatchedRoot, "codex-hud-rs"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
+const rendererInstalledReport = doctor(doctorRendererPatchedArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command.endsWith("codex-hud-rs") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+});
+assert.strictEqual(rendererInstalledReport.renderer.installed, true);
+assert.strictEqual(rendererInstalledReport.renderer.version, repoPackageVersion);
+assert(!rendererInstalledReport.recommendations.some((entry) => entry.includes("codex-hud-rs")));
+
+// (3) installed codex-hud-rs behind the repo version: staleness recommendation.
+const rendererStaleReport = doctor(doctorRendererPatchedArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command.endsWith("codex-hud-rs") ? "codex-hud 0.1.0\n" : "codex-cli 0.139.0\n"),
+});
+assert.strictEqual(rendererStaleReport.renderer.installed, true);
+assert.strictEqual(rendererStaleReport.renderer.version, "0.1.0");
+assert(
+  rendererStaleReport.recommendations.some((entry) => entry.includes("codex-hud-rs") && /rebuild/.test(entry)),
+  "stale renderer must recommend a rebuild",
+);
+
+// (4) v2 launcher without a renderer marker means the js renderer.
+const rendererDefaultReport = doctor(doctorStockArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: () => "codex-cli 0.139.0\n",
+});
+assert.strictEqual(rendererDefaultReport.renderer.configured, "js");
+assert.strictEqual(rendererDefaultReport.renderer.installed, false);
+
 console.log("patched Codex installer tests passed");
