@@ -32,8 +32,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Test
         run: npm test
+
+      - name: Test (Rust)
+        run: npm run test:rust
 
   release:
     name: Release
