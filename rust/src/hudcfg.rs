@@ -285,9 +285,7 @@ fn object_section<'a>(
     warnings: &mut Vec<String>,
     source: &str,
 ) -> Option<&'a Map<String, Value>> {
-    let Some(value) = raw_map.get(key) else {
-        return None;
-    };
+    let value = raw_map.get(key)?;
     match value.as_object() {
         Some(map) => Some(map),
         None => {
