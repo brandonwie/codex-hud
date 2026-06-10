@@ -55,7 +55,15 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+Ardından HUD başlatıcısını kurun (önerilir). Varsayılan mod **gerçek Codex kurulumunuza delege eder**; böylece Homebrew/npm üzerinden gelen Codex güncellemeleri otomatik olarak devreye girer — yeniden derleme yok, yamalı ikili dosya yok:
+
+```bash
+npm run install:launcher                    # ~/.local/bin/codex-hud-tui kurulur
+npm run install:launcher -- --make-default  # isteğe bağlı: `codex` başlatıcıya çözümlensin
+rehash
+```
+
+Ayrıntılar için aşağıdaki "HUD Başlatıcısı" bölümüne, tanılama için `npm run doctor` komutuna bakın.
 
 Beceri listesinin yenilenmesi için kurulumdan veya yeniden kurulumdan sonra yeni bir Codex iş parçacığı başlatın.
 
@@ -146,26 +154,65 @@ showPace = true     # false -> 5h/7d'deki tempo %'sini gizle
 
 Tam çözümlenmiş seçenek setini görmek için `codex-hud --print-config` çalıştırın.
 
-## Yamalı Codex Altbilgisi
+## HUD Başlatıcısı (Stok Delegasyonu — Varsayılan)
 
-> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
+`npm run install:launcher`, `~/.local/bin/codex-hud-tui` dosyasını yazar: gerçek (stok) Codex kurulumunuzu bulup `exec -a codex` ile çalıştıran küçük bir başlatıcı. Böylece Herdr gibi terminal entegrasyonları paneli Codex oturumu olarak tanımaya devam eder. Stok ikili dosyanın yolu kurulum sırasında kaydedilir; yol kaybolursa `PATH` üzerinde Codex'i yeniden keşfeden bir çalışma zamanı yedeği devreye girer (HUD tarafından yönetilen tüm girdiler atlandığından başlatıcı asla kendisini özyinelemeli çalıştıramaz).
 
-Standart Codex, giriş alanının altında rastgele eklenti çıktısı oluşturamaz. Claude-HUD tarzı bir altbilgi elde etmek için ayrı, yamalı bir Codex komutu derleyin:
+Başlatıcı stok Codex'e delege ettiği için:
+
+- Homebrew/npm Codex güncellemeleri otomatik olarak devreye girer — yeniden derleme gerekmez.
+- Homebrew/stok Codex dosyalarınız asla değiştirilmez veya başkasıyla değiştirilmez.
+- `npm run install:launcher -- --make-default`, yönetilen `~/.local/bin/codex` şimini kurar; kurulum aracı, `--force-shim` geçmedikçe yönetilmeyen bir `codex` dosyasını değiştirmeyi reddeder.
+
+Yalnızca yönetilen şimi kaldırmak için:
+
+```bash
+node scripts/install-patched-codex.js --uninstall-shim
+rehash
+which codex
+```
+
+### Doctor
+
+`npm run doctor`, başlatma zincirinin tam durumunu yazdırır — şim, başlatıcı modu (stock/patched/legacy), stok Codex yolu ve sürümü, yamalı yük sürümleri, bayatlık ve artık dosyalar:
+
+```text
+prefix: /Users/you/.local/bin
+codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
+launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
+patched versions: (none)
+patched command: (none)
+status: healthy
+```
+
+Yalnızca etkin giriş zinciri bozulduğunda sıfırdan farklı bir kodla çıkar.
+
+### Eski codex-hud kurulumundan geçiş
+
+Daha önce `npm run patch:codex` (eski varsayılan akış) kullandıysanız `npm run install:launcher` komutunu bir kez çalıştırın: `codex-hud-tui` stok delegasyonuna yeniden yazılır ve mevcut `codex` şiminiz çalışmaya devam eder. Sağlıklı eski `codex-hud-codex` komutu yerinde bırakılır (bayatlama notuyla birlikte); bozuk olanı `codex-hud-codex.broken-<timestamp>` olarak karantinaya alınır, böylece başlatma ortasında ölmek yerine hızla başarısız olur. Bir sonraki `npm run patch:codex`, eski düz yükü sürümlü düzene otomatik taşır. Kalan her şeyi `npm run doctor` gösterir.
+
+## Deneysel: Yamalı Codex Alt Bilgisi
+
+> **Uyarı — deneysel.** Bu mod, yerel olarak yamalanmış, imzasız bir Codex ikili dosyası derler. macOS imzasız yeniden derlemeleri sonlandırabilir (kurulum aracı her yükü etkinleştirmeden *önce* sağlık denetiminden geçirir; bu yüzden başarısız bir derleme etkin `codex` komutunuzu asla bozamaz) ve yamalı ikili dosya **stok Codex güncellendiğinde bayatlar** — Codex güncellemelerinden sonra `npm run patch:codex` komutunu yeniden çalıştırmanız gerekir. TUI içi alt bilgiye özellikle ihtiyacınız yoksa varsayılan stok delegasyon başlatıcısını tercih edin.
+
+Stok Codex, giriş alanının altında rastgele eklenti çıktısı gösteremez. Claude HUD tarzı bir alt bilgi için ayrı bir yamalı Codex komutu derleyin:
 
 ```bash
 npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-Yükleyici, eşleşen OpenAI Codex etiketini yamalar, Rust CLI'yi derler ve gerçek yürütülebilir dosyayı `~/.local/bin/codex-hud-codex.d/codex` altında tutar; `~/.local/bin/codex-hud-codex` ise o ikili dosyaya bir sembolik bağlantıdır. Ayrıca, renkli HUD komutunu `~/.codex/config.toml` dosyasını değiştirmeden Codex'in `-c tui.status_line_command=...` geçersiz kılması aracılığıyla geçiren bir başlatıcı olan `~/.local/bin/codex-hud-tui` dosyasını da yazar. Yürütülebilir dosya yolu ve `argv[0]` her ikisi de Codex tarafından görülebilen adları korur, böylece Herdr gibi terminal entegrasyonları bölmeyi hâlâ bir Codex oturumu olarak tanıyabilir.
+Kurulum aracı eşleşen OpenAI Codex etiketini yamalar, Rust CLI'yi derler ve yürütülebilir dosyayı `~/.local/bin/codex-hud-codex.d/<version>/codex` altında hazırlar. Hazırlanan yük, herhangi bir etkinleştirmeden **önce** `--version` sağlık denetimini geçmek zorundadır; ancak o zaman `~/.local/bin/codex-hud-codex` atomik olarak yeni yüke yönlendirilir ve önceki sürüm geri alma için diskte tutulur. Başarısız bir derleme `<version>.failed` olarak kenara konur ve etkin çalışma zamanı dokunulmadan kalır. Ayrıca yamalı modda `~/.local/bin/codex-hud-tui` yazılır: renkli HUD komutunu `~/.codex/config.toml` dosyasını değiştirmeden Codex'in `-c tui.status_line_command=...` geçersiz kılmasıyla ileten bir başlatıcı. Yürütülebilir dosya yolu ve `argv[0]` Codex olarak görünen adları korur; böylece Herdr gibi terminal entegrasyonları paneli Codex oturumu olarak tanımaya devam eder.
 
-Güvenli başlatıcı modu, normal `codex` komutunuza dokunmaz:
+Güvenli başlatıcı modu normal `codex` komutunuza dokunmaz:
 
 ```bash
 codex-hud-tui
 ```
 
-Yeni bir `codex` başlatmanın HUD özellikli TUI'yi kullanmasını sağlamak için, yönetilen shim'i etkinleştirin:
+Yeni bir `codex` başlatmasının HUD'lu TUI'yi kullanması için yönetilen şime açıkça katılın:
 
 ```bash
 npm run patch:codex -- --make-default
@@ -174,9 +221,9 @@ which codex
 codex
 ```
 
-`which codex`, `~/.local/bin/codex` ile çözümlenmelidir. Yükleyici, `--force-shim` geçirmediğiniz sürece mevcut bir `~/.local/bin/codex` dosyasını değiştirmeyi reddeder ve `--replace-codex` geçirmediğiniz sürece yamalı ikili dosyanın kendisini `codex` olarak kurmayı da reddeder.
+`which codex`, `~/.local/bin/codex` yoluna çözümlenmelidir. Kurulum aracı `--force-shim` geçmedikçe mevcut `~/.local/bin/codex` dosyasını değiştirmeyi, `--replace-codex` geçmedikçe de yamalı ikiliyi doğrudan `codex` olarak kurmayı reddeder.
 
-Geri alma, yalnızca yönetilen `codex` shim'ini kaldırır:
+Geri alma yalnızca yönetilen `codex` şimini kaldırır:
 
 ```bash
 node scripts/install-patched-codex.js --uninstall-shim
@@ -184,21 +231,20 @@ rehash
 which codex
 ```
 
-Kalıcı bir yapılandırmayı tercih ederseniz, yazdırılan satırı mevcut `[tui]` tablonuzun altına ekleyin, ancak standart Codex sürümlerinin bilinmeyen alanları reddedebileceğini unutmayın. Makineniz için tam satırı depo kökünden oluşturun:
+Kalıcı yapılandırma tercih ediyorsanız yazdırılan satırı mevcut `[tui]` tablonuzun altına ekleyin; ancak stok Codex sürümlerinin bilinmeyen alanları reddedebileceğini unutmayın. Makinenize özel satırı depo kökünden üretin:
 
 ```bash
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
 ```
 
-Ardından bunu `~/.codex/config.toml` içindeki `[tui]` altına yapıştırın:
+Sonra `~/.codex/config.toml` içindeki `[tui]` altına yapıştırın:
 
 ```toml
-# /path/to/codex-hud kısmını yerel klon yolunuzla değiştirin.
+# Replace /path/to/codex-hud with your local clone path.
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
-Kompakt altbilgiyi görmek için `codex-hud-tui` çalıştırın. Homebrew veya Codex güncellemeleri bu ayrı komutu güncellemez; Codex'i güncelledikten sonra `npm run patch:codex` komutunu yeniden çalıştırın. Yönetilen `codex` shim'i etkin olduğunda, yükleyici temel Codex sürümünü algılarken o shim'i atlar ve `PATH` üzerindeki bir sonraki gerçek `codex` dosyasını kullanır; yeniden derleme hedefini açıkça sabitlemeniz gerekirse `--version <version>` geçirin. Yeniden derlenen yük, başlatıcı yeniden yazılmadan önce bir `--version` sağlık kontrolünü geçmelidir.
-
+Kompakt alt bilgiyi görmek için `codex-hud-tui` çalıştırın. Yamalı ikili dosya stok Codex güncellemelerini izlemez: derlemeden sonra stok Codex değişirse, yamalı başlatıcı açılışta tek satırlık bir uyarı yazdırır (yine de seçtiğiniz yamalı ikiliyi çalıştırır) — `npm run patch:codex` ile yeniden derleyin veya `npm run install:launcher` ile stok delegasyonuna geri dönün. Her yeniden derleme hazırlanır, sağlık denetiminden geçer ve atomik olarak etkinleştirilir; önceki çalışan sürüm geri alma için `~/.local/bin/codex-hud-codex.d/` altında kalır ve `npm run doctor` bayatlık ile bozuk yükleri bildirir. Yönetilen `codex` şimi etkinken kurulum aracı, temel Codex sürümünü algılarken bu şimi atlar ve `PATH` üzerindeki bir sonraki gerçek `codex` dosyasını kullanır; yeniden derleme hedefini açıkça sabitlemeniz gerekirse `--version <version>` geçin.
 ## Proje Düzeni
 
 ```text
