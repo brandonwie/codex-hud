@@ -137,7 +137,10 @@ function collectParsed(gitState, rolloutKey) {
     USERPROFILE: process.env.USERPROFILE,
   };
   try {
-    const r = spawnSync(process.execPath, [hudScript, "--json"], {
+    // CODEX_HUD_BIN overrides the renderer under test (e.g. the Rust port);
+    // default stays the Node oracle script.
+    const hudBin = process.env.CODEX_HUD_BIN;
+    const r = spawnSync(hudBin || process.execPath, hudBin ? ["--json"] : [hudScript, "--json"], {
       cwd: gitDir,
       encoding: "utf8",
       env: Object.fromEntries(Object.entries(childEnv).filter(([, value]) => value)),
