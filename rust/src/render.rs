@@ -675,6 +675,8 @@ pub fn render_footer(data: &Value, config: &Value, color: bool) -> String {
         let Some(text) = text.filter(|t| !t.is_empty()) else {
             continue;
         };
+        // Runtime is a suffix for the project segment: "repo node v24", not a
+        // standalone pipe-delimited segment.
         let joiner = if id == "runtime" { Some(" ") } else { None };
         pieces.push(Piece { text, joiner });
     }

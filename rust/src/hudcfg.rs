@@ -51,6 +51,8 @@ pub fn segment_alias(entry: &str) -> Vec<String> {
 // ── Codex config.toml text probes (regex-port of the JS helpers) ────────────
 
 /// Port of firstTomlString(): first line matching `^key\s*=\s*"..."`.
+/// This is intentionally a text probe, not a full TOML parser, to preserve the
+/// Node oracle's config precedence behavior.
 pub fn first_toml_string(config: &str, key: &str) -> Option<String> {
     for line in config.split('\n') {
         if let Some(rest) = line.strip_prefix(key) {

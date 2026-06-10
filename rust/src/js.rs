@@ -57,7 +57,12 @@ fn parse_prefixed_integer(text: &str) -> Option<f64> {
     if digits.is_empty() {
         return None;
     }
-    u64::from_str_radix(digits, radix).ok().map(|n| n as f64)
+    let mut out = 0.0;
+    for ch in digits.chars() {
+        let digit = ch.to_digit(radix)?;
+        out = out * radix as f64 + digit as f64;
+    }
+    Some(out)
 }
 
 /// JS `Number.isFinite(value)` (NO coercion: only actual numbers pass).
@@ -116,6 +121,7 @@ mod tests {
         assert_eq!(js_number(Some(&Value::String("0b11".into()))), 3.0);
         assert_eq!(js_number(Some(&Value::String("0o10".into()))), 8.0);
         assert_eq!(js_number(Some(&Value::String("  0Xf  ".into()))), 15.0);
+        assert!(js_number(Some(&Value::String("0xffffffffffffffffffff".into()))) > u64::MAX as f64);
         assert!(js_number(Some(&Value::String("+0x10".into()))).is_nan());
     }
 }
