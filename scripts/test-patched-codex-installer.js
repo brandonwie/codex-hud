@@ -4,13 +4,24 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { spawnSync } = require("child_process");
 const {
   detectCodexVersion,
+  detectLegacyLayout,
+  detectStockCodex,
+  doctor,
+  findStockCodexPath,
   installBuiltBinary,
   installDefaultShim,
+  installLauncher,
   isManagedDefaultShim,
+  migrateLegacyLayout,
   parseArgs,
+  parseLauncherMetadata,
   patchSource,
+  pruneVersionDirs,
+  renderLauncherScript,
+  reviewLegacyBinEntry,
   uninstallDefaultShim,
   verifyInstalledBinary,
 } = require("./install-patched-codex");
@@ -19,6 +30,16 @@ function writeFile(root, relativePath, contents) {
   const filePath = path.join(root, relativePath);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, contents);
+}
+
+function writeExecutable(filePath, contents) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, contents);
+  fs.chmodSync(filePath, 0o755);
+}
+
+function fakeCodexScript(version) {
+  return `#!/usr/bin/env bash\necho codex-cli ${version}\n`;
 }
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-patch-test-"));
@@ -87,36 +108,86 @@ assert(statusSurfaces.includes("std::process::Command::new"));
 assert(statusSurfaces.includes("fn ansi_status_line_to_line"));
 assert(statusSurfaces.includes("ratatui::style::Color::Indexed"));
 
+// --- renderLauncherScript: stock mode ---
+const stockScript = renderLauncherScript({
+  mode: "stock",
+  prefix: "/tmp/test-prefix",
+  stockPath: "/opt/homebrew/bin/codex",
+  stockRealpath: "/opt/homebrew/Cellar/codex/0.139.0/bin/codex",
+  stockVersion: "0.139.0",
+  builtAt: "2026-06-10T00:00:00.000Z",
+});
+assert(stockScript.includes("# codex-hud-launcher v2 mode=stock"), "stock launcher must carry v2 marker");
+assert(stockScript.includes("# stock_path=/opt/homebrew/bin/codex"));
+assert(stockScript.includes("# stock_realpath=/opt/homebrew/Cellar/codex/0.139.0/bin/codex"));
+assert(stockScript.includes("# built_at=2026-06-10T00:00:00.000Z"));
+assert(stockScript.includes('exec -a codex "$stock"'), "stock launcher must preserve argv[0] as codex");
+assert(!stockScript.includes("status_line_command"), "stock launcher must not inject patched-only config");
+
+// --- renderLauncherScript: patched mode ---
+const patchedScript = renderLauncherScript({
+  mode: "patched",
+  prefix: "/tmp/test-prefix",
+  patchedBinary: "/tmp/test-prefix/codex-hud-codex",
+  patchedVersion: "0.139.0",
+  stockPath: "/opt/homebrew/bin/codex",
+  stockRealpath: "/opt/homebrew/Cellar/codex/0.139.0/bin/codex",
+  stockVersion: "0.139.0",
+  builtAt: "2026-06-10T00:00:00.000Z",
+});
+assert(patchedScript.includes("# codex-hud-launcher v2 mode=patched"));
+assert(patchedScript.includes("# patched_version=0.139.0"));
+assert(patchedScript.includes("# stock_realpath=/opt/homebrew/Cellar/codex/0.139.0/bin/codex"));
+assert(patchedScript.includes("exec -a codex "), "patched launcher must preserve argv[0] as codex");
+assert(patchedScript.includes("--line --color"));
+assert(patchedScript.includes("stock Codex changed since this patched runtime was built"), "patched launcher must carry the staleness warning");
+
+// --- parseLauncherMetadata ---
+assert.deepStrictEqual(parseLauncherMetadata(stockScript), {
+  format: "v2",
+  mode: "stock",
+  stockPath: "/opt/homebrew/bin/codex",
+  stockRealpath: "/opt/homebrew/Cellar/codex/0.139.0/bin/codex",
+  stockVersion: "0.139.0",
+  builtAt: "2026-06-10T00:00:00.000Z",
+});
+const patchedMetadata = parseLauncherMetadata(patchedScript);
+assert.strictEqual(patchedMetadata.format, "v2");
+assert.strictEqual(patchedMetadata.mode, "patched");
+assert.strictEqual(patchedMetadata.patchedVersion, "0.139.0");
+const legacyScript = "#!/usr/bin/env bash\nset -euo pipefail\n\nexec -a codex '/x/codex-hud-codex' \\\n  -c 'tui.status_line_command=\"node hud.js\"' \\\n  \"$@\"\n";
+assert.strictEqual(parseLauncherMetadata(legacyScript).format, "legacy");
+assert.strictEqual(parseLauncherMetadata("echo hello\n").format, "foreign");
+assert.strictEqual(parseLauncherMetadata("").format, "foreign");
+
+// --- parseArgs ---
 const shimRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-shim-test-"));
 const launcher = path.join(shimRoot, "codex-hud-tui");
 const shim = path.join(shimRoot, "codex");
 fs.writeFileSync(launcher, "#!/usr/bin/env bash\nexit 0\n");
 fs.chmodSync(launcher, 0o755);
 
-const { installLauncher } = require("./install-patched-codex");
-const generatedLauncher = installLauncher(path.join(shimRoot, "codex-hud-codex"), {
-  prefix: shimRoot,
-  launcherName: "generated-codex-hud-tui",
-});
-const generatedLauncherText = fs.readFileSync(generatedLauncher, "utf8");
-assert(generatedLauncherText.includes("exec -a codex "), "launcher should preserve argv[0] as codex for terminal process detection");
-assert(generatedLauncherText.includes("--line --color"));
-
 const parsed = parseArgs(["--make-default", "--force-shim", "--prefix", shimRoot]);
 assert.strictEqual(parsed.makeDefault, true);
 assert.strictEqual(parsed.forceShim, true);
 assert.strictEqual(parsed.prefix, shimRoot);
+assert.strictEqual(parsed.mode, "stock", "default mode must be stock (safe-by-default)");
+assert.strictEqual(parsed.keepVersions, 2);
+assert.strictEqual(parseArgs(["--mode", "patched"]).mode, "patched");
+assert.strictEqual(parseArgs(["--doctor"]).doctor, true);
+assert.strictEqual(parseArgs(["--keep-versions", "3"]).keepVersions, 3);
+assert.throws(() => parseArgs(["--mode", "yolo"]), /--mode must be stock or patched/);
+assert.throws(() => parseArgs(["--keep-versions", "0"]), /--keep-versions/);
 
+// --- stock discovery: HUD-managed candidates skipped ---
 const versionShimRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-version-shim-test-"));
 const versionRealRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-version-real-test-"));
 const versionLauncher = path.join(versionShimRoot, "codex-hud-tui");
 const versionShim = path.join(versionShimRoot, "codex");
 const versionRealCodex = path.join(versionRealRoot, "codex");
-fs.writeFileSync(versionLauncher, "#!/usr/bin/env bash\necho codex-cli 0.137.0\n");
-fs.chmodSync(versionLauncher, 0o755);
+writeExecutable(versionLauncher, fakeCodexScript("0.137.0"));
 fs.symlinkSync(versionLauncher, versionShim);
-fs.writeFileSync(versionRealCodex, "#!/usr/bin/env bash\necho codex-cli 0.138.0\n");
-fs.chmodSync(versionRealCodex, 0o755);
+writeExecutable(versionRealCodex, fakeCodexScript("0.138.0"));
 
 const detectedVersionCommands = [];
 const detectedVersion = detectCodexVersion({
@@ -129,27 +200,271 @@ const detectedVersion = detectCodexVersion({
 assert.strictEqual(detectedVersion, "0.138.0");
 assert.deepStrictEqual(detectedVersionCommands, [versionRealCodex]);
 
+// --- stock discovery: payloads inside codex-hud-codex.d are skipped (recursion guard) ---
+const recursionRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-recursion-test-"));
+const recursionPayload = path.join(recursionRoot, "codex-hud-codex.d", "1.2.3", "codex");
+writeExecutable(recursionPayload, fakeCodexScript("1.2.3"));
+const trapDir = path.join(recursionRoot, "trap-bin");
+fs.mkdirSync(trapDir);
+fs.symlinkSync(recursionPayload, path.join(trapDir, "codex"));
+const realDir = path.join(recursionRoot, "real-bin");
+const realCodex = path.join(realDir, "codex");
+writeExecutable(realCodex, fakeCodexScript("0.140.0"));
+
+const recursionStock = detectStockCodex({
+  env: { PATH: [trapDir, realDir].join(path.delimiter) },
+  runCommand(command) {
+    assert(!command.includes("codex-hud-codex.d"), "must never run a HUD payload as stock codex");
+    return "codex-cli 0.140.0\n";
+  },
+});
+assert.strictEqual(recursionStock.path, realCodex);
+assert.strictEqual(recursionStock.version, "0.140.0");
+assert.strictEqual(findStockCodexPath({ PATH: [trapDir, realDir].join(path.delimiter) }), realCodex);
+
+// --- verifyInstalledBinary ---
 const healthCheckCodex = path.join(shimRoot, "health-check-codex");
-fs.writeFileSync(healthCheckCodex, "#!/usr/bin/env bash\necho codex-cli 1.2.3\n");
-fs.chmodSync(healthCheckCodex, 0o755);
+writeExecutable(healthCheckCodex, fakeCodexScript("1.2.3"));
 assert.strictEqual(verifyInstalledBinary(healthCheckCodex, { version: "1.2.3" }), "1.2.3");
 assert.throws(() => verifyInstalledBinary(healthCheckCodex, { version: "1.2.4" }), /version mismatch/);
 
-const installSourceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-install-source-test-"));
-const installPrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-install-prefix-test-"));
-const outsideCodex = path.join(installPrefix, "outside-codex");
-writeFile(installSourceRoot, "codex-rs/target/release/codex", "patched codex\n");
-fs.chmodSync(path.join(installSourceRoot, "codex-rs/target/release/codex"), 0o755);
-fs.writeFileSync(outsideCodex, "stock codex\n");
-fs.symlinkSync(outsideCodex, path.join(installPrefix, "codex-hud-codex"));
-const installedBinary = installBuiltBinary(installSourceRoot, { prefix: installPrefix, binName: "codex-hud-codex" });
-const installedBackingBinary = path.join(installPrefix, "codex-hud-codex.d", process.platform === "win32" ? "codex.exe" : "codex");
-assert.strictEqual(fs.lstatSync(installedBinary).isSymbolicLink(), true);
-assert.strictEqual(fs.realpathSync.native(installedBinary), fs.realpathSync.native(installedBackingBinary));
-assert.strictEqual(path.basename(fs.realpathSync.native(installedBinary)), process.platform === "win32" ? "codex.exe" : "codex");
-assert.strictEqual(fs.readFileSync(installedBinary, "utf8"), "patched codex\n");
-assert.strictEqual(fs.readFileSync(outsideCodex, "utf8"), "stock codex\n");
+// --- staged install: success path (versioned layout + atomic swap over regular file) ---
+const stagePrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-stage-prefix-test-"));
+const stageSource = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-stage-source-test-"));
+const stageOutside = path.join(stagePrefix, "outside-codex");
+fs.writeFileSync(stageOutside, "stock codex\n");
+writeExecutable(path.join(stageSource, "codex-rs/target/release/codex"), fakeCodexScript("1.0.0"));
+// pre-existing hand-written recovery script at the bin entry (regular file, not symlink)
+writeExecutable(path.join(stagePrefix, "codex-hud-codex"), "#!/usr/bin/env bash\necho hand-rolled\n");
 
+const stagedArgsV1 = { prefix: stagePrefix, binName: "codex-hud-codex", version: "1.0.0", keepVersions: 2 };
+const stagedV1 = installBuiltBinary(stageSource, stagedArgsV1);
+assert.strictEqual(stagedV1.version, "1.0.0");
+assert.strictEqual(fs.lstatSync(stagedV1.target).isSymbolicLink(), true, "active entry must become a symlink even over a regular file");
+assert.strictEqual(
+  fs.realpathSync.native(stagedV1.target),
+  fs.realpathSync.native(path.join(stagePrefix, "codex-hud-codex.d", "1.0.0", "codex")),
+  "active entry must resolve into the versioned payload dir",
+);
+assert.strictEqual(fs.readFileSync(stageOutside, "utf8"), "stock codex\n", "unrelated files must be untouched");
+
+// second version: previous version dir retained for rollback
+writeExecutable(path.join(stageSource, "codex-rs/target/release/codex"), fakeCodexScript("2.0.0"));
+const stagedV2 = installBuiltBinary(stageSource, { ...stagedArgsV1, version: "2.0.0" });
+assert.strictEqual(stagedV2.version, "2.0.0");
+assert(fs.realpathSync.native(stagedV2.target).includes(`${path.sep}2.0.0${path.sep}`));
+assert(fs.existsSync(path.join(stagePrefix, "codex-hud-codex.d", "1.0.0", "codex")), "previous payload must be retained for rollback");
+
+// --- staged install: failed health check must not touch the active runtime ---
+const failLauncherPath = installLauncher(
+  { prefix: stagePrefix, binName: "codex-hud-codex", launcherName: "codex-hud-tui" },
+  { mode: "patched", patchedBinary: stagedV2.target, patchedVersion: "2.0.0" },
+);
+const launcherBytesBefore = fs.readFileSync(failLauncherPath, "utf8");
+
+writeExecutable(path.join(stageSource, "codex-rs/target/release/codex"), "#!/usr/bin/env bash\nexit 1\n");
+assert.throws(
+  () => installBuiltBinary(stageSource, { ...stagedArgsV1, version: "3.0.0" }),
+  /health check failed/,
+);
+assert(
+  fs.realpathSync.native(path.join(stagePrefix, "codex-hud-codex")).includes(`${path.sep}2.0.0${path.sep}`),
+  "active entry must still resolve to the previous good payload after a failed install",
+);
+assert.strictEqual(fs.readFileSync(failLauncherPath, "utf8"), launcherBytesBefore, "launcher must be untouched by a failed install");
+assert(fs.existsSync(path.join(stagePrefix, "codex-hud-codex.d", "3.0.0.failed", "codex")), "failed payload must be kept for inspection");
+assert(!fs.existsSync(path.join(stagePrefix, "codex-hud-codex.d", "3.0.0")), "failed payload must never be activated");
+
+// failed health check: version mismatch variant
+writeExecutable(path.join(stageSource, "codex-rs/target/release/codex"), fakeCodexScript("9.0.0"));
+assert.throws(
+  () => installBuiltBinary(stageSource, { ...stagedArgsV1, version: "4.0.0" }),
+  /health check failed/,
+);
+assert(fs.realpathSync.native(path.join(stagePrefix, "codex-hud-codex")).includes(`${path.sep}2.0.0${path.sep}`));
+
+// --- generated stock wrapper: executes stock codex, never recurses into HUD entries ---
+const wrapperPrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-wrapper-test-"));
+const fakeStockDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-wrapper-stock-test-"));
+const fakeStock = path.join(fakeStockDir, "codex");
+const sentinel = path.join(wrapperPrefix, "recursion-happened");
+writeExecutable(fakeStock, '#!/usr/bin/env bash\necho "STOCK-RAN $@"\n');
+writeExecutable(path.join(wrapperPrefix, "codex-hud-codex.d", "1.0.0", "codex"), `#!/usr/bin/env bash\ntouch ${JSON.stringify(sentinel)}\n`);
+const wrapperTrapDir = path.join(wrapperPrefix, "trap-bin");
+fs.mkdirSync(wrapperTrapDir);
+fs.symlinkSync(path.join(wrapperPrefix, "codex-hud-codex.d", "1.0.0", "codex"), path.join(wrapperTrapDir, "codex"));
+
+const wrapperArgs = { prefix: wrapperPrefix, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
+const wrapperPath = installLauncher(wrapperArgs, {
+  mode: "stock",
+  stockPath: fakeStock,
+  stockRealpath: fakeStock,
+  stockVersion: "0.139.0",
+});
+fs.symlinkSync(wrapperPath, path.join(wrapperPrefix, "codex"));
+
+const wrapperEnv = {
+  ...process.env,
+  PATH: [wrapperPrefix, wrapperTrapDir, fakeStockDir, "/usr/bin", "/bin"].join(path.delimiter),
+};
+const bakedRun = spawnSync("bash", [wrapperPath, "hello", "world"], { encoding: "utf8", env: wrapperEnv });
+assert.strictEqual(bakedRun.status, 0, `wrapper failed: ${bakedRun.stderr}`);
+assert.match(bakedRun.stdout, /STOCK-RAN hello world/);
+assert(!fs.existsSync(sentinel), "wrapper must never execute a HUD-managed payload");
+
+// fallback discovery: baked path gone -> PATH discovery still finds stock, skips HUD entries
+const fallbackWrapperPath = installLauncher(wrapperArgs, {
+  mode: "stock",
+  stockPath: path.join(wrapperPrefix, "does-not-exist", "codex"),
+});
+const fallbackRun = spawnSync("bash", [fallbackWrapperPath, "again"], { encoding: "utf8", env: wrapperEnv });
+assert.strictEqual(fallbackRun.status, 0, `fallback wrapper failed: ${fallbackRun.stderr}`);
+assert.match(fallbackRun.stdout, /STOCK-RAN again/);
+assert(!fs.existsSync(sentinel), "fallback discovery must never execute a HUD-managed payload");
+
+// --- pruneVersionDirs ---
+const pruneRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prune-test-"));
+const pruneArgs = { prefix: pruneRoot, binName: "codex-hud-codex", keepVersions: 2 };
+for (const version of ["0.9.0", "0.10.0", "0.11.0"]) {
+  writeExecutable(path.join(pruneRoot, "codex-hud-codex.d", version, "codex"), fakeCodexScript(version));
+}
+fs.mkdirSync(path.join(pruneRoot, "codex-hud-codex.d", "1.0.0.staging"), { recursive: true });
+fs.mkdirSync(path.join(pruneRoot, "codex-hud-codex.d", "0.7.0.failed"), { recursive: true });
+fs.mkdirSync(path.join(pruneRoot, "codex-hud-codex.d", "0.8.0.failed"), { recursive: true });
+fs.symlinkSync(path.join(pruneRoot, "codex-hud-codex.d", "0.11.0", "codex"), path.join(pruneRoot, "codex-hud-codex"));
+
+pruneVersionDirs(pruneArgs);
+assert(!fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.9.0")), "numeric semver sort must prune 0.9.0, not 0.10.0");
+assert(fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.10.0")));
+assert(fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.11.0")));
+assert(!fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "1.0.0.staging")), "stale staging dirs must be swept");
+assert(fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.8.0.failed")), "latest failed payload must be kept");
+assert(!fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.7.0.failed")), "older failed payloads must be swept");
+
+// active version is never pruned, even when oldest
+const pruneRoot2 = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prune-active-test-"));
+const pruneArgs2 = { prefix: pruneRoot2, binName: "codex-hud-codex", keepVersions: 1 };
+for (const version of ["0.1.0", "0.2.0", "0.3.0"]) {
+  writeExecutable(path.join(pruneRoot2, "codex-hud-codex.d", version, "codex"), fakeCodexScript(version));
+}
+fs.symlinkSync(path.join(pruneRoot2, "codex-hud-codex.d", "0.1.0", "codex"), path.join(pruneRoot2, "codex-hud-codex"));
+pruneVersionDirs(pruneArgs2);
+assert(fs.existsSync(path.join(pruneRoot2, "codex-hud-codex.d", "0.1.0")), "active payload must never be pruned");
+assert(fs.existsSync(path.join(pruneRoot2, "codex-hud-codex.d", "0.3.0")));
+assert(!fs.existsSync(path.join(pruneRoot2, "codex-hud-codex.d", "0.2.0")));
+
+// --- migration: legacy flat payload -> versioned layout ---
+const migrateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-migrate-test-"));
+const migrateArgs = { prefix: migrateRoot, binName: "codex-hud-codex" };
+const flatPayload = path.join(migrateRoot, "codex-hud-codex.d", "codex");
+writeExecutable(flatPayload, fakeCodexScript("0.138.0"));
+fs.symlinkSync(flatPayload, path.join(migrateRoot, "codex-hud-codex"));
+
+const legacyLayout = detectLegacyLayout(migrateArgs);
+assert.strictEqual(legacyLayout.flatPayload, flatPayload);
+assert.strictEqual(legacyLayout.binEntry.kind, "symlink");
+
+const migrated = migrateLegacyLayout(migrateArgs);
+assert.strictEqual(migrated.status, "migrated");
+assert.strictEqual(migrated.version, "0.138.0");
+assert(fs.existsSync(path.join(migrateRoot, "codex-hud-codex.d", "0.138.0", "codex")));
+assert(!fs.existsSync(flatPayload));
+assert.strictEqual(
+  fs.realpathSync.native(path.join(migrateRoot, "codex-hud-codex")),
+  fs.realpathSync.native(path.join(migrateRoot, "codex-hud-codex.d", "0.138.0", "codex")),
+  "bin entry must be retargeted to the migrated payload",
+);
+assert.deepStrictEqual(migrateLegacyLayout(migrateArgs), { status: "none" }, "migration must be idempotent");
+
+// broken flat payload is quarantined, not activated
+const migrateRoot2 = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-migrate-broken-test-"));
+const brokenFlat = path.join(migrateRoot2, "codex-hud-codex.d", "codex");
+writeExecutable(brokenFlat, "#!/usr/bin/env bash\nexit 1\n");
+const quarantined = migrateLegacyLayout({ prefix: migrateRoot2, binName: "codex-hud-codex" });
+assert.strictEqual(quarantined.status, "quarantined");
+assert(fs.existsSync(`${brokenFlat}.legacy-failed`));
+assert(!fs.existsSync(brokenFlat));
+
+// --- stock-mode review of the legacy codex-hud-codex entry ---
+const reviewRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-review-test-"));
+const reviewArgs = { prefix: reviewRoot, binName: "codex-hud-codex" };
+assert.strictEqual(reviewLegacyBinEntry(reviewArgs).status, "absent");
+
+writeExecutable(path.join(reviewRoot, "codex-hud-codex"), fakeCodexScript("0.137.0"));
+const reviewOk = reviewLegacyBinEntry(reviewArgs);
+assert.strictEqual(reviewOk.status, "ok");
+assert.strictEqual(reviewOk.version, "0.137.0");
+assert(fs.existsSync(path.join(reviewRoot, "codex-hud-codex")), "healthy entry must be left in place");
+
+const reviewRoot2 = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-review-broken-test-"));
+writeExecutable(path.join(reviewRoot2, "codex-hud-codex"), "#!/usr/bin/env bash\nexit 1\n");
+writeExecutable(path.join(reviewRoot2, "codex-hud-codex.d", "codex"), "#!/usr/bin/env bash\nexit 1\n");
+const reviewBroken = reviewLegacyBinEntry({ prefix: reviewRoot2, binName: "codex-hud-codex" });
+assert.strictEqual(reviewBroken.status, "quarantined");
+assert(!fs.existsSync(path.join(reviewRoot2, "codex-hud-codex")), "broken entry must fail fast as command-not-found");
+assert(fs.existsSync(reviewBroken.quarantinePath));
+assert(reviewBroken.quarantinedPayload && fs.existsSync(reviewBroken.quarantinedPayload), "broken flat payload must be quarantined too");
+
+// --- doctor ---
+const doctorStockRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-stock-test-"));
+const doctorStockBin = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-stock-bin-test-"));
+const doctorFakeStock = path.join(doctorStockBin, "codex");
+writeExecutable(doctorFakeStock, fakeCodexScript("0.139.0"));
+const doctorStockArgs = { prefix: doctorStockRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
+const doctorStockLauncher = installLauncher(doctorStockArgs, {
+  mode: "stock",
+  stockPath: doctorFakeStock,
+  stockRealpath: doctorFakeStock,
+  stockVersion: "0.139.0",
+});
+fs.symlinkSync(doctorStockLauncher, path.join(doctorStockRoot, "codex"));
+
+const stockReport = doctor(doctorStockArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: () => "codex-cli 0.139.0\n",
+});
+assert.strictEqual(stockReport.launcher.mode, "stock");
+assert.strictEqual(stockReport.shim.status, "managed");
+assert.strictEqual(stockReport.stock.path, doctorFakeStock);
+assert.strictEqual(stockReport.healthy, true);
+assert.deepStrictEqual(stockReport.recommendations, []);
+
+const doctorStaleRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-stale-test-"));
+const doctorStaleArgs = { prefix: doctorStaleRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
+writeExecutable(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.138.0", "codex"), fakeCodexScript("0.138.0"));
+fs.symlinkSync(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.138.0", "codex"), path.join(doctorStaleRoot, "codex-hud-codex"));
+installLauncher(doctorStaleArgs, {
+  mode: "patched",
+  patchedBinary: path.join(doctorStaleRoot, "codex-hud-codex"),
+  patchedVersion: "0.138.0",
+  stockPath: doctorFakeStock,
+  stockRealpath: doctorFakeStock,
+  stockVersion: "0.138.0",
+});
+const staleReport = doctor(doctorStaleArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command === path.join(doctorStaleRoot, "codex-hud-codex") ? "codex-cli 0.138.0\n" : "codex-cli 0.139.0\n"),
+});
+assert.strictEqual(staleReport.launcher.mode, "patched");
+assert.strictEqual(staleReport.healthy, true);
+assert(
+  staleReport.recommendations.some((entry) => entry.includes("0.139.0") && entry.includes("0.138.0")),
+  "doctor must recommend a rebuild when stock moved past the patched runtime",
+);
+
+const brokenReport = doctor(doctorStaleArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => {
+    if (command === path.join(doctorStaleRoot, "codex-hud-codex")) {
+      throw new Error("codex --version terminated by SIGKILL");
+    }
+    return "codex-cli 0.139.0\n";
+  },
+});
+assert.strictEqual(brokenReport.healthy, false, "broken active payload must mark the chain unhealthy");
+assert(brokenReport.anomalies.some((entry) => entry.includes("active patched payload is broken")));
+
+// --- shim management ---
 const shimArgs = {
   prefix: shimRoot,
   launcherName: "codex-hud-tui",

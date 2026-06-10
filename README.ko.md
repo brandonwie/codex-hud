@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 설치하거나 재설치한 후에는 스킬 목록이 새로고침되도록 새로운 Codex 스레드를 시작하세요.
 
 > **팁:** `codex plugin marketplace add "$(pwd)"`는 현재 디렉터리를 읽으므로 저장소 루트에서 실행하세요. `"$(pwd)"` 대신 명시적인 경로를 전달할 수도 있습니다.
@@ -145,6 +147,8 @@ showPace = true     # false -> 5h/7d의 pace % 숨김
 해석된 전체 옵션 집합을 보려면 `codex-hud --print-config`를 실행하세요.
 
 ## 패치된 Codex 푸터
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 기본 Codex는 입력 영역 아래에 임의의 플러그인 출력을 렌더링할 수 없습니다. Claude HUD 스타일의 푸터를 얻으려면 별도의 패치된 Codex 명령을 빌드하세요.
 

@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 Bắt đầu một thread Codex mới sau khi cài đặt hoặc cài lại để danh sách skill được làm mới.
 
 > **Mẹo:** `codex plugin marketplace add "$(pwd)"` đọc thư mục hiện tại, nên hãy chạy nó từ thư mục gốc của repo. Bạn cũng có thể truyền một đường dẫn cụ thể thay cho `"$(pwd)"`.
@@ -145,6 +147,8 @@ showPace = true     # false -> ẩn % tốc độ trong 5h/7d
 Chạy `codex-hud --print-config` để xem toàn bộ tập tùy chọn đã được phân giải.
 
 ## Footer Codex đã vá
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 Codex bản gốc không thể render đầu ra plugin tùy ý dưới vùng nhập liệu. Để có một footer kiểu Claude-HUD, hãy build một lệnh Codex đã vá riêng:
 

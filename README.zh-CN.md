@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 安装或重新安装后请启动一个新的 Codex 线程，以便刷新技能列表。
 
 > **提示：** `codex plugin marketplace add "$(pwd)"` 会读取当前目录，因此请在仓库根目录下运行它。你也可以传入一个明确的路径来代替 `"$(pwd)"`。
@@ -145,6 +147,8 @@ showPace = true     # false -> 隐藏 5h/7d 中的 pace %
 运行 `codex-hud --print-config` 以查看完整解析后的选项集。
 
 ## 打补丁的 Codex 页脚
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 原生 Codex 无法在输入区下方渲染任意插件输出。若想获得 Claude-HUD 风格的页脚，请构建一个独立的、打过补丁的 Codex 命令：
 

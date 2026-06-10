@@ -8,19 +8,34 @@ const { spawnSync } = require("child_process");
 const OPENAI_CODEX_REPO = "https://github.com/openai/codex.git";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
 const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
+const LAUNCHER_MARKER_FIELDS = {
+  patched_version: "patchedVersion",
+  stock_path: "stockPath",
+  stock_realpath: "stockRealpath",
+  stock_version: "stockVersion",
+  built_at: "builtAt",
+};
 
 function usage() {
   return `Usage: node scripts/install-patched-codex.js [options]
 
-Build a patched OpenAI Codex binary with [tui].status_line_command support.
+Install the Codex HUD launcher.
+
+Default mode (stock) writes a launcher that delegates to your real Codex
+install, so Codex updates are picked up automatically. Patched mode
+(experimental) builds a patched OpenAI Codex binary with
+[tui].status_line_command support.
 
 Options:
-  --version <version>       Codex CLI version to patch. Defaults to installed codex version.
+  --mode <stock|patched>    Install mode. Defaults to stock.
+  --doctor                  Print install/runtime diagnostics and exit.
+  --version <version>       Codex CLI version to patch (patched mode). Defaults to installed codex version.
   --prefix <dir>            Install directory prefix. Defaults to ~/.local/bin.
   --bin-name <name>         Installed command name. Defaults to ${DEFAULT_BIN_NAME}.
   --launcher-name <name>    Launcher command name. Defaults to ${DEFAULT_LAUNCHER_NAME}.
   --repo <url>              Upstream source repo. Defaults to ${OPENAI_CODEX_REPO}.
   --cache-dir <dir>         Source cache directory. Defaults to ~/.cache/codex-hud.
+  --keep-versions <n>       Patched payload versions to retain. Defaults to 2.
   --dry-run                 Clone/check out and patch source, but do not build or install.
   --make-default            Symlink ~/.local/bin/codex to the HUD launcher after install.
   --force-shim              Replace an existing ~/.local/bin/codex when used with --make-default.
@@ -115,15 +130,22 @@ function hasHudManagedBasename(filePath) {
   return basename === DEFAULT_BIN_NAME || basename === DEFAULT_LAUNCHER_NAME;
 }
 
+function isInsideHudBackingDir(filePath) {
+  return String(filePath)
+    .split(path.sep)
+    .some((segment) => segment.endsWith(".d") && hasHudManagedBasename(segment.slice(0, -2)));
+}
+
 function isHudManagedCodexCandidate(candidate) {
-  if (hasHudManagedBasename(candidate)) {
+  if (hasHudManagedBasename(candidate) || isInsideHudBackingDir(candidate)) {
     return true;
   }
 
   try {
     if (fs.lstatSync(candidate).isSymbolicLink()) {
       const rawLink = fs.readlinkSync(candidate);
-      if (hasHudManagedBasename(rawLink) || hasHudManagedBasename(path.resolve(path.dirname(candidate), rawLink))) {
+      const resolvedLink = path.resolve(path.dirname(candidate), rawLink);
+      if (hasHudManagedBasename(rawLink) || hasHudManagedBasename(resolvedLink) || isInsideHudBackingDir(resolvedLink)) {
         return true;
       }
     }
@@ -132,7 +154,8 @@ function isHudManagedCodexCandidate(candidate) {
   }
 
   try {
-    return hasHudManagedBasename(fs.realpathSync.native(candidate));
+    const realpath = fs.realpathSync.native(candidate);
+    return hasHudManagedBasename(realpath) || isInsideHudBackingDir(realpath);
   } catch (_) {
     return false;
   }
@@ -153,6 +176,9 @@ function parseArgs(argv) {
     binName: DEFAULT_BIN_NAME,
     launcherName: DEFAULT_LAUNCHER_NAME,
     cacheDir: path.join(os.homedir(), ".cache", "codex-hud"),
+    mode: "stock",
+    keepVersions: 2,
+    doctor: false,
     dryRun: false,
     makeDefault: false,
     forceShim: false,
@@ -165,6 +191,8 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === "-h" || arg === "--help") {
       args.help = true;
+    } else if (arg === "--doctor") {
+      args.doctor = true;
     } else if (arg === "--dry-run") {
       args.dryRun = true;
     } else if (arg === "--make-default") {
@@ -177,19 +205,30 @@ function parseArgs(argv) {
       args.replaceCodex = true;
     } else if (arg === "--print-config") {
       args.printConfig = true;
-    } else if (arg === "--version" || arg === "--prefix" || arg === "--bin-name" || arg === "--launcher-name" || arg === "--repo" || arg === "--cache-dir") {
+    } else if (
+      arg === "--mode" ||
+      arg === "--version" ||
+      arg === "--prefix" ||
+      arg === "--bin-name" ||
+      arg === "--launcher-name" ||
+      arg === "--repo" ||
+      arg === "--cache-dir" ||
+      arg === "--keep-versions"
+    ) {
       const value = argv[index + 1];
       if (!value) {
         throw new Error(`${arg} requires a value`);
       }
       index += 1;
       const key = {
+        "--mode": "mode",
         "--version": "version",
         "--prefix": "prefix",
         "--bin-name": "binName",
         "--launcher-name": "launcherName",
         "--repo": "repo",
         "--cache-dir": "cacheDir",
+        "--keep-versions": "keepVersions",
       }[arg];
       args[key] = value;
     } else {
@@ -197,6 +236,13 @@ function parseArgs(argv) {
     }
   }
 
+  if (args.mode !== "stock" && args.mode !== "patched") {
+    throw new Error(`--mode must be stock or patched, got: ${args.mode}`);
+  }
+  args.keepVersions = Number.parseInt(args.keepVersions, 10);
+  if (!Number.isFinite(args.keepVersions) || args.keepVersions < 1) {
+    throw new Error("--keep-versions must be a positive integer");
+  }
   args.prefix = path.resolve(expandHome(args.prefix));
   args.cacheDir = path.resolve(expandHome(args.cacheDir));
   return args;
@@ -211,7 +257,7 @@ function defaultStatusLineCommand() {
   return `node ${shellQuote(hudScript)} --line --color`;
 }
 
-function detectCodexVersion(options = {}) {
+function detectStockCodex(options = {}) {
   const runCommand = options.runCommand || run;
   const env = options.env || process.env;
   const candidates = findCodexCandidates(env);
@@ -224,7 +270,14 @@ function detectCodexVersion(options = {}) {
     }
     attemptedRealCandidate = true;
     try {
-      return parseCodexVersion(runCommand(candidate, ["--version"]).trim());
+      const version = parseCodexVersion(runCommand(candidate, ["--version"]).trim());
+      let realpath = candidate;
+      try {
+        realpath = fs.realpathSync.native(candidate);
+      } catch (_) {
+        // keep candidate path when realpath resolution is unavailable
+      }
+      return { path: candidate, realpath, version };
     } catch (error) {
       lastError = error;
     }
@@ -234,6 +287,24 @@ function detectCodexVersion(options = {}) {
     throw lastError;
   }
 
+  return null;
+}
+
+function findStockCodexPath(env = process.env) {
+  for (const candidate of findCodexCandidates(env)) {
+    if (!isHudManagedCodexCandidate(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function detectCodexVersion(options = {}) {
+  const stock = detectStockCodex(options);
+  if (stock) {
+    return stock.version;
+  }
+  const runCommand = options.runCommand || run;
   return parseCodexVersion(runCommand("codex", ["--version"]).trim());
 }
 
@@ -535,6 +606,14 @@ function ensureSource(args) {
   return sourceDir;
 }
 
+function versionsDir(args) {
+  return path.join(args.prefix, `${args.binName}.d`);
+}
+
+function builtBinaryName() {
+  return process.platform === "win32" ? "codex.exe" : "codex";
+}
+
 function installBinary(sourceDir, args) {
   const workspace = path.join(sourceDir, "codex-rs");
   const env = {
@@ -550,28 +629,76 @@ function installBinary(sourceDir, args) {
   return installBuiltBinary(sourceDir, args);
 }
 
-function installBuiltBinary(sourceDir, args) {
-  const workspace = path.join(sourceDir, "codex-rs");
-  const binaryName = process.platform === "win32" ? "codex.exe" : "codex";
-  const builtBinary = path.join(workspace, "target", "release", binaryName);
+function stageBuiltBinary(sourceDir, args) {
+  if (!args.version) {
+    throw new Error("Cannot stage patched binary without a resolved --version.");
+  }
+  const builtBinary = path.join(sourceDir, "codex-rs", "target", "release", builtBinaryName());
+  const stagingDir = path.join(versionsDir(args), `${args.version}.staging`);
+  fs.rmSync(stagingDir, { recursive: true, force: true });
+  fs.mkdirSync(stagingDir, { recursive: true });
+  const stagedBinary = path.join(stagingDir, builtBinaryName());
+  fs.copyFileSync(builtBinary, stagedBinary);
+  fs.chmodSync(stagedBinary, 0o755);
+  return stagedBinary;
+}
+
+function markFailedStaging(stagedBinary) {
+  const stagingDir = path.dirname(stagedBinary);
+  const failedDir = stagingDir.replace(/\.staging$/, ".failed");
+  fs.rmSync(failedDir, { recursive: true, force: true });
+  fs.renameSync(stagingDir, failedDir);
+  return failedDir;
+}
+
+function activateStagedBinary(stagedBinary, args) {
+  const stagingDir = path.dirname(stagedBinary);
+  const versionDir = stagingDir.replace(/\.staging$/, "");
+  fs.rmSync(versionDir, { recursive: true, force: true });
+  fs.renameSync(stagingDir, versionDir);
+  const activeBinary = path.join(versionDir, path.basename(stagedBinary));
+
   const target = path.join(args.prefix, args.binName);
-  const backingDir = `${target}.d`;
-  const backingBinary = path.join(backingDir, binaryName);
-  fs.mkdirSync(args.prefix, { recursive: true });
-
-  fs.mkdirSync(backingDir, { recursive: true });
-  fs.copyFileSync(builtBinary, backingBinary);
-  fs.chmodSync(backingBinary, 0o755);
-
-  if (fs.existsSync(target)) {
-    if (fs.lstatSync(target).isDirectory()) {
-      throw new Error(`Refusing to replace directory at ${target}.`);
-    }
-    fs.unlinkSync(target);
+  let targetStat = null;
+  try {
+    targetStat = fs.lstatSync(target);
+  } catch (_) {
+    targetStat = null;
+  }
+  if (targetStat && targetStat.isDirectory()) {
+    throw new Error(`Refusing to replace directory at ${target}.`);
   }
 
-  fs.symlinkSync(backingBinary, target);
-  return target;
+  const tmpLink = `${target}.tmp-${process.pid}`;
+  fs.rmSync(tmpLink, { force: true });
+  fs.symlinkSync(activeBinary, tmpLink);
+  fs.renameSync(tmpLink, target);
+  return { target, activeBinary, versionDir };
+}
+
+function installBuiltBinary(sourceDir, args) {
+  fs.mkdirSync(args.prefix, { recursive: true });
+  const stagedBinary = stageBuiltBinary(sourceDir, args);
+
+  let version;
+  try {
+    version = verifyInstalledBinary(stagedBinary, args);
+  } catch (error) {
+    const failedDir = markFailedStaging(stagedBinary);
+    const signalHint = /terminated by SIG/.test(error.message)
+      ? "\nmacOS may have killed the unsigned rebuilt binary (Gatekeeper / signature cache)." +
+        `\nTroubleshooting: codesign -s - --force ${path.join(failedDir, builtBinaryName())}` +
+        "\n                 xattr -l <payload>  (check com.apple.quarantine)"
+      : "";
+    throw new Error(
+      "Patched Codex health check failed; the active runtime was NOT modified." +
+      `\nFailed payload kept at: ${failedDir}` +
+      `\n${error.message}${signalHint}`,
+    );
+  }
+
+  const { target } = activateStagedBinary(stagedBinary, args);
+  return { target, version };
 }
 
 function verifyInstalledBinary(installedBinary, args) {
@@ -583,21 +710,317 @@ function verifyInstalledBinary(installedBinary, args) {
   return version;
 }
 
-function installLauncher(installedBinary, args) {
-  const launcher = path.join(args.prefix, args.launcherName);
-  const command = defaultStatusLineCommand();
-  const script = `#!/usr/bin/env bash
+function versionSortKey(version) {
+  return version.split(".").map((part) => Number.parseInt(part, 10) || 0);
+}
+
+function compareVersionsDesc(a, b) {
+  const keyA = versionSortKey(a);
+  const keyB = versionSortKey(b);
+  for (let index = 0; index < Math.max(keyA.length, keyB.length); index += 1) {
+    const diff = (keyB[index] || 0) - (keyA[index] || 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
+
+function pruneVersionDirs(args, keep = args.keepVersions || 2) {
+  const dir = versionsDir(args);
+  let entries;
+  try {
+    entries = fs.readdirSync(dir);
+  } catch (_) {
+    return [];
+  }
+  const removed = [];
+
+  let activeVersion = null;
+  try {
+    const activeReal = fs.realpathSync.native(path.join(args.prefix, args.binName));
+    const activeParent = path.dirname(activeReal);
+    if (path.dirname(activeParent) === fs.realpathSync.native(dir)) {
+      activeVersion = path.basename(activeParent);
+    }
+  } catch (_) {
+    activeVersion = null;
+  }
+
+  const isVersionDir = (entry) => {
+    if (!/^\d+\.\d+\.\d+/.test(entry) || entry.endsWith(".staging") || entry.endsWith(".failed")) {
+      return false;
+    }
+    try {
+      return fs.lstatSync(path.join(dir, entry)).isDirectory();
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const versions = entries.filter(isVersionDir).sort(compareVersionsDesc);
+  const keepSet = new Set(versions.slice(0, keep));
+  if (activeVersion) {
+    keepSet.add(activeVersion);
+  }
+  for (const version of versions) {
+    if (keepSet.has(version)) {
+      continue;
+    }
+    fs.rmSync(path.join(dir, version), { recursive: true, force: true });
+    removed.push(version);
+  }
+
+  for (const entry of entries) {
+    if (entry.endsWith(".staging")) {
+      fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+      removed.push(entry);
+    }
+  }
+
+  const failed = entries
+    .filter((entry) => entry.endsWith(".failed"))
+    .sort((a, b) => compareVersionsDesc(a.replace(/\.failed$/, ""), b.replace(/\.failed$/, "")));
+  for (const entry of failed.slice(1)) {
+    fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+    removed.push(entry);
+  }
+
+  return removed;
+}
+
+function renderLauncherScript(opts) {
+  const mode = opts.mode;
+  if (mode !== "stock" && mode !== "patched") {
+    throw new Error(`Unknown launcher mode: ${mode}`);
+  }
+  const binName = opts.binName || DEFAULT_BIN_NAME;
+  const launcherName = opts.launcherName || DEFAULT_LAUNCHER_NAME;
+
+  const markers = [`# codex-hud-launcher v2 mode=${mode}`];
+  for (const [field, optKey] of Object.entries(LAUNCHER_MARKER_FIELDS)) {
+    if (opts[optKey]) {
+      markers.push(`# ${field}=${opts[optKey]}`);
+    }
+  }
+
+  if (mode === "stock") {
+    return `#!/usr/bin/env bash
+${markers.join("\n")}
 set -euo pipefail
 
-exec -a codex ${shellQuote(installedBinary)} \\
-  -c ${shellQuote(`tui.status_line_command=${JSON.stringify(command)}`)} \\
+STOCK_CODEX=${shellQuote(opts.stockPath || "")}
+MANAGED_SHIM=${shellQuote(path.join(opts.prefix, "codex"))}
+
+resolve_stock() {
+  if [ -n "$STOCK_CODEX" ] && [ -x "$STOCK_CODEX" ]; then
+    printf '%s\\n' "$STOCK_CODEX"
+    return 0
+  fi
+  local IFS=':'
+  local dir candidate resolved
+  for dir in $PATH /opt/homebrew/bin /usr/local/bin /usr/bin; do
+    [ -n "$dir" ] || continue
+    candidate="$dir/codex"
+    [ -x "$candidate" ] || continue
+    [ "$candidate" = "$MANAGED_SHIM" ] && continue
+    case "$candidate" in
+      *${launcherName}|*${binName}) continue ;;
+    esac
+    if command -v realpath >/dev/null 2>&1; then
+      resolved="$(realpath "$candidate" 2>/dev/null || true)"
+      case "$resolved" in
+        *${binName}.d/*|*${launcherName}|*${binName}) continue ;;
+      esac
+    fi
+    printf '%s\\n' "$candidate"
+    return 0
+  done
+  return 1
+}
+
+stock="$(resolve_stock)" || {
+  echo "codex-hud: no stock codex found on PATH. Install the Codex CLI, or use the experimental patched mode (npm run patch:codex)." >&2
+  exit 127
+}
+exec -a codex "$stock" "$@"
+`;
+  }
+
+  if (!opts.patchedBinary) {
+    throw new Error("Patched launcher requires patchedBinary.");
+  }
+  const statusLineCommand = opts.statusLineCommand || defaultStatusLineCommand();
+  const staleWarning =
+    `codex-hud: stock Codex changed since this patched runtime was built; ` +
+    `running experimental patched Codex ${opts.patchedVersion || "(unknown version)"}. ` +
+    `Rebuild with 'npm run patch:codex' or switch to stock delegation ('npm run install:launcher').`;
+
+  return `#!/usr/bin/env bash
+${markers.join("\n")}
+set -euo pipefail
+
+PATCHED=${shellQuote(opts.patchedBinary)}
+STOCK_PATH=${shellQuote(opts.stockPath || "")}
+STOCK_REALPATH_AT_INSTALL=${shellQuote(opts.stockRealpath || "")}
+
+if [ -n "$STOCK_PATH" ] && [ -e "$STOCK_PATH" ] && [ -n "$STOCK_REALPATH_AT_INSTALL" ] && command -v realpath >/dev/null 2>&1; then
+  current_stock="$(realpath "$STOCK_PATH" 2>/dev/null || true)"
+  if [ -n "$current_stock" ] && [ "$current_stock" != "$STOCK_REALPATH_AT_INSTALL" ]; then
+    echo ${shellQuote(staleWarning)} >&2
+  fi
+fi
+
+exec -a codex "$PATCHED" \\
+  -c ${shellQuote(`tui.status_line_command=${JSON.stringify(statusLineCommand)}`)} \\
   "$@"
 `;
+}
+
+function parseLauncherMetadata(scriptText) {
+  if (typeof scriptText !== "string" || scriptText.length === 0) {
+    return { format: "foreign" };
+  }
+
+  const header = scriptText.match(/^# codex-hud-launcher v2 mode=(stock|patched)$/m);
+  if (header) {
+    const metadata = { format: "v2", mode: header[1] };
+    for (const [field, key] of Object.entries(LAUNCHER_MARKER_FIELDS)) {
+      const match = scriptText.match(new RegExp(`^# ${field}=(.*)$`, "m"));
+      if (match) {
+        metadata[key] = match[1];
+      }
+    }
+    return metadata;
+  }
+
+  if (scriptText.includes("exec -a codex")) {
+    return { format: "legacy" };
+  }
+  return { format: "foreign" };
+}
+
+function installLauncher(args, opts) {
+  const launcher = path.join(args.prefix, args.launcherName);
+  const script = renderLauncherScript({
+    prefix: args.prefix,
+    binName: args.binName,
+    launcherName: args.launcherName,
+    ...opts,
+  });
 
   fs.mkdirSync(args.prefix, { recursive: true });
-  fs.writeFileSync(launcher, script);
-  fs.chmodSync(launcher, 0o755);
+  const tmpFile = `${launcher}.tmp-${process.pid}`;
+  fs.writeFileSync(tmpFile, script);
+  fs.chmodSync(tmpFile, 0o755);
+  fs.renameSync(tmpFile, launcher);
   return launcher;
+}
+
+function quarantineStamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function detectLegacyLayout(args) {
+  const layout = { flatPayload: null, binEntry: null };
+
+  const flatPayload = path.join(versionsDir(args), builtBinaryName());
+  try {
+    if (fs.lstatSync(flatPayload).isFile()) {
+      layout.flatPayload = flatPayload;
+    }
+  } catch (_) {
+    layout.flatPayload = null;
+  }
+
+  const binEntryPath = path.join(args.prefix, args.binName);
+  try {
+    const stat = fs.lstatSync(binEntryPath);
+    layout.binEntry = {
+      path: binEntryPath,
+      kind: stat.isSymbolicLink() ? "symlink" : stat.isDirectory() ? "directory" : "file",
+    };
+  } catch (_) {
+    layout.binEntry = null;
+  }
+
+  return layout;
+}
+
+function migrateLegacyLayout(args, options = {}) {
+  const runCommand = options.runCommand || run;
+  const layout = detectLegacyLayout(args);
+  if (!layout.flatPayload) {
+    return { status: "none" };
+  }
+
+  let version;
+  try {
+    version = parseCodexVersion(
+      runCommand(layout.flatPayload, ["--version"], { timeout: args.healthCheckTimeoutMs || 10000 }).trim(),
+    );
+  } catch (error) {
+    const failedPath = `${layout.flatPayload}.legacy-failed`;
+    fs.rmSync(failedPath, { force: true });
+    fs.renameSync(layout.flatPayload, failedPath);
+    return { status: "quarantined", failedPath, error: error.message };
+  }
+
+  const migratedBinary = path.join(versionsDir(args), version, path.basename(layout.flatPayload));
+  fs.mkdirSync(path.dirname(migratedBinary), { recursive: true });
+  fs.rmSync(migratedBinary, { force: true });
+  fs.renameSync(layout.flatPayload, migratedBinary);
+
+  if (layout.binEntry && layout.binEntry.kind === "symlink") {
+    try {
+      const resolved = path.resolve(path.dirname(layout.binEntry.path), fs.readlinkSync(layout.binEntry.path));
+      if (resolved === layout.flatPayload) {
+        const tmpLink = `${layout.binEntry.path}.tmp-${process.pid}`;
+        fs.rmSync(tmpLink, { force: true });
+        fs.symlinkSync(migratedBinary, tmpLink);
+        fs.renameSync(tmpLink, layout.binEntry.path);
+      }
+    } catch (_) {
+      // leave a dangling legacy entry to the doctor report rather than guessing
+    }
+  }
+
+  return { status: "migrated", version, migratedBinary };
+}
+
+function reviewLegacyBinEntry(args, options = {}) {
+  const runCommand = options.runCommand || run;
+  const layout = detectLegacyLayout(args);
+  if (!layout.binEntry) {
+    return { status: "absent", path: path.join(args.prefix, args.binName) };
+  }
+  if (layout.binEntry.kind === "directory") {
+    return { status: "skipped", path: layout.binEntry.path, reason: "directory" };
+  }
+
+  try {
+    const version = parseCodexVersion(
+      runCommand(layout.binEntry.path, ["--version"], { timeout: args.healthCheckTimeoutMs || 10000 }).trim(),
+    );
+    return { status: "ok", path: layout.binEntry.path, version };
+  } catch (error) {
+    const stamp = quarantineStamp();
+    const quarantinePath = `${layout.binEntry.path}.broken-${stamp}`;
+    fs.renameSync(layout.binEntry.path, quarantinePath);
+    let quarantinedPayload = null;
+    if (layout.flatPayload) {
+      quarantinedPayload = `${layout.flatPayload}.broken-${stamp}`;
+      fs.rmSync(quarantinedPayload, { force: true });
+      fs.renameSync(layout.flatPayload, quarantinedPayload);
+    }
+    return {
+      status: "quarantined",
+      path: layout.binEntry.path,
+      quarantinePath,
+      quarantinedPayload,
+      error: error.message,
+    };
+  }
 }
 
 function defaultShimPath(args) {
@@ -665,24 +1088,257 @@ function uninstallDefaultShim(args) {
   return { target, status: "removed" };
 }
 
-function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (args.help) {
-    process.stdout.write(usage());
-    return;
+function doctor(args, options = {}) {
+  const runCommand = options.runCommand || run;
+  const env = options.env || process.env;
+  const launcherPath = path.join(args.prefix, args.launcherName);
+  const shimPath = defaultShimPath(args);
+
+  const report = {
+    prefix: args.prefix,
+    shim: { path: shimPath, status: "missing", target: null },
+    launcher: { path: launcherPath, status: "missing", mode: null, metadata: null },
+    stock: null,
+    patched: { dir: versionsDir(args), versions: [], active: null, flatPayload: null },
+    anomalies: [],
+    recommendations: [],
+    healthy: true,
+  };
+
+  let shimStat = null;
+  try {
+    shimStat = fs.lstatSync(shimPath);
+  } catch (_) {
+    shimStat = null;
+  }
+  if (shimStat) {
+    if (isManagedDefaultShim(shimPath, launcherPath)) {
+      report.shim.status = "managed";
+      report.shim.target = launcherPath;
+    } else if (shimStat.isSymbolicLink() && !fs.existsSync(shimPath)) {
+      report.shim.status = "broken";
+      try {
+        report.shim.target = fs.readlinkSync(shimPath);
+      } catch (_) {
+        report.shim.target = null;
+      }
+      report.healthy = false;
+      report.anomalies.push(`codex shim is a broken symlink: ${shimPath}`);
+    } else {
+      report.shim.status = "foreign";
+      try {
+        report.shim.target = shimStat.isSymbolicLink() ? fs.readlinkSync(shimPath) : "(regular file)";
+      } catch (_) {
+        report.shim.target = null;
+      }
+    }
   }
 
-  if (args.printConfig) {
-    console.log(`status_line_command = ${JSON.stringify(defaultStatusLineCommand())}`);
-    return;
+  let launcherText = null;
+  try {
+    launcherText = fs.readFileSync(launcherPath, "utf8");
+  } catch (_) {
+    launcherText = null;
+  }
+  if (launcherText !== null) {
+    const metadata = parseLauncherMetadata(launcherText);
+    report.launcher.status = metadata.format;
+    report.launcher.mode = metadata.mode || null;
+    report.launcher.metadata = metadata;
   }
 
-  if (args.uninstallShim) {
-    const result = uninstallDefaultShim(args);
-    console.log(result.status === "removed" ? `Removed Codex HUD shim: ${result.target}` : `No Codex HUD shim found at: ${result.target}`);
-    return;
+  try {
+    report.stock = detectStockCodex({ runCommand, env });
+  } catch (error) {
+    report.anomalies.push(`stock codex --version failed: ${error.message}`);
   }
 
+  let payloadEntries = [];
+  try {
+    payloadEntries = fs.readdirSync(report.patched.dir);
+  } catch (_) {
+    payloadEntries = [];
+  }
+  for (const entry of payloadEntries) {
+    const fullPath = path.join(report.patched.dir, entry);
+    let entryStat = null;
+    try {
+      entryStat = fs.lstatSync(fullPath);
+    } catch (_) {
+      continue;
+    }
+    if (entry.endsWith(".staging") || entry.endsWith(".failed") || entry.includes(".broken") || entry.endsWith(".legacy-failed")) {
+      report.anomalies.push(`leftover payload artifact: ${fullPath}`);
+    } else if (entryStat.isDirectory() && /^\d+\.\d+\.\d+/.test(entry)) {
+      report.patched.versions.push(entry);
+    } else if (entryStat.isFile() && entry === builtBinaryName()) {
+      report.patched.flatPayload = fullPath;
+      report.anomalies.push(`legacy flat payload layout: ${fullPath}`);
+    }
+  }
+  report.patched.versions.sort(compareVersionsDesc);
+
+  const binEntryPath = path.join(args.prefix, args.binName);
+  let binStat = null;
+  try {
+    binStat = fs.lstatSync(binEntryPath);
+  } catch (_) {
+    binStat = null;
+  }
+  if (binStat) {
+    const active = {
+      path: binEntryPath,
+      kind: binStat.isSymbolicLink() ? "symlink" : "file",
+      target: null,
+      version: null,
+      broken: false,
+    };
+    try {
+      active.target = fs.realpathSync.native(binEntryPath);
+    } catch (_) {
+      active.broken = true;
+      report.anomalies.push(`patched command is a broken symlink: ${binEntryPath}`);
+    }
+    if (!active.broken) {
+      try {
+        active.version = parseCodexVersion(
+          runCommand(binEntryPath, ["--version"], { timeout: args.healthCheckTimeoutMs || 10000 }).trim(),
+        );
+      } catch (error) {
+        active.broken = true;
+        report.anomalies.push(`active patched payload is broken: ${error.message}`);
+      }
+    }
+    report.patched.active = active;
+  }
+
+  let prefixEntries = [];
+  try {
+    prefixEntries = fs.readdirSync(args.prefix);
+  } catch (_) {
+    prefixEntries = [];
+  }
+  for (const entry of prefixEntries) {
+    if (entry.includes(".broken-") || entry.endsWith(".legacy-failed") || entry.includes(".stock-symlink-")) {
+      report.anomalies.push(`leftover artifact: ${path.join(args.prefix, entry)}`);
+    }
+  }
+
+  if (report.launcher.status === "missing") {
+    report.recommendations.push("no HUD launcher installed -> run: npm run install:launcher");
+  } else if (report.launcher.status === "legacy") {
+    report.recommendations.push("launcher predates the v2 format -> run: npm run install:launcher (stock) or npm run patch:codex (patched)");
+  }
+
+  if (report.launcher.mode === "stock" && !report.stock) {
+    report.healthy = false;
+    report.recommendations.push("stock-mode launcher but no stock codex found -> install the Codex CLI");
+  }
+
+  if (report.launcher.mode === "patched") {
+    const patchedVersion =
+      (report.launcher.metadata && report.launcher.metadata.patchedVersion) ||
+      (report.patched.active && report.patched.active.version);
+    if (report.stock && patchedVersion && report.stock.version !== patchedVersion) {
+      report.recommendations.push(
+        `stock codex is ${report.stock.version} but patched runtime is ${patchedVersion} -> run: npm run patch:codex (or npm run install:launcher for stock mode)`,
+      );
+    }
+    if (!report.patched.active || report.patched.active.broken) {
+      report.healthy = false;
+      report.recommendations.push("patched-mode launcher but its payload is missing or broken -> run: npm run patch:codex or npm run install:launcher");
+    }
+  }
+
+  if (report.shim.status === "managed" && report.launcher.status === "missing") {
+    report.healthy = false;
+    report.anomalies.push("codex shim points at a missing launcher");
+  }
+
+  return report;
+}
+
+function printDoctorReport(report) {
+  const lines = [];
+  lines.push(`prefix: ${report.prefix}`);
+  lines.push(`codex shim: ${report.shim.status}${report.shim.target ? ` -> ${report.shim.target}` : ""} (${report.shim.path})`);
+  lines.push(`launcher: ${report.launcher.status}${report.launcher.mode ? ` mode=${report.launcher.mode}` : ""} (${report.launcher.path})`);
+  if (report.launcher.metadata && report.launcher.metadata.format === "v2") {
+    const meta = report.launcher.metadata;
+    const details = Object.values(LAUNCHER_MARKER_FIELDS)
+      .filter((key) => meta[key])
+      .map((key) => `${key}=${meta[key]}`);
+    if (details.length) {
+      lines.push(`launcher metadata: ${details.join(" ")}`);
+    }
+  }
+  lines.push(report.stock
+    ? `stock codex: ${report.stock.path} (${report.stock.version}, realpath ${report.stock.realpath})`
+    : "stock codex: not found");
+  lines.push(`patched payload dir: ${report.patched.dir}`);
+  lines.push(`patched versions: ${report.patched.versions.length ? report.patched.versions.join(", ") : "(none)"}`);
+  if (report.patched.active) {
+    const active = report.patched.active;
+    lines.push(`patched command: ${active.path} -> ${active.target || "(unresolved)"}${active.version ? ` (${active.version})` : ""}${active.broken ? " [BROKEN]" : ""}`);
+  } else {
+    lines.push("patched command: (none)");
+  }
+  for (const anomaly of report.anomalies) {
+    lines.push(`anomaly: ${anomaly}`);
+  }
+  for (const recommendation of report.recommendations) {
+    lines.push(`recommendation: ${recommendation}`);
+  }
+  lines.push(`status: ${report.healthy ? "healthy" : "BROKEN entrypoint chain"}`);
+  console.log(lines.join("\n"));
+}
+
+function installShimIfRequested(launcher, args) {
+  if (!args.makeDefault) {
+    return;
+  }
+  const shim = installDefaultShim(launcher, args);
+  console.log(`${shim.status === "unchanged" ? "Kept" : "Installed"} default codex shim: ${shim.target}`);
+  console.log("Run `rehash` if your shell cached the old codex path.");
+}
+
+function runStockInstall(args) {
+  const stock = detectStockCodex();
+  if (!stock) {
+    throw new Error(
+      "No stock codex found on PATH or in known locations. Install the Codex CLI first, or use the experimental patched mode: npm run patch:codex",
+    );
+  }
+  console.log(`Stock Codex: ${stock.path} (${stock.version})`);
+
+  const launcher = installLauncher(args, {
+    mode: "stock",
+    stockPath: stock.path,
+    stockRealpath: stock.realpath,
+    stockVersion: stock.version,
+    builtAt: new Date().toISOString(),
+  });
+  console.log(`Installed stock-delegating HUD launcher: ${launcher}`);
+  console.log("Codex updates are picked up automatically; no rebuild needed.");
+
+  const legacy = reviewLegacyBinEntry(args);
+  if (legacy.status === "ok") {
+    console.log(
+      `Note: patched command kept at ${legacy.path} (codex ${legacy.version}). ` +
+      "Direct invocations of it will go stale; rerun `npm run patch:codex` or remove it.",
+    );
+  } else if (legacy.status === "quarantined") {
+    console.log(`Quarantined broken patched command: ${legacy.path} -> ${legacy.quarantinePath}`);
+    if (legacy.quarantinedPayload) {
+      console.log(`Quarantined broken flat payload: ${legacy.quarantinedPayload}`);
+    }
+    console.log("Restore by renaming it back, or rebuild with `npm run patch:codex`.");
+  }
+
+  installShimIfRequested(launcher, args);
+}
+
+function runPatchedInstall(args) {
   if (!args.version) {
     args.version = detectCodexVersion();
   }
@@ -703,19 +1359,75 @@ function main() {
     return;
   }
 
-  const installed = installBinary(sourceDir, args);
-  const installedVersion = verifyInstalledBinary(installed, args);
-  const launcher = installLauncher(installed, args);
-  console.log(`Installed patched Codex as: ${installed}`);
-  console.log(`Verified patched Codex version: ${installedVersion}`);
-  console.log(`Installed HUD launcher as: ${launcher}`);
-  if (args.makeDefault) {
-    const shim = installDefaultShim(launcher, args);
-    console.log(`${shim.status === "unchanged" ? "Kept" : "Installed"} default codex shim: ${shim.target}`);
-    console.log("Run `rehash` if your shell cached the old codex path.");
+  const migration = migrateLegacyLayout(args);
+  if (migration.status === "migrated") {
+    console.log(`Migrated legacy flat payload into versioned layout: ${migration.migratedBinary}`);
+  } else if (migration.status === "quarantined") {
+    console.log(`Legacy flat payload failed its health check; kept at: ${migration.failedPath}`);
   }
+
+  let stock = null;
+  try {
+    stock = detectStockCodex();
+  } catch (_) {
+    stock = null;
+  }
+
+  const installed = installBinary(sourceDir, args);
+  const launcher = installLauncher(args, {
+    mode: "patched",
+    patchedBinary: installed.target,
+    patchedVersion: installed.version,
+    stockPath: stock ? stock.path : null,
+    stockRealpath: stock ? stock.realpath : null,
+    stockVersion: stock ? stock.version : null,
+    builtAt: new Date().toISOString(),
+  });
+  const pruned = pruneVersionDirs(args);
+
+  console.log(`Installed patched Codex as: ${installed.target}`);
+  console.log(`Verified patched Codex version: ${installed.version}`);
+  console.log(`Installed HUD launcher as: ${launcher}`);
+  if (pruned.length) {
+    console.log(`Pruned old payloads: ${pruned.join(", ")}`);
+  }
+  installShimIfRequested(launcher, args);
   console.log("Add this under your existing [tui] table:");
   console.log(`status_line_command = ${JSON.stringify(defaultStatusLineCommand())}`);
+}
+
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    process.stdout.write(usage());
+    return;
+  }
+
+  if (args.printConfig) {
+    console.log(`status_line_command = ${JSON.stringify(defaultStatusLineCommand())}`);
+    return;
+  }
+
+  if (args.uninstallShim) {
+    const result = uninstallDefaultShim(args);
+    console.log(result.status === "removed" ? `Removed Codex HUD shim: ${result.target}` : `No Codex HUD shim found at: ${result.target}`);
+    return;
+  }
+
+  if (args.doctor) {
+    const report = doctor(args);
+    printDoctorReport(report);
+    if (!report.healthy) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (args.mode === "stock") {
+    runStockInstall(args);
+    return;
+  }
+  runPatchedInstall(args);
 }
 
 if (require.main === module) {
@@ -728,15 +1440,26 @@ if (require.main === module) {
 }
 
 module.exports = {
+  activateStagedBinary,
   defaultStatusLineCommand,
   detectCodexVersion,
-  installBuiltBinary,
+  detectLegacyLayout,
+  detectStockCodex,
+  doctor,
+  findStockCodexPath,
   installBinary,
+  installBuiltBinary,
   installDefaultShim,
   installLauncher,
   isManagedDefaultShim,
+  migrateLegacyLayout,
   parseArgs,
+  parseLauncherMetadata,
   patchSource,
+  pruneVersionDirs,
+  renderLauncherScript,
+  reviewLegacyBinEntry,
+  stageBuiltBinary,
   uninstallDefaultShim,
   verifyInstalledBinary,
 };

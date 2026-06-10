@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 Inicie uma nova thread do Codex após instalar ou reinstalar para que a lista de skills seja atualizada.
 
 > **Dica:** `codex plugin marketplace add "$(pwd)"` lê o diretório atual, então execute-o a partir da raiz do repositório. Você também pode passar um caminho explícito em vez de `"$(pwd)"`.
@@ -145,6 +147,8 @@ showPace = true     # false -> oculta o % de ritmo em 5h/7d
 Execute `codex-hud --print-config` para ver o conjunto completo de opções resolvidas.
 
 ## Rodapé do Codex com Patch
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 O Codex de fábrica não consegue renderizar saída arbitrária de plugin abaixo da área de entrada. Para obter um rodapé no estilo Claude-HUD, construa um comando Codex separado com patch:
 

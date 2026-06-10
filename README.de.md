@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 Starte nach dem Installieren oder Neuinstallieren einen neuen Codex-Thread, damit die Skill-Liste aktualisiert wird.
 
 > **Tipp:** `codex plugin marketplace add "$(pwd)"` liest das aktuelle Verzeichnis, führe es also aus dem Repo-Root aus. Du kannst statt `"$(pwd)"` auch einen expliziten Pfad übergeben.
@@ -145,6 +147,8 @@ showPace = true     # false -> die Pace-% in 5h/7d ausblenden
 Führe `codex-hud --print-config` aus, um den vollständigen aufgelösten Optionssatz zu sehen.
 
 ## Gepatchte Codex-Fußzeile
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 Das Standard-Codex kann keine beliebige Plugin-Ausgabe unter dem Eingabebereich darstellen. Um eine Fußzeile im Claude-HUD-Stil zu erhalten, baue einen separaten gepatchten Codex-Befehl:
 
