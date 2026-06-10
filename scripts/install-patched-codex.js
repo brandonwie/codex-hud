@@ -1714,7 +1714,7 @@ function main() {
     const renderer = resolveRenderer(args, { install: false });
     console.log(`status_line_command = ${JSON.stringify(statusLineCommandFor(renderer))}`);
     if (renderer.preview) {
-      console.error("note: binary not yet at the install target; run npm run install:launcher or npm run patch:codex");
+      console.error("note: no usable binary at the install target (missing or failed health check); run npm run install:launcher or npm run patch:codex");
     }
     return;
   }
