@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**为 OpenAI Codex CLI 打造的紧凑、彩色工作区 HUD —— 在单行页脚中呈现模型、项目、git、上下文以及 5h/7d 用量。**
+**为 OpenAI Codex CLI 打造的工作区 HUD —— 默认是独立的多行 HUD，外加一条紧凑的彩色状态行（模型、项目、git、上下文、5h/7d 用量），在实验性补丁模式下会成为 TUI 内嵌页脚。**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -16,7 +16,7 @@
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#配置)
 [![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Linux-0db7ed?style=for-the-badge&logo=linux&logoColor=white)](#快速开始)
 
-[功能](#功能) · [快速开始](#快速开始) · [配置](#配置) · [打补丁的 Codex 页脚](#打补丁的-codex-页脚) · [路线图](#路线图)
+[功能](#功能) · [快速开始](#快速开始) · [配置](#配置) · [补丁版 Codex 页脚](#实验性功能补丁版-codex-页脚) · [路线图](#路线图)
 
 </div>
 
@@ -24,7 +24,9 @@
 
 Codex HUD 是一个本地 Codex 插件，为 OpenAI Codex CLI 会话渲染多行工作区 HUD。
 
-默认情况下，它是 Codex 原生 `[tui].status_line` 的辅助伙伴，因为原生 Codex 公开了一个可配置的内置状态项数组，但没有提供由插件掌控的渲染器。本仓库还附带了一条持续维护的补丁路径，供希望让 HUD 脚本直接渲染到真实 Codex 页脚的用户使用。
+默认情况下，它是 Codex 原生 `[tui].status_line` 的辅助伙伴，因为原生 Codex 无法在输入区下方渲染任意插件输出 —— 它公开了一个可配置的内置状态项数组，但没有提供由插件掌控的渲染器。本仓库还附带了一条持续维护的补丁路径，供希望让 HUD 直接渲染到真实 Codex 页脚的用户使用。
+
+由 `--line` 打印的紧凑状态行（仅在补丁模式下才会渲染为 TUI 内嵌页脚）：
 
 ```text
 5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)
@@ -32,11 +34,13 @@ Codex HUD 是一个本地 Codex 插件，为 OpenAI Codex CLI 会话渲染多行
 
 > 该行中的各段、标签、颜色和阈值都是可配置的 —— 参见[配置](#配置)。
 
+默认的状态行渲染器是 `codex-hud-rs`，即本仓库自带的小型 Rust 二进制；Node 脚本（`plugins/codex-hud/scripts/codex-hud.js`）仍是文档中的回退方案，并充当两者输出一致性的校验基准。本 README 中出现了两个不同的「Rust」：上游 Codex CLI 本身就是一个 Rust 程序（也是下文实验性补丁的构建目标），而 `codex-hud-rs` 则是本仓库内的状态行渲染器。
+
 ## 功能
 
 - Codex 版本、模型、推理强度、沙箱以及审批模式
 - 原生 Codex 状态行项目数量及颜色设置
-- 从 Codex rollout 日志解析得到的紧凑用量（即上方的示例页脚）
+- 从 Codex rollout 日志解析得到的紧凑用量 —— 即上方的紧凑行（补丁模式下为 TUI 内嵌页脚）
 - 当前工作目录、git 分支、未提交计数以及仓库根目录
 - 项目提示，例如包名、附近的 `AGENTS.md`，以及（存在时）3B `ACTIVE-STATUS.md` 优先级
 - 来自 `hooks.json` 的 Codex 钩子事件计数
@@ -55,12 +59,18 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
-接下来安装 HUD 启动器(推荐)。默认模式**委派给你真实安装的 Codex**,因此 Homebrew/npm 的 Codex 更新会被自动拾取 — 无需重新构建,也没有补丁二进制:
+接下来安装 HUD 启动器(推荐)。默认模式**委派给你真实安装的 Codex**,因此 Homebrew/npm 的 Codex 更新会被自动拾取 — 无需重新构建,也没有补丁二进制。需要明确的是:委派原生模式的启动器**不会**渲染 TUI 内嵌页脚 — 它提供的是安全委派加受管的 `codex` 垫片;TUI 内嵌页脚只存在于下文的实验性补丁模式中。
 
 ```bash
 npm run install:launcher                    # 安装 ~/.local/bin/codex-hud-tui
 npm run install:launcher -- --make-default  # 可选:让 `codex` 解析到该启动器
 rehash
+```
+
+可选:构建 Rust 状态行渲染器。这不会给以原生方式启动的 TUI 带来任何可见变化 — 它只影响实验性补丁页脚,以及独立使用 `codex-hud-rs` 的场景(`--watch`,或手动把 `status_line_command` 接进其他工具)。构建完成后,安装器会自动拾取它(`--renderer auto`),用于补丁模式和 `--print-config`:
+
+```bash
+npm run build:rust   # 可选:构建 rust/target/release/codex-hud-rs
 ```
 
 详情见下文「HUD 启动器」一节;诊断请运行 `npm run doctor`。
@@ -71,7 +81,7 @@ rehash
 
 ## 用法
 
-在开发期间直接运行渲染器：
+在开发期间直接运行 Node 渲染器：
 
 ```bash
 node plugins/codex-hud/scripts/codex-hud.js           # 多行 HUD
@@ -82,18 +92,24 @@ node plugins/codex-hud/scripts/codex-hud.js --watch 5   # 每 5 秒刷新一次
 npm test
 ```
 
-默认紧凑页脚的终端捕获：
+紧凑状态行（`--line`）的终端捕获：
 
 ```text
 $ node plugins/codex-hud/scripts/codex-hud.js --line
 5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
-在本地运行 `node plugins/codex-hud/scripts/codex-hud.js --line --color` 可查看带 ANSI 彩色样式的同一页脚。
+在本地运行 `node plugins/codex-hud/scripts/codex-hud.js --line --color` 可查看带 ANSI 彩色样式的同一行。
+
+`codex-hud-rs`（在 `npm run build:rust` 之后）提供完全相同的参数界面 —— `--line` / `--status-line` / `--color` / `--json` / `--watch` / `--init-config` / `--print-config` / `--config-path`：
+
+```bash
+./rust/target/release/codex-hud-rs --line --color
+```
 
 ## 配置
 
-页脚可通过一个可选的 `codex-hud.toml` 进行配置。若没有配置文件，你将得到上方展示的默认页脚；每个键都是可选的，凡是省略的项都会继承内置默认值。
+多行 HUD 和紧凑状态行都可以通过一个可选的 `codex-hud.toml` 进行配置；Node 与 Rust 渲染器读取同一套 `codex-hud.toml` 配置层级。若没有配置文件，你将得到上方展示的默认值；每个键都是可选的，凡是省略的项都会继承内置默认值。
 
 ```bash
 codex-hud --init-config     # 生成 ~/.codex/codex-hud.toml（用 --force 覆盖）
@@ -174,20 +190,22 @@ which codex
 
 ### Doctor
 
-`npm run doctor` 打印完整启动链状态 — 垫片、启动器模式(stock/patched/legacy)、原生 Codex 路径与版本、补丁负载版本、是否过期以及遗留产物:
+`npm run doctor` 打印完整启动链状态 — 垫片、启动器模式(stock/patched/legacy)、原生 Codex 路径与版本、渲染器状态、补丁负载版本、是否过期以及遗留产物:
 
 ```text
 prefix: /Users/you/.local/bin
 codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bin/codex)
 launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
+launcher metadata: stock_path=/opt/homebrew/bin/codex stock_realpath=/opt/homebrew/Cellar/codex/0.139.0/bin/codex stock_version=0.139.0 renderer=rust built_at=2026-06-10T12:00:00.000Z
 stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
+renderer: rust (/Users/you/.local/bin/codex-hud-rs, v0.2.0; used by --print-config/patched mode only — stock launcher does not invoke it)
 patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
 patched versions: (none)
 patched command: (none)
 status: healthy
 ```
 
-仅当活动入口链损坏时才以非零码退出。
+仅当活动入口链损坏时才以非零码退出 — 渲染器退化绝不会把 healthy 状态翻转为失败。渲染器的重建建议按发布粒度工作:它把编译进 `codex-hud-rs` 的版本与 `package.json` 进行比较,因此只在发布推进版本号时才会触发,而不是每次提交都触发。
 
 ### 从旧版 codex-hud 安装迁移
 
@@ -204,7 +222,7 @@ npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-安装器会对匹配的 OpenAI Codex 标签打补丁、构建 Rust CLI,并把可执行文件暂存到 `~/.local/bin/codex-hud-codex.d/<version>/codex`。暂存负载必须在任何激活动作**之前**通过 `--version` 健康检查;只有通过后,`~/.local/bin/codex-hud-codex` 才会被原子地重定向到新负载,且上一版本保留在磁盘上用于回滚。失败的构建会被搁置为 `<version>.failed`,活动运行时保持原样。它还会写入补丁模式的 `~/.local/bin/codex-hud-tui` 启动器,通过 Codex 的 `-c tui.status_line_command=...` 覆盖把彩色 HUD 命令传入,而不修改 `~/.codex/config.toml`。可执行路径和 `argv[0]` 都保持 Codex 可见的名称,因此 Herdr 等终端集成仍会把该窗格识别为 Codex 会话。
+安装器会对匹配的 OpenAI Codex 标签打补丁、构建 Rust CLI,并把可执行文件暂存到 `~/.local/bin/codex-hud-codex.d/<version>/codex`。暂存负载必须在任何激活动作**之前**通过 `--version` 健康检查;只有通过后,`~/.local/bin/codex-hud-codex` 才会被原子地重定向到新负载,且上一版本保留在磁盘上用于回滚。失败的构建会被搁置为 `<version>.failed`,活动运行时保持原样。它还会写入补丁模式的 `~/.local/bin/codex-hud-tui` 启动器,通过 Codex 的 `-c tui.status_line_command=...` 覆盖把彩色 HUD 命令传入,而不修改 `~/.codex/config.toml`。在默认的 `--renderer auto` 下,若已安装 Rust 渲染器,注入的命令是 `'~/.local/bin/codex-hud-rs' --line --color`,否则回退为 `node .../plugins/codex-hud/scripts/codex-hud.js --line --color`。可执行路径和 `argv[0]` 都保持 Codex 可见的名称,因此 Herdr 等终端集成仍会把该窗格识别为 Codex 会话。
 
 安全启动器模式不会动你常规的 `codex` 命令:
 
@@ -231,17 +249,21 @@ rehash
 which codex
 ```
 
-如果你偏好持久配置,把打印出的行添加到现有 `[tui]` 表下;注意原生 Codex 版本可能拒绝未知字段。在仓库根目录生成适合你机器的精确配置行:
+如果你偏好持久配置,把打印出的行添加到现有 `[tui]` 表下;注意原生 Codex 版本可能拒绝未知字段。在仓库根目录生成适合你机器的精确配置行(`node scripts/install-patched-codex.js --print-config` 解析渲染器的方式与安装器完全一致):
 
 ```bash
+echo "status_line_command = \"$HOME/.local/bin/codex-hud-rs --line --color\""
+# Node 回退(未构建 Rust 时):
 echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
 ```
 
 然后粘贴到 `~/.codex/config.toml` 的 `[tui]` 下:
 
 ```toml
-# 将 /path/to/codex-hud 替换为你的本地克隆路径。
-status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
+# 将 /Users/you 替换为你的家目录。
+status_line_command = "/Users/you/.local/bin/codex-hud-rs --line --color"
+# Node 回退 — 将 /path/to/codex-hud 替换为你的本地克隆路径:
+# status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
 运行 `codex-hud-tui` 即可看到紧凑页脚。补丁二进制不会跟随原生 Codex 更新:构建后若原生 Codex 发生变化,补丁启动器会在启动时打印一行警告(仍会运行你主动选择的补丁二进制)— 运行 `npm run patch:codex` 重新构建,或运行 `npm run install:launcher` 切回委派模式。每次重新构建都会经过暂存、健康检查、原子激活;上一个可用版本保留在 `~/.local/bin/codex-hud-codex.d/` 下用于回滚,`npm run doctor` 会报告过期与损坏的负载。当受管 `codex` 垫片处于激活状态时,安装器在检测基础 Codex 版本时会跳过该垫片,使用 `PATH` 上下一个真实的 `codex`;如需显式固定重建目标,请传入 `--version <version>`。
@@ -255,10 +277,14 @@ codex-hud/
 │     ├─ scripts/codex-hud.js        # HUD 渲染器 + 配置加载器
 │     ├─ vendor/toml.js              # 内置的 TOML 解析器 (smol-toml)
 │     └─ skills/codex-hud/SKILL.md
+├─ rust/                             # codex-hud-rs 源码 (默认状态行渲染器)
 └─ scripts/
    ├─ test-codex-hud.js
    ├─ test-codex-hud-config.js
    ├─ test-patched-codex-installer.js
+   ├─ test-rust-golden.js
+   ├─ test-rust-parsing-golden.js
+   ├─ test-rust-cli.js
    ├─ vendor-toml.js                 # 重新生成 vendor/toml.js
    └─ install-patched-codex.js
 ```
@@ -266,6 +292,7 @@ codex-hud/
 ## 路线图
 
 - 如果 Codex 为插件公开稳定的本地会话状态 API，则添加更丰富的会话记录摘要。
+- 保持 `codex-hud-rs` 与 Node 渲染器的黄金一致性（`npm run test:rust` 会用同一组固定样例验证两者）。
 - 跟踪上游 OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827)。截至 2026-06-10，原版 Codex 仍只有内置的 `[tui].status_line` 项目，没有命令驱动或插件拥有的渲染器；只有在受支持的自定义渲染器发布后才退役该补丁。
 
 ## 贡献

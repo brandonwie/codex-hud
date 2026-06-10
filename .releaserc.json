@@ -19,7 +19,9 @@
           "package.json",
           "package-lock.json",
           "plugins/codex-hud/.codex-plugin/plugin.json",
-          "plugins/codex-hud/scripts/codex-hud.js"
+          "plugins/codex-hud/scripts/codex-hud.js",
+          "rust/Cargo.toml",
+          "rust/Cargo.lock"
         ],
         "message": "chore(release): v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}\n\nCo-authored-by: claude <noreply@anthropic.com>"
       }

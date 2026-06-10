@@ -12,7 +12,10 @@ const files = {
   packageLock: path.join(repoRoot, "package-lock.json"),
   pluginManifest: path.join(repoRoot, "plugins", "codex-hud", ".codex-plugin", "plugin.json"),
   hudScript: path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js"),
+  cargoToml: path.join(repoRoot, "rust", "Cargo.toml"),
+  cargoLock: path.join(repoRoot, "rust", "Cargo.lock"),
 };
+const cargoLockCodexHudPackageRe = /((?:^|\r?\n)\[\[package\]\]\r?\nname = "codex-hud"\r?\nversion = ")([^"]+)(")/g;
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -31,9 +34,47 @@ function readHudVersion() {
 
 function writeHudVersion(version) {
   const source = fs.readFileSync(files.hudScript, "utf8");
+  const match = source.match(/const VERSION = "([^"]+)";/);
+  if (!match) throw new Error("Could not find HUD VERSION constant");
+  if (match[1] === version) return;
   const updated = source.replace(/const VERSION = "[^"]+";/, `const VERSION = "${version}";`);
-  if (updated === source) throw new Error("Could not update HUD VERSION constant");
   fs.writeFileSync(files.hudScript, updated, "utf8");
+}
+
+function readCargoTomlVersion() {
+  const source = fs.readFileSync(files.cargoToml, "utf8");
+  const match = source.match(/^version = "([^"]+)"$/m);
+  if (!match) throw new Error("Could not find Cargo.toml package version");
+  return match[1];
+}
+
+function writeCargoTomlVersion(version) {
+  const source = fs.readFileSync(files.cargoToml, "utf8");
+  const match = source.match(/^version = "([^"]+)"$/m);
+  if (!match) throw new Error("Could not find Cargo.toml package version");
+  if (match[1] === version) return;
+  const updated = source.replace(/^version = "[^"]+"$/m, `version = "${version}"`);
+  fs.writeFileSync(files.cargoToml, updated, "utf8");
+}
+
+function readCargoLockVersion() {
+  const source = fs.readFileSync(files.cargoLock, "utf8");
+  const matches = Array.from(source.matchAll(cargoLockCodexHudPackageRe));
+  if (matches.length !== 1) {
+    throw new Error(`Expected exactly one Cargo.lock codex-hud package entry, found ${matches.length}`);
+  }
+  return matches[0][2];
+}
+
+function writeCargoLockVersion(version) {
+  const source = fs.readFileSync(files.cargoLock, "utf8");
+  const matches = Array.from(source.matchAll(cargoLockCodexHudPackageRe));
+  if (matches.length !== 1) {
+    throw new Error(`Expected exactly one Cargo.lock codex-hud package entry, found ${matches.length}`);
+  }
+  if (matches[0][2] === version) return;
+  const updated = source.replace(cargoLockCodexHudPackageRe, `$1${version}$3`);
+  fs.writeFileSync(files.cargoLock, updated, "utf8");
 }
 
 function getVersions() {
@@ -46,6 +87,8 @@ function getVersions() {
     packageLockRoot: packageLock.packages && packageLock.packages[""] && packageLock.packages[""].version,
     pluginManifest: pluginManifest.version,
     hudScript: readHudVersion(),
+    cargoToml: readCargoTomlVersion(),
+    cargoLock: readCargoLockVersion(),
   };
 }
 
@@ -74,6 +117,8 @@ function updateVersion(version) {
   writeJson(files.pluginManifest, pluginManifest);
 
   writeHudVersion(version);
+  writeCargoTomlVersion(version);
+  writeCargoLockVersion(version);
   console.log(`synced release version ${version}`);
 }
 
