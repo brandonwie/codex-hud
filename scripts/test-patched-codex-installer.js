@@ -23,6 +23,7 @@ const {
   patchSource,
   pruneVersionDirs,
   renderLauncherScript,
+  rendererBinaryName,
   resolveRenderer,
   reviewLegacyBinEntry,
   statusLineCommandFor,
@@ -349,6 +350,9 @@ writeExecutable(rendererSource, '#!/usr/bin/env bash\necho "codex-hud 0.2.0"\n')
 const rendererPrefix = path.join(rendererRoot, "bin");
 const rendererArgs = { prefix: rendererPrefix, renderer: "auto" };
 
+assert.strictEqual(rendererBinaryName("darwin"), "codex-hud-rs");
+assert.strictEqual(rendererBinaryName("linux"), "codex-hud-rs");
+assert.strictEqual(rendererBinaryName("win32"), "codex-hud-rs.exe");
 assert.strictEqual(verifyRustRenderer(rendererSource), "0.2.0");
 const gibberishRenderer = path.join(rendererRoot, "source", "gibberish");
 writeExecutable(gibberishRenderer, "#!/usr/bin/env bash\necho not-a-hud\n");
@@ -772,9 +776,10 @@ const rendererDoctorRun = spawnSync(
 );
 assert.strictEqual(rendererDoctorRun.status, 0, "stock-mode doctor with missing renderer must exit healthy");
 assert(
-  rendererDoctorRun.stdout.includes("renderer: rust configured but codex-hud-rs missing (used by --print-config/patched mode only"),
+  rendererDoctorRun.stdout.includes("renderer: rust configured but binary missing at"),
   "stock-mode renderer line must carry the stock qualifier",
 );
+assert(rendererDoctorRun.stdout.includes("used by --print-config/patched mode only"));
 assert(!rendererDoctorRun.stdout.includes("recommendation:"));
 assert(rendererDoctorRun.stdout.includes("status: healthy"));
 
@@ -856,5 +861,36 @@ const rendererDefaultReport = doctor(doctorStockArgs, {
 });
 assert.strictEqual(rendererDefaultReport.renderer.configured, "js");
 assert.strictEqual(rendererDefaultReport.renderer.installed, false);
+
+const rendererDefaultRun = spawnSync(
+  process.execPath,
+  [path.join(__dirname, "install-patched-codex.js"), "--doctor", "--prefix", doctorStockRoot],
+  { encoding: "utf8", env: { ...process.env, PATH: `${doctorStockBin}:${process.env.PATH}` } },
+);
+assert.strictEqual(rendererDefaultRun.status, 0);
+assert(
+  rendererDefaultRun.stdout.includes("renderer: js (node renderer; rust binary missing at"),
+  "js-configured doctor output must still mention the missing rust binary",
+);
+
+writeExecutable(path.join(doctorStockRoot, "codex-hud-rs"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
+const rendererDefaultInstalledReport = doctor(doctorStockArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command.endsWith("codex-hud-rs") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+});
+assert.strictEqual(rendererDefaultInstalledReport.renderer.configured, "js");
+assert.strictEqual(rendererDefaultInstalledReport.renderer.installed, true);
+assert.strictEqual(rendererDefaultInstalledReport.renderer.version, repoPackageVersion);
+
+const rendererDefaultInstalledRun = spawnSync(
+  process.execPath,
+  [path.join(__dirname, "install-patched-codex.js"), "--doctor", "--prefix", doctorStockRoot],
+  { encoding: "utf8", env: { ...process.env, PATH: `${doctorStockBin}:${process.env.PATH}` } },
+);
+assert.strictEqual(rendererDefaultInstalledRun.status, 0);
+assert(
+  rendererDefaultInstalledRun.stdout.includes(`renderer: rust (${path.join(doctorStockRoot, "codex-hud-rs")}, v${repoPackageVersion}`),
+  "doctor output must show an installed rust renderer even when configured renderer is js",
+);
 
 console.log("patched Codex installer tests passed");

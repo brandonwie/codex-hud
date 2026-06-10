@@ -22,6 +22,10 @@ const LAUNCHER_MARKER_FIELDS = {
   built_at: "builtAt",
 };
 
+function rendererBinaryName(platform = process.platform) {
+  return platform === "win32" ? `${RUST_RENDERER_BIN_NAME}.exe` : RUST_RENDERER_BIN_NAME;
+}
+
 function usage() {
   return `Usage: node scripts/install-patched-codex.js [options]
 
@@ -293,7 +297,7 @@ function defaultStatusLineCommand() {
 }
 
 function rustRendererSourcePath() {
-  return path.join(repoRoot(), "rust", "target", "release", RUST_RENDERER_BIN_NAME);
+  return path.join(repoRoot(), "rust", "target", "release", rendererBinaryName());
 }
 
 function verifyRustRenderer(binPath, options = {}) {
@@ -307,7 +311,7 @@ function verifyRustRenderer(binPath, options = {}) {
 }
 
 function installRustRenderer(args, options = {}) {
-  const target = path.join(args.prefix, RUST_RENDERER_BIN_NAME);
+  const target = path.join(args.prefix, rendererBinaryName());
   const source = options.sourcePath || rustRendererSourcePath();
 
   let sourceError = null;
@@ -359,7 +363,7 @@ function resolveRenderer(args, options = {}) {
   }
 
   if (options.install === false) {
-    const target = path.join(args.prefix, RUST_RENDERER_BIN_NAME);
+    const target = path.join(args.prefix, rendererBinaryName());
     const source = options.sourcePath || rustRendererSourcePath();
     let brokenDetail = null;
     if (executableExists(target)) {
@@ -1322,7 +1326,7 @@ function doctor(args, options = {}) {
     launcher: { path: launcherPath, status: "missing", mode: null, metadata: null },
     stock: null,
     patched: { dir: versionsDir(args), versions: [], active: null, flatPayload: null },
-    renderer: { configured: null, binPath: path.join(args.prefix, RUST_RENDERER_BIN_NAME), installed: false, broken: false, version: null },
+    renderer: { configured: null, binPath: path.join(args.prefix, rendererBinaryName()), installed: false, broken: false, version: null },
     anomalies: [],
     recommendations: [],
     healthy: true,
@@ -1536,16 +1540,20 @@ function printDoctorReport(report) {
   lines.push(report.stock
     ? `stock codex: ${report.stock.path} (${report.stock.version}, realpath ${report.stock.realpath})`
     : "stock codex: not found");
-  if (report.renderer && report.renderer.configured) {
-    const stockQualifier = "used by --print-config/patched mode only — stock launcher does not invoke it";
-    if (report.renderer.configured === "js") {
-      lines.push("renderer: js (node renderer)");
-    } else if (report.renderer.installed) {
-      lines.push(`renderer: rust (${report.renderer.binPath}, v${report.renderer.version}${report.launcher.mode === "stock" ? `; ${stockQualifier}` : ""})`);
+  if (report.renderer) {
+    const stockQualifier = report.launcher.mode === "stock"
+      ? "; used by --print-config/patched mode only — stock launcher does not invoke it"
+      : "";
+    if (report.renderer.installed) {
+      lines.push(`renderer: rust (${report.renderer.binPath}, v${report.renderer.version}${stockQualifier})`);
     } else if (report.renderer.broken) {
-      lines.push(`renderer: rust configured but codex-hud-rs is broken — failed --help health check${report.launcher.mode === "stock" ? ` (${stockQualifier})` : ""}`);
+      lines.push(`renderer: rust binary is broken at ${report.renderer.binPath} — failed --help health check${stockQualifier}`);
+    } else if (report.renderer.configured === "js") {
+      lines.push(`renderer: js (node renderer; rust binary missing at ${report.renderer.binPath})`);
+    } else if (report.renderer.configured === "rust") {
+      lines.push(`renderer: rust configured but binary missing at ${report.renderer.binPath}${stockQualifier}`);
     } else {
-      lines.push(`renderer: rust configured but codex-hud-rs missing${report.launcher.mode === "stock" ? ` (${stockQualifier})` : ""}`);
+      lines.push(`renderer: rust binary missing at ${report.renderer.binPath}`);
     }
   }
   lines.push(`patched payload dir: ${report.patched.dir}`);
@@ -1759,6 +1767,7 @@ module.exports = {
   patchSource,
   pruneVersionDirs,
   renderLauncherScript,
+  rendererBinaryName,
   resolveRenderer,
   reviewLegacyBinEntry,
   stageBuiltBinary,
