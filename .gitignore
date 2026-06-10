@@ -1,6 +1,8 @@
 node_modules/
 .serena/
 .agents/
+.codex/
+.gemini/
 .worktrees/
 .DS_Store
 *.log
@@ -11,3 +13,5 @@ docs
 docs/
 .claude/
 .code-review-graph/
+graphify-out/
+.graphifyignore
