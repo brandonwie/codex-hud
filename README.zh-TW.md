@@ -240,7 +240,7 @@ echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js
 接著貼到 `~/.codex/config.toml` 的 `[tui]` 之下:
 
 ```toml
-# Replace /path/to/codex-hud with your local clone path.
+# 將 /path/to/codex-hud 換成你的本機複製路徑。
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 

@@ -240,7 +240,7 @@ echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js
 Depois cole sob `[tui]` em `~/.codex/config.toml`:
 
 ```toml
-# Replace /path/to/codex-hud with your local clone path.
+# Substitua /path/to/codex-hud pelo caminho do seu clone local.
 status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
 ```
 
