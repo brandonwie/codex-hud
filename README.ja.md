@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 スキルリストが更新されるよう、インストールまたは再インストール後は新しい Codex スレッドを開始してください。
 
 > **ヒント:** `codex plugin marketplace add "$(pwd)"` は現在のディレクトリを読み取るため、リポジトリのルートから実行してください。`"$(pwd)"` の代わりに明示的なパスを渡すこともできます。
@@ -145,6 +147,8 @@ showPace = true     # false -> hide the pace % in 5h/7d
 `codex-hud --print-config` を実行すると、解決された全オプションセットを確認できます。
 
 ## パッチ適用版 Codex フッター
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 標準の Codex は、入力エリアの下に任意のプラグイン出力を描画できません。Claude HUD スタイルのフッターを得るには、別途パッチ適用版の Codex コマンドをビルドします。
 

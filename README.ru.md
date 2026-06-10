@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 Запустите новый поток Codex после установки или переустановки, чтобы список навыков обновился.
 
 > **Совет:** `codex plugin marketplace add "$(pwd)"` считывает текущий каталог, поэтому запускайте команду из корня репозитория. Вместо `"$(pwd)"` можно также передать явный путь.
@@ -145,6 +147,8 @@ showPace = true     # false -> скрыть процент темпа в 5h/7d
 Запустите `codex-hud --print-config`, чтобы увидеть полный итоговый набор параметров.
 
 ## Пропатченный футер Codex
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 Штатный Codex не может отрисовывать произвольный вывод плагина под областью ввода. Чтобы получить футер в стиле Claude HUD, соберите отдельную пропатченную команду Codex:
 

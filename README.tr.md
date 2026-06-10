@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 Beceri listesinin yenilenmesi için kurulumdan veya yeniden kurulumdan sonra yeni bir Codex iş parçacığı başlatın.
 
 > **İpucu:** `codex plugin marketplace add "$(pwd)"` geçerli dizini okur, bu yüzden onu depo kökünden çalıştırın. `"$(pwd)"` yerine açık bir yol da geçirebilirsiniz.
@@ -145,6 +147,8 @@ showPace = true     # false -> 5h/7d'deki tempo %'sini gizle
 Tam çözümlenmiş seçenek setini görmek için `codex-hud --print-config` çalıştırın.
 
 ## Yamalı Codex Altbilgisi
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 Standart Codex, giriş alanının altında rastgele eklenti çıktısı oluşturamaz. Claude-HUD tarzı bir altbilgi elde etmek için ayrı, yamalı bir Codex komutu derleyin:
 

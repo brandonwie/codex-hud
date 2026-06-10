@@ -55,6 +55,8 @@ codex plugin marketplace add "$(pwd)"
 codex plugin add codex-hud@codex-hud
 ```
 
+> **⚠️ Update:** the recommended next step is now `npm run install:launcher` (stock-delegating launcher; Codex updates are picked up automatically). See the [English README](./README.md#quick-start) until this translation is updated.
+
 เริ่มเธรด Codex ใหม่หลังจากติดตั้งหรือติดตั้งใหม่ เพื่อให้รายการสกิลได้รับการรีเฟรช
 
 > **เคล็ดลับ:** `codex plugin marketplace add "$(pwd)"` จะอ่านไดเรกทอรีปัจจุบัน ดังนั้นให้รันจากรากของรีโป คุณยังสามารถระบุพาธอย่างชัดเจนแทน `"$(pwd)"` ได้
@@ -145,6 +147,8 @@ showPace = true     # false -> ซ่อน pace % ใน 5h/7d
 รัน `codex-hud --print-config` เพื่อดูชุดตัวเลือกที่ถูกแก้ไขรวมแล้วทั้งหมด
 
 ## Footer ของ Codex ที่แพตช์แล้ว
+
+> **⚠️ Outdated section — install/update flow changed.** Stock delegation (`npm run install:launcher`) is now the default and picks up Codex updates automatically; the patched build below is **experimental and opt-in**. See the [English README](./README.md#experimental-patched-codex-footer) for current instructions until this translation is updated.
 
 Codex รุ่นมาตรฐานไม่สามารถเรนเดอร์เอาต์พุตของปลั๊กอินตามอำเภอใจใต้พื้นที่ป้อนข้อมูลได้ หากต้องการ footer สไตล์ Claude-HUD ให้สร้างคำสั่ง Codex ที่แพตช์แล้วแยกต่างหาก:
 
