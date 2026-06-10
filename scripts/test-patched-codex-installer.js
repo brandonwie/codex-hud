@@ -176,8 +176,12 @@ assert.strictEqual(parsed.keepVersions, 2);
 assert.strictEqual(parseArgs(["--mode", "patched"]).mode, "patched");
 assert.strictEqual(parseArgs(["--doctor"]).doctor, true);
 assert.strictEqual(parseArgs(["--keep-versions", "3"]).keepVersions, 3);
+assert.strictEqual(parseArgs(["--version", "0.139.0-beta.1+build.2"]).version, "0.139.0-beta.1+build.2");
 assert.throws(() => parseArgs(["--mode", "yolo"]), /--mode must be stock or patched/);
 assert.throws(() => parseArgs(["--keep-versions", "0"]), /--keep-versions/);
+assert.throws(() => parseArgs(["--bin-name", "../codex"]), /--bin-name must contain only/);
+assert.throws(() => parseArgs(["--launcher-name", "codex*"]), /--launcher-name must contain only/);
+assert.throws(() => parseArgs(["--version", "../../0.139.0"]), /--version must be a semver-like/);
 
 // --- stock discovery: HUD-managed candidates skipped ---
 const versionShimRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-version-shim-test-"));
@@ -199,6 +203,10 @@ const detectedVersion = detectCodexVersion({
 });
 assert.strictEqual(detectedVersion, "0.138.0");
 assert.deepStrictEqual(detectedVersionCommands, [versionRealCodex]);
+assert.throws(
+  () => detectCodexVersion({ env: { PATH: versionShimRoot }, includeKnownPaths: false, runCommand: () => "codex-cli 0.137.0\n" }),
+  /No stock codex found for version detection/,
+);
 
 // --- stock discovery: payloads inside codex-hud-codex.d are skipped (recursion guard) ---
 const recursionRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-recursion-test-"));
@@ -353,6 +361,17 @@ assert(fs.existsSync(path.join(pruneRoot2, "codex-hud-codex.d", "0.1.0")), "acti
 assert(fs.existsSync(path.join(pruneRoot2, "codex-hud-codex.d", "0.3.0")));
 assert(!fs.existsSync(path.join(pruneRoot2, "codex-hud-codex.d", "0.2.0")));
 
+// release versions sort ahead of their prereleases when pruning
+const pruneRoot3 = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prune-prerelease-test-"));
+const pruneArgs3 = { prefix: pruneRoot3, binName: "codex-hud-codex", keepVersions: 1 };
+for (const version of ["0.139.0-beta.1", "0.139.0", "0.138.0"]) {
+  writeExecutable(path.join(pruneRoot3, "codex-hud-codex.d", version, "codex"), fakeCodexScript(version));
+}
+pruneVersionDirs(pruneArgs3);
+assert(fs.existsSync(path.join(pruneRoot3, "codex-hud-codex.d", "0.139.0")));
+assert(!fs.existsSync(path.join(pruneRoot3, "codex-hud-codex.d", "0.139.0-beta.1")));
+assert(!fs.existsSync(path.join(pruneRoot3, "codex-hud-codex.d", "0.138.0")));
+
 // --- migration: legacy flat payload -> versioned layout ---
 const migrateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-migrate-test-"));
 const migrateArgs = { prefix: migrateRoot, binName: "codex-hud-codex" };
@@ -395,6 +414,12 @@ const reviewOk = reviewLegacyBinEntry(reviewArgs);
 assert.strictEqual(reviewOk.status, "ok");
 assert.strictEqual(reviewOk.version, "0.137.0");
 assert(fs.existsSync(path.join(reviewRoot, "codex-hud-codex")), "healthy entry must be left in place");
+
+const reviewDirRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-review-dir-test-"));
+fs.mkdirSync(path.join(reviewDirRoot, "codex-hud-codex"), { recursive: true });
+const reviewDir = reviewLegacyBinEntry({ prefix: reviewDirRoot, binName: "codex-hud-codex" });
+assert.strictEqual(reviewDir.status, "skipped");
+assert.strictEqual(reviewDir.reason, "directory");
 
 const reviewRoot2 = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-review-broken-test-"));
 writeExecutable(path.join(reviewRoot2, "codex-hud-codex"), "#!/usr/bin/env bash\nexit 1\n");

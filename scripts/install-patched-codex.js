@@ -8,6 +8,10 @@ const { spawnSync } = require("child_process");
 const OPENAI_CODEX_REPO = "https://github.com/openai/codex.git";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
 const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
+const SAFE_COMMAND_NAME_RE = /^[A-Za-z0-9_-]+$/;
+const CODEX_VERSION_PATTERN = "\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?";
+const CODEX_VERSION_RE = new RegExp(`(${CODEX_VERSION_PATTERN})`);
+const CODEX_VERSION_EXACT_RE = new RegExp(`^${CODEX_VERSION_PATTERN}$`);
 const LAUNCHER_MARKER_FIELDS = {
   patched_version: "patchedVersion",
   stock_path: "stockPath",
@@ -101,7 +105,7 @@ function uniquePaths(values) {
   });
 }
 
-function findCodexCandidates(env = process.env) {
+function findCodexCandidates(env = process.env, options = {}) {
   const names = process.platform === "win32" ? ["codex.exe", "codex.cmd", "codex.bat", "codex"] : ["codex"];
   const candidates = [];
   for (const entry of String(env.PATH || "").split(path.delimiter)) {
@@ -116,9 +120,11 @@ function findCodexCandidates(env = process.env) {
     }
   }
 
-  for (const candidate of ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex"]) {
-    if (executableExists(candidate)) {
-      candidates.push(candidate);
+  if (options.includeKnownPaths !== false) {
+    for (const candidate of ["/opt/homebrew/bin/codex", "/usr/local/bin/codex", "/usr/bin/codex"]) {
+      if (executableExists(candidate)) {
+        candidates.push(candidate);
+      }
     }
   }
 
@@ -162,11 +168,23 @@ function isHudManagedCodexCandidate(candidate) {
 }
 
 function parseCodexVersion(stdout) {
-  const match = stdout.match(/(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
+  const match = stdout.match(CODEX_VERSION_RE);
   if (!match) {
     throw new Error(`Could not parse codex version from: ${stdout}`);
   }
   return match[1];
+}
+
+function validateCommandName(value, optionName) {
+  if (!SAFE_COMMAND_NAME_RE.test(value)) {
+    throw new Error(`${optionName} must contain only letters, numbers, underscores, and hyphens`);
+  }
+}
+
+function validateCodexVersion(value, optionName) {
+  if (!CODEX_VERSION_EXACT_RE.test(value)) {
+    throw new Error(`${optionName} must be a semver-like Codex version, got: ${value}`);
+  }
 }
 
 function parseArgs(argv) {
@@ -239,6 +257,11 @@ function parseArgs(argv) {
   if (args.mode !== "stock" && args.mode !== "patched") {
     throw new Error(`--mode must be stock or patched, got: ${args.mode}`);
   }
+  validateCommandName(args.binName, "--bin-name");
+  validateCommandName(args.launcherName, "--launcher-name");
+  if (args.version) {
+    validateCodexVersion(args.version, "--version");
+  }
   args.keepVersions = Number.parseInt(args.keepVersions, 10);
   if (!Number.isFinite(args.keepVersions) || args.keepVersions < 1) {
     throw new Error("--keep-versions must be a positive integer");
@@ -260,7 +283,7 @@ function defaultStatusLineCommand() {
 function detectStockCodex(options = {}) {
   const runCommand = options.runCommand || run;
   const env = options.env || process.env;
-  const candidates = findCodexCandidates(env);
+  const candidates = findCodexCandidates(env, { includeKnownPaths: options.includeKnownPaths });
   let attemptedRealCandidate = false;
   let lastError = null;
 
@@ -290,8 +313,8 @@ function detectStockCodex(options = {}) {
   return null;
 }
 
-function findStockCodexPath(env = process.env) {
-  for (const candidate of findCodexCandidates(env)) {
+function findStockCodexPath(env = process.env, options = {}) {
+  for (const candidate of findCodexCandidates(env, options)) {
     if (!isHudManagedCodexCandidate(candidate)) {
       return candidate;
     }
@@ -304,8 +327,7 @@ function detectCodexVersion(options = {}) {
   if (stock) {
     return stock.version;
   }
-  const runCommand = options.runCommand || run;
-  return parseCodexVersion(runCommand("codex", ["--version"]).trim());
+  throw new Error("No stock codex found for version detection. Install Codex, or pass --version <version> for patched mode.");
 }
 
 function applyTextPatch(filePath, marker, anchor, replacement) {
@@ -607,7 +629,9 @@ function ensureSource(args) {
 }
 
 function versionsDir(args) {
-  return path.join(args.prefix, `${args.binName}.d`);
+  const binName = args.binName || DEFAULT_BIN_NAME;
+  validateCommandName(binName, "--bin-name");
+  return path.join(args.prefix, `${binName}.d`);
 }
 
 function builtBinaryName() {
@@ -633,6 +657,7 @@ function stageBuiltBinary(sourceDir, args) {
   if (!args.version) {
     throw new Error("Cannot stage patched binary without a resolved --version.");
   }
+  validateCodexVersion(args.version, "--version");
   const builtBinary = path.join(sourceDir, "codex-rs", "target", "release", builtBinaryName());
   const stagingDir = path.join(versionsDir(args), `${args.version}.staging`);
   fs.rmSync(stagingDir, { recursive: true, force: true });
@@ -711,19 +736,33 @@ function verifyInstalledBinary(installedBinary, args) {
 }
 
 function versionSortKey(version) {
-  return version.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const value = String(version);
+  const core = value.split(/[+-]/, 1)[0];
+  return {
+    parts: core.split(".").map((part) => Number.parseInt(part, 10) || 0),
+    suffix: value.slice(core.length),
+  };
 }
 
 function compareVersionsDesc(a, b) {
   const keyA = versionSortKey(a);
   const keyB = versionSortKey(b);
-  for (let index = 0; index < Math.max(keyA.length, keyB.length); index += 1) {
-    const diff = (keyB[index] || 0) - (keyA[index] || 0);
+  for (let index = 0; index < Math.max(keyA.parts.length, keyB.parts.length); index += 1) {
+    const diff = (keyB.parts[index] || 0) - (keyA.parts[index] || 0);
     if (diff !== 0) {
       return diff;
     }
   }
-  return 0;
+  if (keyA.suffix === keyB.suffix) {
+    return 0;
+  }
+  if (!keyA.suffix) {
+    return -1;
+  }
+  if (!keyB.suffix) {
+    return 1;
+  }
+  return keyA.suffix.localeCompare(keyB.suffix);
 }
 
 function pruneVersionDirs(args, keep = args.keepVersions || 2) {
@@ -796,6 +835,8 @@ function renderLauncherScript(opts) {
   }
   const binName = opts.binName || DEFAULT_BIN_NAME;
   const launcherName = opts.launcherName || DEFAULT_LAUNCHER_NAME;
+  validateCommandName(binName, "--bin-name");
+  validateCommandName(launcherName, "--launcher-name");
 
   const markers = [`# codex-hud-launcher v2 mode=${mode}`];
   for (const [field, optKey] of Object.entries(LAUNCHER_MARKER_FIELDS)) {
