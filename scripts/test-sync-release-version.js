@@ -8,6 +8,9 @@ const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-sync-version-test-"));
+process.on("exit", () => {
+  fs.rmSync(root, { recursive: true, force: true });
+});
 
 function writeFile(relativePath, contents) {
   const filePath = path.join(root, relativePath);
