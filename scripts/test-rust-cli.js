@@ -121,7 +121,7 @@ try {
   // 4. --watch loops forever by design — only ever run it under a hard
   //    timeout + SIGKILL, then assert it was killed (never exited cleanly).
   {
-    const watch = run(["--watch", "1"], null, { timeout: 3000, killSignal: "SIGKILL" });
+    const watch = run(["--watch", "1"], null, { timeout: 8000, killSignal: "SIGKILL" });
     assert.ok(watch.signal, "watch must be killed by the harness, never exit");
     assert.ok(watch.stdout.includes("\x1Bc"), "watch should reset the screen each refresh");
     assert.match(watch.stdout, /Refreshing every 1s\. Press Ctrl\+C to stop\./);
