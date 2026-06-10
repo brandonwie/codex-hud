@@ -307,7 +307,7 @@ function verifyRustRenderer(binPath, options = {}) {
   const firstLine = runCommand(binPath, ["--help"], { timeout: 10000 }).trim().split(/\r?\n/)[0];
   const match = firstLine.match(/^codex-hud (\d+\.\d+\.\d+\S*)$/);
   if (!match) {
-    throw new Error(`Could not parse codex-hud-rs version from: ${firstLine}`);
+    throw new Error(`Could not parse ${rendererBinaryName()} version from: ${firstLine}`);
   }
   return match[1];
 }
@@ -1643,13 +1643,13 @@ function runPatchedInstall(args) {
   }
 
   console.log(`Codex HUD patch target: OpenAI Codex ${args.version}`);
-  console.log(`HUD command: ${statusLineCommandFor(resolveRenderer(args, { install: false }))}`);
 
   const sourceDir = ensureSource(args);
   const changes = patchSource(sourceDir);
   console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
 
   if (args.dryRun) {
+    console.log(`HUD command: ${statusLineCommandFor(resolveRenderer(args, { install: false }))}`);
     console.log("Dry run complete; build/install skipped.");
     return;
   }
@@ -1673,11 +1673,12 @@ function runPatchedInstall(args) {
   // (new payload active, stale launcher). If installBinary fails below, an
   // already installed standalone renderer is harmless.
   const renderer = resolveRenderer(args);
+  const statusLineCommand = statusLineCommandFor(renderer);
+  console.log(`HUD command: ${statusLineCommand}`);
   if (renderer.kind === "js" && args.renderer === "auto") {
     console.log("rust renderer not available; using node renderer (run npm run build:rust && rerun to enable)");
   }
   const installed = installBinary(sourceDir, args);
-  const statusLineCommand = statusLineCommandFor(renderer);
   const launcher = installLauncher(args, {
     mode: "patched",
     patchedBinary: installed.target,
@@ -1713,7 +1714,7 @@ function main() {
     const renderer = resolveRenderer(args, { install: false });
     console.log(`status_line_command = ${JSON.stringify(statusLineCommandFor(renderer))}`);
     if (renderer.preview) {
-      console.error("note: requires npm run install:launcher / patch:codex to place the binary");
+      console.error("note: binary not yet at the install target; run npm run install:launcher or npm run patch:codex");
     }
     return;
   }

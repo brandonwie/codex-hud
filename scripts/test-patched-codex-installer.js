@@ -48,6 +48,10 @@ function fakeCodexScript(version) {
   return `#!/usr/bin/env bash\necho codex-cli ${version}\n`;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-patch-test-"));
 
 writeFile(root, "codex-rs/config/src/types.rs", `
@@ -359,7 +363,10 @@ writeExecutable(crlfRenderer, '#!/usr/bin/env bash\nprintf "codex-hud 0.2.0\\r\\
 assert.strictEqual(verifyRustRenderer(crlfRenderer), "0.2.0");
 const gibberishRenderer = path.join(rendererRoot, "source", "gibberish");
 writeExecutable(gibberishRenderer, "#!/usr/bin/env bash\necho not-a-hud\n");
-assert.throws(() => verifyRustRenderer(gibberishRenderer), /Could not parse codex-hud-rs version/);
+assert.throws(
+  () => verifyRustRenderer(gibberishRenderer),
+  new RegExp(`Could not parse ${escapeRegExp(rendererBinaryName())} version`),
+);
 
 const installedRenderer = installRustRenderer(rendererArgs, { sourcePath: rendererSource });
 assert.deepStrictEqual(installedRenderer, {
