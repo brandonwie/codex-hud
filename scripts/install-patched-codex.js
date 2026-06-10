@@ -316,9 +316,14 @@ function installRustRenderer(args, options = {}) {
       const version = verifyRustRenderer(source, options);
       fs.mkdirSync(args.prefix, { recursive: true });
       const tmpFile = `${target}.tmp-${process.pid}`;
-      fs.copyFileSync(source, tmpFile);
-      fs.chmodSync(tmpFile, 0o755);
-      fs.renameSync(tmpFile, target);
+      try {
+        fs.copyFileSync(source, tmpFile);
+        fs.chmodSync(tmpFile, 0o755);
+        fs.renameSync(tmpFile, target);
+      } catch (error) {
+        fs.rmSync(tmpFile, { force: true });
+        throw error;
+      }
       return { status: "installed", path: target, version };
     } catch (error) {
       sourceError = error;
@@ -1482,6 +1487,8 @@ function doctor(args, options = {}) {
     }
   }
 
+  // Renderer health breaks the active entrypoint only in patched mode; stock
+  // launchers never inject status_line_command.
   if (report.renderer.configured === "rust" && !report.renderer.installed && report.launcher.mode === "patched") {
     if (report.renderer.broken) {
       report.healthy = false;
@@ -1651,9 +1658,10 @@ function runPatchedInstall(args) {
     stock = null;
   }
 
-  // Resolve the renderer BEFORE activating the patched payload so an explicit
-  // --renderer rust failure cannot leave a half-finished install (new payload
-  // active, stale launcher).
+  // Resolve and install the renderer BEFORE activating the patched payload so
+  // an explicit --renderer rust failure cannot leave a half-finished install
+  // (new payload active, stale launcher). If installBinary fails below, an
+  // already installed standalone renderer is harmless.
   const renderer = resolveRenderer(args);
   if (renderer.kind === "js" && args.renderer === "auto") {
     console.log("rust renderer not available; using node renderer (run npm run build:rust && rerun to enable)");

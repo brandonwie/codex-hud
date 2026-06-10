@@ -362,6 +362,15 @@ assert.deepStrictEqual(installedRenderer, {
 });
 assert(fs.statSync(installedRenderer.path).mode & 0o111, "installed renderer must be executable");
 
+const cleanupPrefix = path.join(rendererRoot, "cleanup-bin");
+fs.mkdirSync(path.join(cleanupPrefix, "codex-hud-rs"), { recursive: true });
+const cleanupResult = installRustRenderer({ prefix: cleanupPrefix }, { sourcePath: rendererSource });
+assert.strictEqual(cleanupResult.status, "broken");
+assert(
+  !fs.readdirSync(cleanupPrefix).some((name) => name.includes(".tmp-")),
+  "failed renderer installs must remove their temp file",
+);
+
 const existingRenderer = installRustRenderer(rendererArgs, { sourcePath: missingSource });
 assert.deepStrictEqual(existingRenderer, {
   status: "existing",
