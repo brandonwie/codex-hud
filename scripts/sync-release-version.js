@@ -15,6 +15,7 @@ const files = {
   cargoToml: path.join(repoRoot, "rust", "Cargo.toml"),
   cargoLock: path.join(repoRoot, "rust", "Cargo.lock"),
 };
+const cargoLockCodexHudPackageRe = /((?:^|\r?\n)\[\[package\]\]\r?\nname = "codex-hud"\r?\nversion = ")([^"]+)(")/g;
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -58,17 +59,21 @@ function writeCargoTomlVersion(version) {
 
 function readCargoLockVersion() {
   const source = fs.readFileSync(files.cargoLock, "utf8");
-  const match = source.match(/name = "codex-hud"\nversion = "([^"]+)"/);
-  if (!match) throw new Error("Could not find Cargo.lock codex-hud version");
-  return match[1];
+  const matches = Array.from(source.matchAll(cargoLockCodexHudPackageRe));
+  if (matches.length !== 1) {
+    throw new Error(`Expected exactly one Cargo.lock codex-hud package entry, found ${matches.length}`);
+  }
+  return matches[0][2];
 }
 
 function writeCargoLockVersion(version) {
   const source = fs.readFileSync(files.cargoLock, "utf8");
-  const match = source.match(/(name = "codex-hud"\nversion = ")([^"]+)(")/);
-  if (!match) throw new Error("Could not find Cargo.lock codex-hud version");
-  if (match[2] === version) return;
-  const updated = source.replace(/(name = "codex-hud"\nversion = ")[^"]+(")/, `$1${version}$2`);
+  const matches = Array.from(source.matchAll(cargoLockCodexHudPackageRe));
+  if (matches.length !== 1) {
+    throw new Error(`Expected exactly one Cargo.lock codex-hud package entry, found ${matches.length}`);
+  }
+  if (matches[0][2] === version) return;
+  const updated = source.replace(cargoLockCodexHudPackageRe, `$1${version}$3`);
   fs.writeFileSync(files.cargoLock, updated, "utf8");
 }
 

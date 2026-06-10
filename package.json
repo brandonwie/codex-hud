@@ -8,7 +8,7 @@
     "codex-hud": "./plugins/codex-hud/scripts/codex-hud.js"
   },
   "scripts": {
-    "test": "node scripts/test-codex-hud.js && node scripts/test-codex-hud-config.js && node scripts/test-patched-codex-installer.js && node scripts/test-golden.js && node scripts/test-parsing-golden.js && node scripts/sync-release-version.js --check",
+    "test": "node scripts/test-codex-hud.js && node scripts/test-codex-hud-config.js && node scripts/test-patched-codex-installer.js && node scripts/test-sync-release-version.js && node scripts/test-golden.js && node scripts/test-parsing-golden.js && node scripts/sync-release-version.js --check",
     "hud": "node plugins/codex-hud/scripts/codex-hud.js",
     "golden:update": "node scripts/test-golden.js --update && node scripts/test-parsing-golden.js --update",
     "build:rust": "cargo build --release --manifest-path rust/Cargo.toml",
