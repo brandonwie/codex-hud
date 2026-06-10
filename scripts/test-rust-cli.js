@@ -113,7 +113,7 @@ try {
     assert.strictEqual(line.status, 0, "malformed config must not crash the status line");
     assert.ok(line.stdout.trim().length > 0, "should still render a footer");
     assert.match(line.stderr, /codex-hud:/);
-    assert.strictEqual(line.stderr.trim().split("\n").length, 1, "config warning must be a single stderr line");
+    assert.strictEqual(line.stderr.trim().split(/\r?\n/).length, 1, "config warning must be a single stderr line");
 
     const json = run(["--json"], { CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(json.status, 0, json.stderr);
