@@ -16,7 +16,7 @@
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#yapılandırma)
 [![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Linux-0db7ed?style=for-the-badge&logo=linux&logoColor=white)](#hızlı-başlangıç)
 
-[Özellikler](#özellikler) · [Hızlı Başlangıç](#hızlı-başlangıç) · [Yapılandırma](#yapılandırma) · [Yamalı Codex Altbilgisi](#deneysel-yamalı-codex-alt-bilgisi) · [Yol Haritası](#yol-haritası)
+[Özellikler](#özellikler) · [Hızlı Başlangıç](#hızlı-başlangıç) · [Yapılandırma](#yapılandırma) · [Yamalı Codex Alt Bilgisi](#deneysel-yamalı-codex-alt-bilgisi) · [Yol Haritası](#yol-haritası)
 
 </div>
 

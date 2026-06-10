@@ -16,7 +16,7 @@
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#配置)
 [![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Linux-0db7ed?style=for-the-badge&logo=linux&logoColor=white)](#快速开始)
 
-[功能](#功能) · [快速开始](#快速开始) · [配置](#配置) · [打补丁的 Codex 页脚](#实验性功能补丁版-codex-页脚) · [路线图](#路线图)
+[功能](#功能) · [快速开始](#快速开始) · [配置](#配置) · [补丁版 Codex 页脚](#实验性功能补丁版-codex-页脚) · [路线图](#路线图)
 
 </div>
 

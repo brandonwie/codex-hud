@@ -310,26 +310,42 @@ function installRustRenderer(args, options = {}) {
   const target = path.join(args.prefix, RUST_RENDERER_BIN_NAME);
   const source = options.sourcePath || rustRendererSourcePath();
 
+  let sourceError = null;
   if (executableExists(source)) {
-    const version = verifyRustRenderer(source, options);
-    fs.mkdirSync(args.prefix, { recursive: true });
-    const tmpFile = `${target}.tmp-${process.pid}`;
-    fs.copyFileSync(source, tmpFile);
-    fs.chmodSync(tmpFile, 0o755);
-    fs.renameSync(tmpFile, target);
-    return { status: "installed", path: target, version };
+    try {
+      const version = verifyRustRenderer(source, options);
+      fs.mkdirSync(args.prefix, { recursive: true });
+      const tmpFile = `${target}.tmp-${process.pid}`;
+      fs.copyFileSync(source, tmpFile);
+      fs.chmodSync(tmpFile, 0o755);
+      fs.renameSync(tmpFile, target);
+      return { status: "installed", path: target, version };
+    } catch (error) {
+      sourceError = error;
+    }
   }
 
   if (executableExists(target)) {
     try {
       const version = verifyRustRenderer(target, options);
+      if (sourceError) {
+        return { status: "existing", path: target, version, sourceError: sourceError.message, sourcePath: source };
+      }
       return { status: "existing", path: target, version };
-    } catch (_) {
-      return { status: "broken", path: target };
+    } catch (error) {
+      return { status: "broken", path: target, error: error.message };
     }
   }
 
+  if (sourceError) {
+    return { status: "broken-source", path: source, error: sourceError.message };
+  }
+
   return { status: "missing", path: target };
+}
+
+function brokenRendererDetail(brokenPath, errorMessage) {
+  return `${brokenPath} failed its --help health check (${errorMessage})`;
 }
 
 function resolveRenderer(args, options = {}) {
@@ -339,21 +355,52 @@ function resolveRenderer(args, options = {}) {
 
   if (options.install === false) {
     const target = path.join(args.prefix, RUST_RENDERER_BIN_NAME);
+    const source = options.sourcePath || rustRendererSourcePath();
+    let brokenDetail = null;
     if (executableExists(target)) {
-      return { kind: "rust", path: target };
+      try {
+        verifyRustRenderer(target, options);
+        return { kind: "rust", path: target };
+      } catch (error) {
+        brokenDetail = brokenRendererDetail(target, error.message);
+      }
     }
-    if (executableExists(options.sourcePath || rustRendererSourcePath())) {
-      return { kind: "rust", path: target, preview: true };
+    if (executableExists(source)) {
+      try {
+        verifyRustRenderer(source, options);
+        return { kind: "rust", path: target, preview: true };
+      } catch (error) {
+        brokenDetail = brokenDetail || brokenRendererDetail(source, error.message);
+      }
     }
     if (args.renderer === "rust") {
+      if (brokenDetail) {
+        throw new Error(`renderer rust requested but ${brokenDetail}. Rebuild: npm run build:rust`);
+      }
       throw new Error("renderer rust requested but codex-hud-rs is not built. Run: npm run build:rust");
+    }
+    if (brokenDetail) {
+      console.error(`warning: ${brokenDetail}; falling back to the node renderer`);
     }
     return { kind: "js" };
   }
 
   const installed = installRustRenderer(args, options);
   if (installed.status === "installed" || installed.status === "existing") {
+    if (installed.sourceError) {
+      console.error(
+        `warning: ${brokenRendererDetail(installed.sourcePath, installed.sourceError)}; keeping the previously installed renderer at ${installed.path}`,
+      );
+    }
     return { kind: "rust", path: installed.path };
+  }
+  if (installed.status === "broken" || installed.status === "broken-source") {
+    const detail = brokenRendererDetail(installed.path, installed.error);
+    if (args.renderer === "rust") {
+      throw new Error(`renderer rust requested but ${detail}. Rebuild: npm run build:rust`);
+    }
+    console.error(`warning: ${detail}; falling back to the node renderer`);
+    return { kind: "js" };
   }
   if (args.renderer === "rust") {
     throw new Error("renderer rust requested but codex-hud-rs is not built. Run: npm run build:rust");
@@ -1270,7 +1317,7 @@ function doctor(args, options = {}) {
     launcher: { path: launcherPath, status: "missing", mode: null, metadata: null },
     stock: null,
     patched: { dir: versionsDir(args), versions: [], active: null, flatPayload: null },
-    renderer: { configured: null, binPath: path.join(args.prefix, RUST_RENDERER_BIN_NAME), installed: false, version: null },
+    renderer: { configured: null, binPath: path.join(args.prefix, RUST_RENDERER_BIN_NAME), installed: false, broken: false, version: null },
     anomalies: [],
     recommendations: [],
     healthy: true,
@@ -1327,6 +1374,7 @@ function doctor(args, options = {}) {
       });
       report.renderer.installed = true;
     } catch (error) {
+      report.renderer.broken = true;
       report.anomalies.push(`installed codex-hud-rs failed --help health check: ${error.message}`);
     }
   }
@@ -1435,9 +1483,16 @@ function doctor(args, options = {}) {
   }
 
   if (report.renderer.configured === "rust" && !report.renderer.installed && report.launcher.mode === "patched") {
-    report.recommendations.push(
-      `launcher renderer=rust but ${report.renderer.binPath} is missing -> run: npm run build:rust && npm run patch:codex`,
-    );
+    if (report.renderer.broken) {
+      report.healthy = false;
+      report.recommendations.push(
+        `launcher renderer=rust but ${report.renderer.binPath} is broken (failed --help health check) -> run: npm run build:rust && npm run patch:codex`,
+      );
+    } else {
+      report.recommendations.push(
+        `launcher renderer=rust but ${report.renderer.binPath} is missing -> run: npm run build:rust && npm run patch:codex`,
+      );
+    }
   }
 
   if (report.renderer.installed) {
@@ -1480,6 +1535,8 @@ function printDoctorReport(report) {
       lines.push("renderer: js (node renderer)");
     } else if (report.renderer.installed) {
       lines.push(`renderer: rust (${report.renderer.binPath}, v${report.renderer.version}${report.launcher.mode === "stock" ? `; ${stockQualifier}` : ""})`);
+    } else if (report.renderer.broken) {
+      lines.push(`renderer: rust configured but codex-hud-rs is broken — failed --help health check${report.launcher.mode === "stock" ? ` (${stockQualifier})` : ""}`);
     } else {
       lines.push(`renderer: rust configured but codex-hud-rs missing${report.launcher.mode === "stock" ? ` (${stockQualifier})` : ""}`);
     }
@@ -1519,6 +1576,14 @@ function runStockInstall(args) {
     );
   }
   console.log(`Stock Codex: ${stock.path} (${stock.version})`);
+
+  if (args.dryRun) {
+    const previewRenderer = resolveRenderer(args, { install: false });
+    console.log(`Would install stock-delegating HUD launcher: ${path.join(args.prefix, args.launcherName)}`);
+    console.log(`renderer (used by patched mode and --print-config only): ${previewRenderer.kind}`);
+    console.log("Dry run complete; nothing installed.");
+    return;
+  }
 
   const renderer = resolveRenderer(args);
 
@@ -1586,11 +1651,14 @@ function runPatchedInstall(args) {
     stock = null;
   }
 
-  const installed = installBinary(sourceDir, args);
+  // Resolve the renderer BEFORE activating the patched payload so an explicit
+  // --renderer rust failure cannot leave a half-finished install (new payload
+  // active, stale launcher).
   const renderer = resolveRenderer(args);
   if (renderer.kind === "js" && args.renderer === "auto") {
     console.log("rust renderer not available; using node renderer (run npm run build:rust && rerun to enable)");
   }
+  const installed = installBinary(sourceDir, args);
   const statusLineCommand = statusLineCommandFor(renderer);
   const launcher = installLauncher(args, {
     mode: "patched",

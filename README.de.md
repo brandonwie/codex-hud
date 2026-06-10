@@ -16,7 +16,7 @@
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#konfiguration)
 [![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Linux-0db7ed?style=for-the-badge&logo=linux&logoColor=white)](#schnellstart)
 
-[Funktionen](#funktionen) · [Schnellstart](#schnellstart) · [Konfiguration](#konfiguration) · [Gepatchte Codex-Fußzeile](#experimentell-gepatchter-codex-footer) · [Roadmap](#roadmap)
+[Funktionen](#funktionen) · [Schnellstart](#schnellstart) · [Konfiguration](#konfiguration) · [Gepatchter Codex-Footer](#experimentell-gepatchter-codex-footer) · [Roadmap](#roadmap)
 
 </div>
 

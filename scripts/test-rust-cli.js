@@ -48,7 +48,9 @@ function run(args, envOverrides, opts) {
   const options = opts || {};
   return spawnSync(binary, args, {
     encoding: "utf8",
-    timeout: options.timeout,
+    // Hard default timeout so a hanging regression (e.g. --line entering the
+    // watch loop) fails the suite instead of stalling it — and CI — forever.
+    timeout: options.timeout === undefined ? 30000 : options.timeout,
     killSignal: options.killSignal,
     env: {
       PATH: process.env.PATH,
@@ -111,6 +113,9 @@ try {
     const json = run(["--json"], { CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(json.status, 0, json.stderr);
     assert.strictEqual(json.stderr, "", "--json must not emit config warnings on stderr");
+    const warnings = JSON.parse(json.stdout).hud.warnings;
+    assert.ok(Array.isArray(warnings) && warnings.length > 0, "--json must carry config warnings inside the JSON");
+    assert.match(warnings.join("\n"), /TOML parse error/, "the parse warning must ride inside hud.warnings");
   }
 
   // 4. --watch loops forever by design — only ever run it under a hard

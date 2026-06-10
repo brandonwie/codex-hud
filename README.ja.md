@@ -16,7 +16,7 @@
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#設定)
 [![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Linux-0db7ed?style=for-the-badge&logo=linux&logoColor=white)](#クイックスタート)
 
-[機能](#機能) · [クイックスタート](#クイックスタート) · [設定](#設定) · [パッチ適用版 Codex フッター](#実験的機能-パッチ済み-codex-フッター) · [ロードマップ](#ロードマップ)
+[機能](#機能) · [クイックスタート](#クイックスタート) · [設定](#設定) · [パッチ済み Codex フッター](#実験的機能-パッチ済み-codex-フッター) · [ロードマップ](#ロードマップ)
 
 </div>
 

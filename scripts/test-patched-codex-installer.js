@@ -374,14 +374,47 @@ assert.deepStrictEqual(resolveRenderer(rendererArgs, { sourcePath: missingSource
 });
 
 writeExecutable(path.join(rendererPrefix, "codex-hud-rs"), "#!/usr/bin/env bash\nexit 1\n");
-assert.deepStrictEqual(installRustRenderer(rendererArgs, { sourcePath: missingSource }), {
-  status: "broken",
-  path: path.join(rendererPrefix, "codex-hud-rs"),
-});
+const brokenInstalled = installRustRenderer(rendererArgs, { sourcePath: missingSource });
+assert.strictEqual(brokenInstalled.status, "broken");
+assert.strictEqual(brokenInstalled.path, path.join(rendererPrefix, "codex-hud-rs"));
+assert.match(brokenInstalled.error, /--help/, "broken renderer result must carry the health-check failure cause");
 assert.deepStrictEqual(
   resolveRenderer(rendererArgs, { sourcePath: missingSource }),
   { kind: "js" },
   "auto must fall back to js when the installed renderer is broken",
+);
+assert.throws(
+  () => resolveRenderer({ prefix: rendererPrefix, renderer: "rust" }, { sourcePath: missingSource }),
+  /failed its --help health check/,
+  "explicit rust with a broken installed binary must surface the health check, not claim it is not built",
+);
+
+// broken build artifact must not abort an auto install (stock rollback path)
+const brokenSource = path.join(rendererRoot, "source", "broken-build");
+writeExecutable(brokenSource, "#!/usr/bin/env bash\nexit 1\n");
+const brokenSourcePrefix = path.join(rendererRoot, "broken-source-bin");
+const brokenSourceResult = installRustRenderer({ prefix: brokenSourcePrefix }, { sourcePath: brokenSource });
+assert.strictEqual(brokenSourceResult.status, "broken-source");
+assert.strictEqual(brokenSourceResult.path, brokenSource);
+assert.match(brokenSourceResult.error, /--help/);
+assert.deepStrictEqual(
+  resolveRenderer({ prefix: brokenSourcePrefix, renderer: "auto" }, { sourcePath: brokenSource }),
+  { kind: "js" },
+  "auto must fall back to js when the built source binary is broken",
+);
+assert(!fs.existsSync(path.join(brokenSourcePrefix, "codex-hud-rs")), "a broken source binary must never be installed");
+assert.throws(
+  () => resolveRenderer({ prefix: brokenSourcePrefix, renderer: "rust" }, { sourcePath: brokenSource }),
+  /failed its --help health check/,
+);
+
+// broken source + healthy installed target: keep the working install
+const keepPrefix = path.join(rendererRoot, "keep-bin");
+writeExecutable(path.join(keepPrefix, "codex-hud-rs"), '#!/usr/bin/env bash\necho "codex-hud 0.2.0"\n');
+assert.deepStrictEqual(
+  resolveRenderer({ prefix: keepPrefix, renderer: "auto" }, { sourcePath: brokenSource }),
+  { kind: "rust", path: path.join(keepPrefix, "codex-hud-rs") },
+  "a broken build artifact must not downgrade a healthy installed renderer",
 );
 
 const emptyRendererPrefix = path.join(rendererRoot, "empty-bin");
@@ -411,6 +444,28 @@ assert(!fs.existsSync(previewPrefix), "resolveRenderer install:false must not cr
 assert.deepStrictEqual(
   resolveRenderer({ prefix: previewPrefix, renderer: "auto" }, { install: false, sourcePath: missingSource }),
   { kind: "js" },
+);
+
+// preview must health-check binaries so --print-config / the patched-install
+// preview can never disagree with what the real install resolves.
+assert.deepStrictEqual(
+  resolveRenderer(rendererArgs, { install: false, sourcePath: missingSource }),
+  { kind: "js" },
+  "preview must fall back to js for a broken installed renderer, matching the install path",
+);
+assert.throws(
+  () => resolveRenderer({ prefix: rendererPrefix, renderer: "rust" }, { install: false, sourcePath: missingSource }),
+  /failed its --help health check/,
+);
+assert.deepStrictEqual(
+  resolveRenderer(rendererArgs, { install: false, sourcePath: rendererSource }),
+  { kind: "rust", path: path.join(rendererPrefix, "codex-hud-rs"), preview: true },
+  "preview must offer the healthy source when the installed target is broken",
+);
+assert.deepStrictEqual(
+  resolveRenderer({ prefix: keepPrefix, renderer: "auto" }, { install: false, sourcePath: brokenSource }),
+  { kind: "rust", path: path.join(keepPrefix, "codex-hud-rs") },
+  "preview must keep a healthy installed renderer despite a broken build artifact",
 );
 
 // --- statusLineCommandFor ---
@@ -760,6 +815,29 @@ assert.strictEqual(rendererStaleReport.renderer.version, "0.1.0");
 assert(
   rendererStaleReport.recommendations.some((entry) => entry.includes("codex-hud-rs") && /rebuild/.test(entry)),
   "stale renderer must recommend a rebuild",
+);
+
+// (3b) installed codex-hud-rs whose --help health check fails: reported broken (not missing)
+// and, in patched mode, the entrypoint chain is unhealthy because every launch injects it.
+const rendererBrokenReport = doctor(doctorRendererPatchedArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => {
+    if (command.endsWith("codex-hud-rs")) {
+      throw new Error("exec format error");
+    }
+    return "codex-cli 0.139.0\n";
+  },
+});
+assert.strictEqual(rendererBrokenReport.renderer.installed, false);
+assert.strictEqual(rendererBrokenReport.renderer.broken, true);
+assert.strictEqual(rendererBrokenReport.healthy, false, "patched-mode broken renderer must break the entrypoint chain");
+assert(
+  rendererBrokenReport.anomalies.some((entry) => entry.includes("installed codex-hud-rs failed --help health check")),
+  "broken renderer must surface the health-check failure as an anomaly",
+);
+assert(
+  rendererBrokenReport.recommendations.some((entry) => entry.includes("broken") && entry.includes("npm run build:rust")),
+  "patched-mode broken renderer must recommend a rebuild and say broken, not missing",
 );
 
 // (4) v2 launcher without a renderer marker means the js renderer.
