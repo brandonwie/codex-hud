@@ -1,6 +1,6 @@
 {
   "name": "codex-hud",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Multiline local context HUD for Codex CLI sessions.",
   "license": "MIT",
   "type": "commonjs",
