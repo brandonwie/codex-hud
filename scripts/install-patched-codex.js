@@ -737,11 +737,53 @@ function verifyInstalledBinary(installedBinary, args) {
 
 function versionSortKey(version) {
   const value = String(version);
-  const core = value.split(/[+-]/, 1)[0];
+  const [withoutBuild, build = ""] = value.split("+", 2);
+  const [core, prerelease = ""] = withoutBuild.split("-", 2);
   return {
     parts: core.split(".").map((part) => Number.parseInt(part, 10) || 0),
-    suffix: value.slice(core.length),
+    prerelease: prerelease ? prerelease.split(".") : null,
+    build,
   };
+}
+
+function comparePrereleaseDesc(aPrerelease, bPrerelease) {
+  if (!aPrerelease && !bPrerelease) {
+    return 0;
+  }
+  if (!aPrerelease) {
+    return -1;
+  }
+  if (!bPrerelease) {
+    return 1;
+  }
+
+  for (let index = 0; index < Math.max(aPrerelease.length, bPrerelease.length); index += 1) {
+    const aPart = aPrerelease[index];
+    const bPart = bPrerelease[index];
+    if (aPart === undefined) {
+      return 1;
+    }
+    if (bPart === undefined) {
+      return -1;
+    }
+    if (aPart === bPart) {
+      continue;
+    }
+
+    const aNumeric = /^(0|[1-9]\d*)$/.test(aPart);
+    const bNumeric = /^(0|[1-9]\d*)$/.test(bPart);
+    if (aNumeric && bNumeric) {
+      return Number(bPart) - Number(aPart);
+    }
+    if (aNumeric) {
+      return 1;
+    }
+    if (bNumeric) {
+      return -1;
+    }
+    return aPart > bPart ? -1 : 1;
+  }
+  return 0;
 }
 
 function compareVersionsDesc(a, b) {
@@ -753,16 +795,11 @@ function compareVersionsDesc(a, b) {
       return diff;
     }
   }
-  if (keyA.suffix === keyB.suffix) {
-    return 0;
+  const prereleaseDiff = comparePrereleaseDesc(keyA.prerelease, keyB.prerelease);
+  if (prereleaseDiff !== 0) {
+    return prereleaseDiff;
   }
-  if (!keyA.suffix) {
-    return -1;
-  }
-  if (!keyB.suffix) {
-    return 1;
-  }
-  return keyA.suffix.localeCompare(keyB.suffix);
+  return keyA.build.localeCompare(keyB.build);
 }
 
 function pruneVersionDirs(args, keep = args.keepVersions || 2) {
@@ -813,6 +850,10 @@ function pruneVersionDirs(args, keep = args.keepVersions || 2) {
   for (const entry of entries) {
     if (entry.endsWith(".staging")) {
       fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+      removed.push(entry);
+    }
+    if (entry.endsWith(".legacy-failed")) {
+      fs.rmSync(path.join(dir, entry), { force: true });
       removed.push(entry);
     }
   }

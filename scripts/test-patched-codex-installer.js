@@ -339,6 +339,7 @@ for (const version of ["0.9.0", "0.10.0", "0.11.0"]) {
 fs.mkdirSync(path.join(pruneRoot, "codex-hud-codex.d", "1.0.0.staging"), { recursive: true });
 fs.mkdirSync(path.join(pruneRoot, "codex-hud-codex.d", "0.7.0.failed"), { recursive: true });
 fs.mkdirSync(path.join(pruneRoot, "codex-hud-codex.d", "0.8.0.failed"), { recursive: true });
+fs.writeFileSync(path.join(pruneRoot, "codex-hud-codex.d", "codex.legacy-failed"), "");
 fs.symlinkSync(path.join(pruneRoot, "codex-hud-codex.d", "0.11.0", "codex"), path.join(pruneRoot, "codex-hud-codex"));
 
 pruneVersionDirs(pruneArgs);
@@ -346,6 +347,7 @@ assert(!fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.9.0")), "nume
 assert(fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.10.0")));
 assert(fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.11.0")));
 assert(!fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "1.0.0.staging")), "stale staging dirs must be swept");
+assert(!fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "codex.legacy-failed")), "legacy failed files must be swept");
 assert(fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.8.0.failed")), "latest failed payload must be kept");
 assert(!fs.existsSync(path.join(pruneRoot, "codex-hud-codex.d", "0.7.0.failed")), "older failed payloads must be swept");
 
@@ -371,6 +373,17 @@ pruneVersionDirs(pruneArgs3);
 assert(fs.existsSync(path.join(pruneRoot3, "codex-hud-codex.d", "0.139.0")));
 assert(!fs.existsSync(path.join(pruneRoot3, "codex-hud-codex.d", "0.139.0-beta.1")));
 assert(!fs.existsSync(path.join(pruneRoot3, "codex-hud-codex.d", "0.138.0")));
+
+// prerelease variants sort by semver precedence when no release is present
+const pruneRoot4 = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prune-prerelease-order-test-"));
+const pruneArgs4 = { prefix: pruneRoot4, binName: "codex-hud-codex", keepVersions: 1 };
+for (const version of ["0.139.0-alpha.1", "0.139.0-beta.1", "0.139.0-beta.2"]) {
+  writeExecutable(path.join(pruneRoot4, "codex-hud-codex.d", version, "codex"), fakeCodexScript(version));
+}
+pruneVersionDirs(pruneArgs4);
+assert(fs.existsSync(path.join(pruneRoot4, "codex-hud-codex.d", "0.139.0-beta.2")));
+assert(!fs.existsSync(path.join(pruneRoot4, "codex-hud-codex.d", "0.139.0-beta.1")));
+assert(!fs.existsSync(path.join(pruneRoot4, "codex-hud-codex.d", "0.139.0-alpha.1")));
 
 // --- migration: legacy flat payload -> versioned layout ---
 const migrateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-migrate-test-"));
