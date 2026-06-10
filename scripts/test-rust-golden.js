@@ -54,7 +54,20 @@ function build(binary) {
     console.error("--render-json failed: " + (r.stderr || ""));
     process.exit(1);
   }
-  const outputs = r.stdout.trim().split("\n").map((line) => JSON.parse(line));
+  const raw = r.stdout.trim();
+  if (!raw) {
+    console.error("--render-json returned no output");
+    process.exit(1);
+  }
+  const outputs = raw.split("\n").map((line, i) => {
+    try {
+      return JSON.parse(line);
+    } catch (err) {
+      console.error(`invalid JSON on output line ${i + 1}: ${JSON.stringify(line)}`);
+      console.error(String(err));
+      process.exit(1);
+    }
+  });
   if (outputs.length !== requests.length) {
     console.error(`expected ${requests.length} outputs, got ${outputs.length}`);
     process.exit(1);

@@ -351,13 +351,21 @@ pub fn latest_usage(codex_home: &Path) -> Value {
                     } else {
                         Value::Null
                     };
-                    latest_context = json!({
-                        "usedPercent": percent_from_tokens(last_usage, info.get("model_context_window")),
+                    let used_percent =
+                        percent_from_tokens(last_usage, info.get("model_context_window"));
+                    let candidate = json!({
+                        "usedPercent": used_percent,
                         "usedTokens": used_tokens,
                         "windowTokens": window_tokens,
                         "timestamp": token_count.get("timestamp").cloned().unwrap_or(Value::Null),
                     });
-                    source_file = Value::String(file.display().to_string());
+                    if !candidate["usedPercent"].is_null()
+                        || !candidate["usedTokens"].is_null()
+                        || !candidate["windowTokens"].is_null()
+                    {
+                        latest_context = candidate;
+                        source_file = Value::String(file.display().to_string());
+                    }
                 }
             }
 
@@ -439,6 +447,21 @@ pub fn runtime_info(cwd: &Path) -> Value {
     json!({ "label": "node", "version": command_version("node", &["-v"]) })
 }
 
+fn native_status_items(configs: &hudcfg::Configs) -> Vec<String> {
+    if hudcfg::toml_key_exists(&configs.project_text, "tui", "status_line") {
+        hudcfg::toml_string_array(&configs.project_text, "tui", "status_line")
+    } else {
+        hudcfg::toml_string_array(&configs.user_text, "tui", "status_line")
+    }
+}
+
+fn native_status_colors(configs: &hudcfg::Configs) -> Value {
+    hudcfg::toml_boolean(&configs.project_text, "tui", "status_line_use_colors")
+        .or_else(|| hudcfg::toml_boolean(&configs.user_text, "tui", "status_line_use_colors"))
+        .map(Value::Bool)
+        .unwrap_or(Value::Null)
+}
+
 /// Port of collect(): the full HUD data object.
 pub fn collect() -> Value {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -446,16 +469,12 @@ pub fn collect() -> Value {
     let git = git_info(&cwd);
     let git_root = git.get("root").and_then(|r| r.as_str()).map(PathBuf::from);
     let configs = hudcfg::resolve_config(&codex_home, &cwd, git_root.as_deref());
-    let status_items = hudcfg::toml_string_array(&configs.user_text, "tui", "status_line");
+    let status_items = native_status_items(&configs);
     let hints = project_hints(&cwd, git_root.as_deref());
     let hud = hudcfg::load_hud_config(&codex_home, &cwd, git_root.as_deref());
 
     let opt_string = |v: Option<String>| v.map(Value::String).unwrap_or(Value::Null);
-    let status_colors =
-        match hudcfg::toml_boolean(&configs.user_text, "tui", "status_line_use_colors") {
-            Some(b) => Value::Bool(b),
-            None => Value::Null,
-        };
+    let status_colors = native_status_colors(&configs);
 
     json!({
         "codexHudVersion": VERSION,
@@ -485,4 +504,76 @@ pub fn collect() -> Value {
             "note": "Usage is parsed from the latest Codex rollout JSONL. Codex's native TUI status line remains authoritative.",
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("codex-hud-{name}-{unique}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn latest_usage_skips_all_null_context_samples() {
+        let codex_home = temp_dir("latest-usage");
+        let session_dir = codex_home.join("sessions/2026/06/10");
+        fs::create_dir_all(&session_dir).expect("create session dir");
+        let rollout = session_dir.join("rollout-2026-06-10T00-00-00-test.jsonl");
+        let real_context = json!({
+            "timestamp": "2026-06-10T00:00:00.000Z",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "last_token_usage": { "total_tokens": 250 },
+                    "model_context_window": 1000
+                },
+                "rate_limits": {}
+            }
+        });
+        let all_null_context = json!({
+            "timestamp": "2026-06-10T00:01:00.000Z",
+            "payload": {
+                "type": "token_count",
+                "info": {},
+                "rate_limits": {}
+            }
+        });
+        fs::write(
+            &rollout,
+            format!("{}\n{}\n", real_context, all_null_context),
+        )
+        .expect("write rollout");
+
+        let usage = latest_usage(&codex_home);
+        assert_eq!(usage["context"]["usedTokens"], json!(250));
+        assert_eq!(usage["context"]["windowTokens"], json!(1000));
+        assert_eq!(
+            usage["sourceFile"],
+            Value::String(rollout.display().to_string())
+        );
+
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
+    }
+
+    #[test]
+    fn native_status_settings_prefer_project_and_preserve_empty_arrays() {
+        let configs = hudcfg::Configs {
+            user_config: PathBuf::from("user-config.toml"),
+            project_config: Some(PathBuf::from("project-config.toml")),
+            user_text: "[tui]\nstatus_line = [\"model\"]\nstatus_line_use_colors = true\n".into(),
+            project_text: "[tui]\nstatus_line = []\nstatus_line_use_colors = false\n".into(),
+        };
+
+        assert!(native_status_items(&configs).is_empty());
+        assert_eq!(native_status_colors(&configs), Value::Bool(false));
+    }
 }

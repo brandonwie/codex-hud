@@ -33,12 +33,31 @@ pub fn js_number(value: Option<&Value>) -> f64 {
             let t = s.trim();
             if t.is_empty() {
                 0.0
+            } else if let Some(n) = parse_prefixed_integer(t) {
+                n
             } else {
                 t.parse::<f64>().unwrap_or(f64::NAN)
             }
         }
         Some(_) => f64::NAN,
     }
+}
+
+fn parse_prefixed_integer(text: &str) -> Option<f64> {
+    let (digits, radix) = [
+        ("0x", 16),
+        ("0X", 16),
+        ("0b", 2),
+        ("0B", 2),
+        ("0o", 8),
+        ("0O", 8),
+    ]
+    .iter()
+    .find_map(|(prefix, radix)| text.strip_prefix(prefix).map(|digits| (digits, *radix)))?;
+    if digits.is_empty() {
+        return None;
+    }
+    u64::from_str_radix(digits, radix).ok().map(|n| n as f64)
 }
 
 /// JS `Number.isFinite(value)` (NO coercion: only actual numbers pass).
@@ -85,4 +104,18 @@ pub fn number_value(x: f64) -> Value {
 /// Object member access treating non-objects as `undefined` (JS `a && a.b` chains).
 pub fn get<'a>(value: Option<&'a Value>, key: &str) -> Option<&'a Value> {
     value.and_then(|v| v.get(key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn js_number_accepts_js_prefixed_integer_strings() {
+        assert_eq!(js_number(Some(&Value::String("0x10".into()))), 16.0);
+        assert_eq!(js_number(Some(&Value::String("0b11".into()))), 3.0);
+        assert_eq!(js_number(Some(&Value::String("0o10".into()))), 8.0);
+        assert_eq!(js_number(Some(&Value::String("  0Xf  ".into()))), 15.0);
+        assert!(js_number(Some(&Value::String("+0x10".into()))).is_nan());
+    }
 }

@@ -94,6 +94,21 @@ pub fn toml_section(config: &str, section: &str) -> Option<String> {
     Some(body.join("\n"))
 }
 
+pub fn toml_key_exists(config: &str, section: &str, key: &str) -> bool {
+    let Some(body) = toml_section(config, section) else {
+        return false;
+    };
+    for line in body.split('\n') {
+        if let Some(rest) = line.strip_prefix(key) {
+            let rest = rest.trim_start();
+            if rest.starts_with('=') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Port of tomlBoolean(): `^key\s*=\s*(true|false)` inside a section.
 pub fn toml_boolean(config: &str, section: &str, key: &str) -> Option<bool> {
     let body = toml_section(config, section)?;
@@ -262,6 +277,24 @@ fn load_one_toml_file(path: &Path) -> LoadedToml {
     }
 }
 
+fn object_section<'a>(
+    raw_map: &'a Map<String, Value>,
+    key: &str,
+    warnings: &mut Vec<String>,
+    source: &str,
+) -> Option<&'a Map<String, Value>> {
+    let Some(value) = raw_map.get(key) else {
+        return None;
+    };
+    match value.as_object() {
+        Some(map) => Some(map),
+        None => {
+            warnings.push(format!("{}: {} must be an object; ignored", source, key));
+            None
+        }
+    }
+}
+
 /// Port of validateAndCoerce(): never fails; drops unknown/ill-typed entries
 /// and records a note per dropped entry.
 pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str) -> Value {
@@ -318,7 +351,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
             note(warnings, "space must be a boolean; ignored".to_string());
         }
     }
-    if let Some(separators) = raw_map.get("separators").and_then(|v| v.as_object()) {
+    if let Some(separators) = object_section(raw_map, "separators", warnings, source) {
         let existing = out.entry("separators").or_insert_with(|| json!({}));
         let existing_map = existing.as_object_mut().unwrap();
         for (key, value) in separators {
@@ -333,7 +366,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         }
     }
 
-    if let Some(labels) = raw_map.get("labels").and_then(|v| v.as_object()) {
+    if let Some(labels) = object_section(raw_map, "labels", warnings, source) {
         let mut coerced = Map::new();
         for (key, value) in labels {
             match value {
@@ -359,7 +392,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         out.insert("labels".into(), Value::Object(coerced));
     }
 
-    if let Some(colors) = raw_map.get("colors").and_then(|v| v.as_object()) {
+    if let Some(colors) = object_section(raw_map, "colors", warnings, source) {
         let mut coerced = Map::new();
         for (key, value) in colors {
             let valid_number = value
@@ -381,7 +414,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         out.insert("colors".into(), Value::Object(coerced));
     }
 
-    if let Some(thresholds) = raw_map.get("thresholds").and_then(|v| v.as_object()) {
+    if let Some(thresholds) = object_section(raw_map, "thresholds", warnings, source) {
         let mut groups = Map::new();
         for group in ["percent", "pace"] {
             let Some(group_map) = thresholds.get(group).and_then(|v| v.as_object()) else {
@@ -409,7 +442,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         out.insert("thresholds".into(), Value::Object(groups));
     }
 
-    if let Some(format) = raw_map.get("format").and_then(|v| v.as_object()) {
+    if let Some(format) = object_section(raw_map, "format", warnings, source) {
         let mut coerced = Map::new();
         for key in ["percentRound", "tokenUnits", "tokenParts", "showPace"] {
             match format.get(key) {
@@ -532,3 +565,41 @@ tokenUnits = true     # false -> raw integers (no k/M)
 tokenParts = true     # false -> total only, hide (I:.. O:.. C:..)
 showPace = true       # false -> hide the pace % in 5h/7d
 "##;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn toml_key_exists_distinguishes_empty_array_from_absent_key() {
+        let config = "[tui]\nstatus_line = []\nstatus_line_use_colors = false\n";
+        assert!(toml_key_exists(config, "tui", "status_line"));
+        assert!(!toml_key_exists(config, "tui", "status_line_missing"));
+        assert!(toml_string_array(config, "tui", "status_line").is_empty());
+    }
+
+    #[test]
+    fn validate_and_coerce_warns_for_wrong_type_object_sections() {
+        let raw = json!({
+            "separators": true,
+            "labels": [],
+            "colors": "blue",
+            "thresholds": 7,
+            "format": false
+        });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let map = coerced.as_object().expect("coerced config object");
+
+        for key in ["separators", "labels", "colors", "thresholds", "format"] {
+            assert!(!map.contains_key(key));
+            assert!(
+                warnings
+                    .iter()
+                    .any(|warning| warning
+                        == &format!("test.toml: {} must be an object; ignored", key)),
+                "missing warning for {key}"
+            );
+        }
+    }
+}

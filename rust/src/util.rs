@@ -1,9 +1,15 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_TIMEOUT_MS: u64 = 1200;
+
+fn cleanup_child(child: &mut Child, reader: std::thread::JoinHandle<String>) {
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = reader.join();
+}
 
 /// Port of run(): spawn, capture stdout, kill on timeout. Returns None on
 /// spawn error / non-zero exit / timeout, else trimmed stdout.
@@ -30,14 +36,15 @@ pub fn run(command: &str, args: &[&str], cwd: Option<&Path>, timeout_ms: u64) ->
             Ok(Some(status)) => break status,
             Ok(None) => {
                 if start.elapsed() >= Duration::from_millis(timeout_ms) {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    let _ = reader.join();
+                    cleanup_child(&mut child, reader);
                     return None;
                 }
                 std::thread::sleep(Duration::from_millis(5));
             }
-            Err(_) => return None,
+            Err(_) => {
+                cleanup_child(&mut child, reader);
+                return None;
+            }
         }
     };
     let out = reader.join().ok()?;
@@ -164,4 +171,14 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
     (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_returns_none_for_missing_command() {
+        assert!(run("__codex_hud_missing_command__", &[], None, 50).is_none());
+    }
 }
