@@ -6,6 +6,7 @@ node_modules/
 *.log
 coverage/
 dist/
+rust/target/
 docs
 docs/
 .claude/

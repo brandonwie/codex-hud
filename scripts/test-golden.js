@@ -211,4 +211,10 @@ function main() {
   process.exit(1);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+// Exported for scripts/test-rust-golden.js so the Rust parity harness drives
+// the byte-identical fixture set (single source of truth for golden cases).
+module.exports = { LINE_CASES, TEXT_CASES, makeData, esc, splitBlocks, GOLDEN };
