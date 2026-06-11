@@ -170,6 +170,10 @@ showPace = true     # false -> 5h/7d'deki tempo %'sini gizle
 
 Tam çözümlenmiş seçenek setini görmek için `codex-hud --print-config` çalıştırın.
 
+## Platform Desteği
+
+Desteklenen launcher akışı macOS ve Linux shell ortamlarını hedefler. Yollar Linux dosya sistemi üzerinden çözümlendiğinde WSL çalışabilir; yönetilen launcher'lar Bash betikleri olduğu için yerel Windows shell'leri desteklenmez.
+
 ## HUD Başlatıcısı (Stok Delegasyonu — Varsayılan)
 
 `npm run install:launcher`, `~/.local/bin/codex-hud-tui` dosyasını yazar: gerçek (stok) Codex kurulumunuzu bulup `exec -a codex` ile çalıştıran küçük bir başlatıcı. Böylece Herdr gibi terminal entegrasyonları paneli Codex oturumu olarak tanımaya devam eder. Stok ikili dosyanın yolu kurulum sırasında kaydedilir; yol kaybolursa `PATH` üzerinde Codex'i yeniden keşfeden bir çalışma zamanı yedeği devreye girer (HUD tarafından yönetilen tüm girdiler atlandığından başlatıcı asla kendisini özyinelemeli çalıştıramaz).
@@ -206,6 +210,10 @@ status: healthy
 ```
 
 Yalnızca etkin giriş zinciri bozulduğunda sıfırdan farklı bir kodla çıkar — oluşturucu tarafındaki bir bozulma, sağlıklı (healthy) durumu asla değiştirmez. Oluşturucu için yeniden derleme önerisi sürüm (release) ayrıntı düzeyinde çalışır: derleme zamanındaki `codex-hud-rs` sürümünü `package.json` ile karşılaştırır; bu yüzden her commit'te değil, yalnızca bir release sürüm numarasını ilerlettiğinde tetiklenir.
+
+## Sorun giderme
+
+Önce `npm run doctor` çalıştırın. Shim eksikse, stok Codex bulunamıyorsa, yamalı runtime eskiyse, yapılandırma uygulanmıyorsa veya Rust renderer yoksa önce Doctor'ın işaret ettiği zincir halkasını düzeltin, ardından ilgili kurulum veya build komutunu yeniden çalıştırın.
 
 ### Eski codex-hud kurulumundan geçiş
 
@@ -298,6 +306,10 @@ codex-hud/
 ## Katkıda Bulunma
 
 Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. HUD çıktısını değiştirdikten sonra `npm test` ve Codex eklenti doğrulayıcısını çalıştırın. Manifest sürümünü değiştirdikten veya release aldıktan sonra manuel test için yerel eklenti önbelleğini `codex plugin add codex-hud@codex-hud` ile yenileyin, ardından güncellenmiş skill metadatasının yüklenmesi için yeni bir Codex thread başlatın.
+
+### Bakımcı betikleri
+
+Yaygın bakım komutları: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version` ve `npm run vendor:toml`.
 
 ## Lisans
 

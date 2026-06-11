@@ -855,3 +855,65 @@ pub fn emit_hud_warnings(data: &Value) {
     };
     eprintln!("codex-hud: {}{}", first, extra);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn format_counts_reports_clean_for_missing_or_empty_counts() {
+        assert_eq!(format_counts(None), "clean");
+        assert_eq!(format_counts(Some(&json!({}))), "clean");
+        assert_eq!(
+            format_counts(Some(&json!({
+                "modified": 0,
+                "added": null,
+                "deleted": false,
+                "renamed": "",
+                "untracked": 0,
+                "other": 0
+            }))),
+            "clean"
+        );
+    }
+
+    #[test]
+    fn format_counts_preserves_segment_order_and_js_numeric_coercion() {
+        assert_eq!(
+            format_counts(Some(&json!({
+                "modified": 2,
+                "added": 0,
+                "deleted": 1,
+                "renamed": null,
+                "untracked": "3",
+                "other": false
+            }))),
+            "m:2 d:1 u:3"
+        );
+    }
+
+    #[test]
+    fn status_model_strips_gpt_prefix_and_normalizes_reasoning() {
+        let data = json!({
+            "config": {
+                "model": "gpt-5.5",
+                "reasoning": "x high"
+            }
+        });
+
+        assert_eq!(status_model(&data), Some("5.5xhigh".to_string()));
+    }
+
+    #[test]
+    fn status_model_falls_back_to_codex_version_when_model_missing() {
+        let data = json!({
+            "codexVersion": "codex-cli 0.139.0",
+            "config": {
+                "reasoning": "medium"
+            }
+        });
+
+        assert_eq!(status_model(&data), Some("codex-cliMed".to_string()));
+    }
+}

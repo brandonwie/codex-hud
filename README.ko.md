@@ -170,6 +170,10 @@ showPace = true     # false -> 5h/7d의 pace % 숨김
 
 해석된 전체 옵션 집합을 보려면 `codex-hud --print-config`를 실행하세요.
 
+## 플랫폼 지원
+
+지원되는 런처 흐름은 macOS와 Linux 셸을 대상으로 합니다. WSL은 경로가 Linux 파일시스템을 통해 해석될 때 동작할 수 있지만, 관리형 런처가 Bash 스크립트이므로 네이티브 Windows 셸은 지원하지 않습니다.
+
 ## HUD 런처 (스톡 위임 — 기본값)
 
 `npm run install:launcher`는 `~/.local/bin/codex-hud-tui`를 설치합니다. 이 작은 런처는 실제(스톡) Codex 설치를 찾아 `exec -a codex`로 실행하므로, Herdr 같은 터미널 통합이 해당 창을 계속 Codex 세션으로 인식합니다. 스톡 바이너리 경로는 설치 시점에 기록되며, 경로가 사라지면 `PATH`에서 Codex를 다시 탐색하는 런타임 폴백이 동작합니다(HUD가 관리하는 항목은 모두 건너뛰므로 런처가 자기 자신을 재귀 실행할 수 없습니다).
@@ -206,6 +210,10 @@ status: healthy
 ```
 
 활성 진입 체인이 손상된 경우에만 0이 아닌 코드로 종료합니다 — 렌더러 상태 저하만으로 healthy 상태가 뒤집히는 일은 없습니다. 렌더러 재빌드 권고는 릴리스 단위로 동작합니다. 컴파일 시점의 `codex-hud-rs` 버전을 `package.json`과 비교하므로, 릴리스로 버전이 올라갈 때 발동하며 커밋마다 발동하지는 않습니다.
+
+## 문제 해결
+
+먼저 `npm run doctor`를 실행하세요. shim이 없거나, 스톡 Codex를 찾지 못하거나, 패치된 런타임이 오래되었거나, 설정이 적용되지 않거나, Rust 렌더러가 없으면 Doctor가 지적한 체인 구간을 먼저 고친 뒤 해당 설치 또는 빌드 명령을 다시 실행하세요.
 
 ### 이전 codex-hud 설치에서 마이그레이션
 
@@ -298,6 +306,10 @@ codex-hud/
 ## 기여하기
 
 이슈와 풀 리퀘스트를 환영합니다. HUD 출력을 변경한 후에는 `npm test`와 Codex 플러그인 검증기를 실행하세요. 매니페스트 버전을 변경하거나 릴리스한 후에는 수동 테스트를 위해 `codex plugin add codex-hud@codex-hud`로 로컬 플러그인 캐시를 새로고침하고, 업데이트된 스킬 메타데이터를 불러오도록 새 Codex 스레드를 시작하세요.
+
+### 메인테이너 스크립트
+
+주요 메인테이너 명령: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`, `npm run vendor:toml`.
 
 ## 라이선스
 

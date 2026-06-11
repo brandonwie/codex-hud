@@ -170,6 +170,10 @@ showPace = true     # false -> 隐藏 5h/7d 中的 pace %
 
 运行 `codex-hud --print-config` 以查看完整解析后的选项集。
 
+## 平台支持
+
+受支持的 launcher 流程面向 macOS 和 Linux shell。WSL 在路径通过 Linux 文件系统解析时可能可用；不支持原生 Windows shell，因为托管 launcher 是 Bash 脚本。
+
 ## HUD 启动器(委派原生 Codex — 默认模式)
 
 `npm run install:launcher` 会写入 `~/.local/bin/codex-hud-tui`:一个小型启动器,它找到你真实(原生)的 Codex 安装并用 `exec -a codex` 执行,因此 Herdr 等终端集成仍会把该窗格识别为 Codex 会话。原生二进制的路径在安装时写入,若路径失效则有运行时回退逻辑在 `PATH` 上重新发现 Codex(会跳过所有 HUD 管理的条目,因此启动器永远不会递归执行自身)。
@@ -206,6 +210,10 @@ status: healthy
 ```
 
 仅当活动入口链损坏时才以非零码退出 — 渲染器退化绝不会把 healthy 状态翻转为失败。渲染器的重建建议按发布粒度工作:它把编译进 `codex-hud-rs` 的版本与 `package.json` 进行比较,因此只在发布推进版本号时才会触发,而不是每次提交都触发。
+
+## 故障排除
+
+先运行 `npm run doctor`。如果 shim 缺失、找不到原生 Codex、已 patch 的 runtime 过期、配置未生效，或缺少 Rust renderer，请先修复 Doctor 指出的链路节点，然后重新运行对应的安装或构建命令。
 
 ### 从旧版 codex-hud 安装迁移
 
@@ -298,6 +306,10 @@ codex-hud/
 ## 贡献
 
 欢迎提交 issue 和 pull request。更改 HUD 输出后，请运行 `npm test` 以及 Codex 插件验证器。更改清单版本或发布 release 后，请用 `codex plugin add codex-hud@codex-hud` 刷新本地插件缓存以进行手动测试，然后启动新的 Codex 线程以加载更新后的技能元数据。
+
+### 维护者脚本
+
+常用维护命令：`npm test`、`npm run test:rust`、`npm run check:i18n`、`npm run doctor`、`npm run sync:version` 和 `npm run vendor:toml`。
 
 ## 许可证
 

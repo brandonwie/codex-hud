@@ -110,3 +110,57 @@ pub fn resolve_color_set(colors_cfg: &Value) -> HashMap<String, String> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn resolve_color_rejects_invalid_hex_without_panic() {
+        let fallback = Some("fallback".to_string());
+
+        assert_eq!(
+            resolve_color(Some(&json!("#12xz34")), fallback.clone()),
+            fallback
+        );
+        assert_eq!(
+            resolve_color(Some(&json!("#12345")), Some("fallback".to_string())),
+            Some("fallback".to_string())
+        );
+        assert_eq!(
+            resolve_color(Some(&json!("not-a-color")), Some("fallback".to_string())),
+            Some("fallback".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_color_accepts_palette_numeric_and_hex_inputs() {
+        assert_eq!(
+            resolve_color(Some(&json!("mint")), None),
+            palette("mint").map(str::to_string)
+        );
+        assert_eq!(
+            resolve_color(Some(&json!("45")), None),
+            Some("\x1b[38;5;45m".to_string())
+        );
+        assert_eq!(
+            resolve_color(Some(&json!(203)), None),
+            Some("\x1b[38;5;203m".to_string())
+        );
+        assert_eq!(
+            resolve_color(Some(&json!("#5fafff")), None),
+            Some(format!("\x1b[38;5;{}m", nearest_xterm256(0x5f, 0xaf, 0xff)))
+        );
+    }
+
+    #[test]
+    fn colorize_wraps_only_when_enabled_and_color_present() {
+        assert_eq!(
+            colorize("text", Some("\x1b[38;5;45m"), true),
+            "\x1b[38;5;45mtext\x1b[0m"
+        );
+        assert_eq!(colorize("text", Some("\x1b[38;5;45m"), false), "text");
+        assert_eq!(colorize("text", None, true), "text");
+    }
+}
