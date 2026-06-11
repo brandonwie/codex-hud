@@ -111,6 +111,8 @@ Run `node plugins/codex-hud/scripts/codex-hud.js --line --color` locally to see 
 
 Both the multiline HUD and the compact status line are configurable through an optional `codex-hud.toml`; the Node and Rust renderers read the same `codex-hud.toml` tiers. With no config file you get the defaults shown above; every key is optional and anything you omit inherits the built-in default.
 
+The canonical schema lives in [`spec/config-schema.md`](spec/config-schema.md). This README shows the common options; use the schema when changing parser behavior or validating every supported field.
+
 ```bash
 codex-hud --init-config     # scaffold ~/.codex/codex-hud.toml (--force to overwrite)
 codex-hud --print-config    # print the resolved, merged config as JSON
@@ -170,6 +172,10 @@ showPace = true     # false -> hide the pace % in 5h/7d
 
 Run `codex-hud --print-config` to see the full resolved option set.
 
+## Platform Support
+
+The supported launcher flow targets macOS and Linux shells. WSL can work when paths resolve through the Linux filesystem, but native Windows shells are not supported because the managed launchers are Bash scripts.
+
 ## HUD Launcher (Stock Delegation — Default)
 
 `npm run install:launcher` writes `~/.local/bin/codex-hud-tui`, a small launcher that finds your real (stock) Codex install and executes it with `exec -a codex`, so terminal integrations such as Herdr still recognize the pane as a Codex session. The stock binary's path is baked in at install time, with a runtime fallback that re-discovers Codex on `PATH` (skipping all HUD-managed entries, so the launcher can never recurse into itself).
@@ -206,6 +212,18 @@ status: healthy
 ```
 
 It exits non-zero only when the active entrypoint chain is broken — renderer degradation never flips a healthy status. The renderer rebuild recommendation is release-granularity: it compares the compile-time `codex-hud-rs` version against `package.json`, so it fires when a release moves the version, not on every commit.
+
+## Troubleshooting
+
+Start with `npm run doctor`; it prints the active shim, launcher, stock Codex, renderer, and patched payload state.
+
+| Symptom | Doctor signal | Fix |
+| ------- | ------------- | --- |
+| `codex` does not start after enabling the shim | `codex shim` missing, unmanaged, or points somewhere unexpected | Run `npm run install:launcher -- --make-default`, then `rehash`. If a non-managed shim exists, inspect it before using `--force-shim`. |
+| Exit 127 or "no stock codex found" | `stock codex: not found` or launcher metadata has no usable stock path | Install or repair the stock Codex CLI, then rerun `npm run install:launcher` so the launcher records the real path. |
+| Patched footer disappeared after a Codex update | `patched command` exists but doctor reports stale versions | Rerun `npm run patch:codex`, or switch back to stock delegation with `npm run install:launcher`. |
+| Config changes are ignored | `codex-hud --config-path` does not list the file you edited, or `--print-config` shows defaults | Move the config to `$CODEX_HOME/codex-hud.toml`, `./.codex/codex-hud.toml`, or set `$CODEX_HUD_CONFIG` to the exact file. |
+| Rust renderer is not used | `renderer` reports Node fallback, missing binary, or failed health check | Run `npm run build:rust`, then reinstall the launcher or rerun the patched flow that should use the Rust renderer. |
 
 ### Migrating from an older codex-hud install
 
@@ -299,6 +317,25 @@ codex-hud/
 ## Contributing
 
 Issues and pull requests are welcome. After changing HUD output, run `npm test` and the Codex plugin validator. After changing the manifest version or cutting a release, refresh the local plugin cache for manual testing with `codex plugin add codex-hud@codex-hud`, then start a new Codex thread so the refreshed skill metadata is loaded.
+
+### Maintainer Scripts
+
+| Command | Purpose |
+| ------- | ------- |
+| `npm test` | Run the Node/config/installer/version/golden test suite, including version-sync checks. |
+| `npm run test:rust` | Build `codex-hud-rs` and run Rust golden, parsing, and CLI parity tests. |
+| `npm run hud` | Run the Node HUD renderer directly. |
+| `npm run build:rust` | Build the release Rust renderer. |
+| `npm run measure:rust` | Compare renderer timing for local performance checks. |
+| `npm run golden:update` | Refresh golden fixtures after an intentional output grammar change. |
+| `npm run sync:version` | Fan out `package.json` version changes to lockfile, plugin manifest, Rust, and runtime constants. |
+| `npm run vendor:toml` | Regenerate the vendored TOML parser. |
+| `npm run install:launcher` | Install the stock-delegating HUD launcher. |
+| `npm run patch:codex` | Build and install the experimental patched Codex footer payload. |
+| `npm run patch:codex:dry-run` | Preview the patched Codex build/install flow. |
+| `npm run doctor` | Print launch-chain diagnostics. |
+| `npm run release:dry-run` | Preview semantic-release output. |
+| `npm run release` | Run semantic-release in CI. |
 
 ## License
 
