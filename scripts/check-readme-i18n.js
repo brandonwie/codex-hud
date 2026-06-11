@@ -4,7 +4,9 @@
 const fs = require("fs");
 const path = require("path");
 
-const repoRoot = path.resolve(__dirname, "..");
+const repoRoot = process.env.CODEX_HUD_README_ROOT
+  ? path.resolve(process.env.CODEX_HUD_README_ROOT)
+  : path.resolve(__dirname, "..");
 const sourceFile = "README.md";
 const localizedPattern = /^README\.[A-Za-z]{2}(?:-[A-Z]{2})?\.md$/;
 
@@ -87,8 +89,20 @@ function firstDifference(left, right) {
 }
 
 function compareReadme(source, targetFile) {
-  const target = skeletonFor(targetFile);
   const problems = [];
+  let target;
+
+  try {
+    target = skeletonFor(targetFile);
+  } catch (error) {
+    problems.push(
+      [
+        "unable to parse localized README skeleton",
+        `  ${targetFile}: ${error && error.message ? error.message : String(error)}`,
+      ].join("\n"),
+    );
+    return problems;
+  }
 
   const headingDiff = firstDifference(source.headingLevels, target.headingLevels);
   if (headingDiff !== -1) {
