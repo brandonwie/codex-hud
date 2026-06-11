@@ -170,6 +170,10 @@ showPace = true     # false -> ẩn % tốc độ trong 5h/7d
 
 Chạy `codex-hud --print-config` để xem toàn bộ tập tùy chọn đã được phân giải.
 
+## Hỗ trợ nền tảng
+
+Luồng launcher được hỗ trợ nhắm tới shell macOS và Linux. WSL có thể hoạt động khi đường dẫn được phân giải qua hệ thống tệp Linux; shell Windows gốc không được hỗ trợ vì các launcher được quản lý là script Bash.
+
 ## Launcher HUD (ủy quyền cho Codex gốc — mặc định)
 
 `npm run install:launcher` ghi `~/.local/bin/codex-hud-tui`, một launcher nhỏ tìm bản cài Codex thật (gốc) của bạn và thực thi nó bằng `exec -a codex`, nhờ đó các tích hợp terminal như Herdr vẫn nhận diện pane là một phiên Codex. Đường dẫn nhị phân gốc được ghi lại lúc cài đặt, kèm cơ chế dự phòng lúc chạy sẽ tìm lại Codex trên `PATH` (bỏ qua mọi mục do HUD quản lý, nên launcher không bao giờ tự gọi đệ quy chính nó).
@@ -206,6 +210,10 @@ status: healthy
 ```
 
 Chỉ thoát với mã khác 0 khi chuỗi điểm vào đang hoạt động bị hỏng — suy giảm ở bộ render không bao giờ làm đổi trạng thái healthy. Khuyến nghị build lại bộ render hoạt động ở mức release: nó so sánh phiên bản `codex-hud-rs` lúc biên dịch với `package.json`, nên chỉ kích hoạt khi một bản release thay đổi phiên bản, chứ không phải ở mỗi commit.
+
+## Khắc phục sự cố
+
+Bắt đầu bằng `npm run doctor`. Nếu thiếu shim, không tìm thấy Codex gốc, runtime đã patch bị cũ, cấu hình không được áp dụng, hoặc thiếu Rust renderer, hãy sửa mắt xích mà Doctor báo trước rồi chạy lại lệnh cài đặt hoặc build tương ứng.
 
 ### Di chuyển từ bản cài codex-hud cũ
 
@@ -298,6 +306,10 @@ codex-hud/
 ## Đóng góp
 
 Hoan nghênh các issue và pull request. Sau khi thay đổi đầu ra HUD, hãy chạy `npm test` và trình kiểm tra plugin Codex. Sau khi thay đổi phiên bản manifest hoặc phát hành release, hãy làm mới cache plugin cục bộ để kiểm thử thủ công bằng `codex plugin add codex-hud@codex-hud`, rồi mở một thread Codex mới để tải metadata skill đã cập nhật.
+
+### Script bảo trì
+
+Các lệnh bảo trì thường dùng: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version` và `npm run vendor:toml`.
 
 ## Giấy phép
 

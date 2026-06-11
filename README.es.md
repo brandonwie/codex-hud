@@ -170,6 +170,10 @@ showPace = true     # false -> oculta el % de ritmo en 5h/7d
 
 Ejecuta `codex-hud --print-config` para ver el conjunto completo de opciones resueltas.
 
+## Compatibilidad de plataformas
+
+El flujo de launcher compatible está pensado para shells de macOS y Linux. WSL puede funcionar cuando las rutas se resuelven dentro del sistema de archivos Linux; los shells nativos de Windows no son compatibles porque los launchers administrados son scripts Bash.
+
 ## Lanzador HUD (delegación al Codex original — predeterminado)
 
 `npm run install:launcher` escribe `~/.local/bin/codex-hud-tui`, un pequeño lanzador que localiza tu instalación real (original) de Codex y la ejecuta con `exec -a codex`, de modo que integraciones de terminal como Herdr siguen reconociendo el panel como una sesión de Codex. La ruta del binario original se fija en el momento de la instalación, con un mecanismo de respaldo en tiempo de ejecución que vuelve a buscar Codex en el `PATH` (omitiendo todas las entradas gestionadas por el HUD, así el lanzador nunca puede ejecutarse a sí mismo de forma recursiva).
@@ -206,6 +210,10 @@ status: healthy
 ```
 
 Solo devuelve un código distinto de cero cuando la cadena de entrada activa está rota — una degradación del renderizador nunca convierte en no sano un estado sano. La recomendación de recompilar el renderizador tiene granularidad de release: compara la versión de `codex-hud-rs` fijada en tiempo de compilación con la de `package.json`, de modo que se activa cuando una release cambia la versión, no en cada commit.
+
+## Solución de problemas
+
+Empieza con `npm run doctor`. Si falta el shim, no se encuentra el Codex original, el runtime parcheado está obsoleto, la configuración no se aplica o falta el renderer Rust, repara primero el eslabón que Doctor señale y vuelve a ejecutar el comando de instalación o compilación correspondiente.
 
 ### Migración desde una instalación anterior de codex-hud
 
@@ -298,6 +306,10 @@ codex-hud/
 ## Contribuir
 
 Los issues y los pull requests son bienvenidos. Después de cambiar la salida del HUD, ejecuta `npm test` y el validador de plugins de Codex. Después de cambiar la versión del manifiesto o publicar una release, actualiza la caché local del plugin para pruebas manuales con `codex plugin add codex-hud@codex-hud` e inicia un nuevo hilo de Codex para cargar los metadatos actualizados de la skill.
+
+### Scripts de mantenimiento
+
+Comandos habituales de mantenimiento: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version` y `npm run vendor:toml`.
 
 ## Licencia
 
