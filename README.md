@@ -220,7 +220,7 @@ Start with `npm run doctor`; it prints the active shim, launcher, stock Codex, r
 | Symptom | Doctor signal | Fix |
 | ------- | ------------- | --- |
 | `codex` does not start after enabling the shim | `codex shim` missing, unmanaged, or points somewhere unexpected | Run `npm run install:launcher -- --make-default`, then `rehash`. If a non-managed shim exists, inspect it before using `--force-shim`. |
-| Exit 127 or "no stock codex found" | `stock codex: (missing)` or launcher metadata has no usable stock path | Install or repair the stock Codex CLI, then rerun `npm run install:launcher` so the launcher records the real path. |
+| Exit 127 or "no stock codex found" | `stock codex: not found` or launcher metadata has no usable stock path | Install or repair the stock Codex CLI, then rerun `npm run install:launcher` so the launcher records the real path. |
 | Patched footer disappeared after a Codex update | `patched command` exists but doctor reports stale versions | Rerun `npm run patch:codex`, or switch back to stock delegation with `npm run install:launcher`. |
 | Config changes are ignored | `codex-hud --config-path` does not list the file you edited, or `--print-config` shows defaults | Move the config to `$CODEX_HOME/codex-hud.toml`, `./.codex/codex-hud.toml`, or set `$CODEX_HUD_CONFIG` to the exact file. |
 | Rust renderer is not used | `renderer` reports Node fallback, missing binary, or failed health check | Run `npm run build:rust`, then reinstall the launcher or rerun the patched flow that should use the Rust renderer. |
