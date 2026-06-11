@@ -98,7 +98,7 @@ function compareReadme(source, targetFile) {
     problems.push(
       [
         "unable to parse localized README skeleton",
-        `  ${targetFile}: ${error && error.message ? error.message : String(error)}`,
+        `  ${error && error.message ? error.message : String(error)}`,
       ].join("\n"),
     );
     return problems;

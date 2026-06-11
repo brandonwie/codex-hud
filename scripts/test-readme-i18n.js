@@ -50,6 +50,7 @@ try {
   assert.strictEqual(result.status, 1);
   assert.match(output, /README\.de\.md/);
   assert.match(output, /unclosed code fence/);
+  assert.doesNotMatch(output, /README\.de\.md: README\.de\.md:/);
   assert.match(output, /README\.zh-TW\.md/);
   assert.match(output, /heading skeleton differs/);
 } finally {
