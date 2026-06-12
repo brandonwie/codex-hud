@@ -166,14 +166,14 @@ crit = 90
 [format]
 tokenParts = true   # false -> total only, hide (I:.. O:.. C:..)
 showPace = true     # false -> hide the pace % in 5h/7d
-modelStyle = "full"
-effortShort = false
+modelStyle = "full" # "version-only" -> gpt-5.5 ではなく 5.5
+effortShort = false # true -> xhigh ではなく xh
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "🤖"
 paceFastPrefix = "🔥"
 ```
 
-`codex-hud --print-config` を実行すると、解決された全オプションセットを確認できます。
+ペースマーカーは使用量を均等な消費ペースと比較します。slow は `thresholds.pace.crit` を超えてペースより遅れている状態、fast は `thresholds.pace.crit` を超えてペースより進んでいる状態で、その中間帯は normal です。`codex-hud --print-config` を実行すると、解決された全オプションセットを確認できます。
 
 ## プラットフォームサポート
 

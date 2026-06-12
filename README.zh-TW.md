@@ -166,14 +166,14 @@ crit = 90
 [format]
 tokenParts = true   # false -> 僅顯示總計，隱藏 (I:.. O:.. C:..)
 showPace = true     # false -> hide the pace % in 5h/7d
-modelStyle = "full"
-effortShort = false
+modelStyle = "full" # "version-only" -> 5.5 而不是 gpt-5.5
+effortShort = false # true -> xh 而不是 xhigh
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "🤖"
 paceFastPrefix = "🔥"
 ```
 
-執行 `codex-hud --print-config` 可查看完整解析後的選項集合。
+節奏標記會將用量與均勻消耗速率比較：slow 表示比節奏落後超過 `thresholds.pace.crit`，fast 表示比節奏超前超過 `thresholds.pace.crit`，中間區間為 normal。執行 `codex-hud --print-config` 可查看完整解析後的選項集合。
 
 ## 平台支援
 

@@ -166,14 +166,14 @@ crit = 90
 [format]
 tokenParts = true   # false -> 합계만, (I:.. O:.. C:..) 숨김
 showPace = true     # false -> hide the pace % in 5h/7d
-modelStyle = "full"
-effortShort = false
+modelStyle = "full" # "version-only" -> gpt-5.5 대신 5.5
+effortShort = false # true -> xhigh 대신 xh
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "🤖"
 paceFastPrefix = "🔥"
 ```
 
-해석된 전체 옵션 집합을 보려면 `codex-hud --print-config`를 실행하세요.
+페이스 표시는 사용량을 균등 소모 속도와 비교합니다. slow는 `thresholds.pace.crit`보다 더 뒤처진 상태, fast는 `thresholds.pace.crit`보다 더 앞선 상태, 그 사이 구간은 normal입니다. 해석된 전체 옵션 집합을 보려면 `codex-hud --print-config`를 실행하세요.
 
 ## 플랫폼 지원
 

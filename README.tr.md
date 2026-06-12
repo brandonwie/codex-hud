@@ -166,14 +166,14 @@ crit = 90
 [format]
 tokenParts = true   # false -> yalnızca toplam, (I:.. O:.. C:..) gizle
 showPace = true     # false -> hide the pace % in 5h/7d
-modelStyle = "full"
-effortShort = false
+modelStyle = "full" # "version-only" -> gpt-5.5 yerine 5.5
+effortShort = false # true -> xhigh yerine xh
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "🤖"
 paceFastPrefix = "🔥"
 ```
 
-Tam çözümlenmiş seçenek setini görmek için `codex-hud --print-config` çalıştırın.
+Pace işaretleri kullanımı eşit tüketim hızıyla karşılaştırır: slow, `thresholds.pace.crit` değerinden fazla geride kalmayı; fast, `thresholds.pace.crit` değerinden fazla önde olmayı; orta bant ise normal durumu gösterir. Tam çözümlenmiş seçenek setini görmek için `codex-hud --print-config` çalıştırın.
 
 ## Platform Desteği
 

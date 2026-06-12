@@ -166,14 +166,14 @@ crit = 90
 [format]
 tokenParts = true   # false -> только итог, скрыть (I:.. O:.. C:..)
 showPace = true     # false -> hide the pace % in 5h/7d
-modelStyle = "full"
-effortShort = false
+modelStyle = "full" # "version-only" -> 5.5 вместо gpt-5.5
+effortShort = false # true -> xh вместо xhigh
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "🤖"
 paceFastPrefix = "🔥"
 ```
 
-Запустите `codex-hud --print-config`, чтобы увидеть полный итоговый набор параметров.
+Маркеры темпа сравнивают использование с равномерной скоростью расхода: slow означает отставание от темпа более чем на `thresholds.pace.crit`, fast означает опережение более чем на `thresholds.pace.crit`, а средний диапазон считается normal. Запустите `codex-hud --print-config`, чтобы увидеть полный итоговый набор параметров.
 
 ## Поддержка платформ
 

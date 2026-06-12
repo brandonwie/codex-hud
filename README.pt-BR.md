@@ -166,14 +166,14 @@ crit = 90
 [format]
 tokenParts = true   # false -> apenas total, oculta (I:.. O:.. C:..)
 showPace = true     # false -> hide the pace % in 5h/7d
-modelStyle = "full"
-effortShort = false
+modelStyle = "full" # "version-only" -> 5.5 em vez de gpt-5.5
+effortShort = false # true -> xh em vez de xhigh
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "🤖"
 paceFastPrefix = "🔥"
 ```
 
-Execute `codex-hud --print-config` para ver o conjunto completo de opções resolvidas.
+Os marcadores de ritmo comparam o uso com a taxa de consumo uniforme: slow fica mais de `thresholds.pace.crit` atrás do ritmo, fast fica mais de `thresholds.pace.crit` à frente, e a faixa intermediária é normal. Execute `codex-hud --print-config` para ver o conjunto completo de opções resolvidas.
 
 ## Suporte a plataformas
 

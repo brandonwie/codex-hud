@@ -166,14 +166,14 @@ crit = 90
 [format]
 tokenParts = true   # false -> chỉ tổng, ẩn (I:.. O:.. C:..)
 showPace = true     # false -> hide the pace % in 5h/7d
-modelStyle = "full"
-effortShort = false
+modelStyle = "full" # "version-only" -> 5.5 thay vì gpt-5.5
+effortShort = false # true -> xh thay vì xhigh
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "🤖"
 paceFastPrefix = "🔥"
 ```
 
-Chạy `codex-hud --print-config` để xem toàn bộ tập tùy chọn đã được phân giải.
+Dấu pace so sánh mức sử dụng với tốc độ tiêu thụ đều: slow là chậm hơn pace quá `thresholds.pace.crit`, fast là nhanh hơn pace quá `thresholds.pace.crit`, và dải ở giữa là normal. Chạy `codex-hud --print-config` để xem toàn bộ tập tùy chọn đã được phân giải.
 
 ## Hỗ trợ nền tảng
 
