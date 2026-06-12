@@ -1,134 +1,164 @@
 ### line | default | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | default | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | dirty-repo | color=false
-5.5xhigh|proj|git(main*)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main*)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | dirty-repo | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;215m*\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;215m*\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | git-unavailable | color=false
-5.5xhigh|proj|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | git-unavailable | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | warn-thresholds | color=false
-5.5xhigh|proj|git(main)|Ctx:75%|5h:72%|7d:71%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main)|Ctx:75%|5h:72%|7d:71%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | warn-thresholds | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m75%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m72%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m71%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m75%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m72%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m71%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | crit-thresholds | color=false
-5.5xhigh|proj|git(main)|Ctx:95%|5h:93%|7d:91%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main)|Ctx:95%|5h:93%|7d:91%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | crit-thresholds | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m95%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m93%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m91%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m95%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m93%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m91%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | boundary-70 | color=false
-5.5xhigh|proj|git(main)|Ctx:70%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main)|Ctx:70%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | boundary-70 | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m70%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m70%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | boundary-90 | color=false
-5.5xhigh|proj|git(main)|Ctx:90%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main)|Ctx:90%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | boundary-90 | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m90%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m90%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | no-rates | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:?|7d:?|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:?|7d:?|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | no-rates | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | no-tokens | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:?
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:?
 
 ### line | no-tokens | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:?\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:?\x1b[0m
 
 ### line | tokens-millions | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:1.5M(I:1.2M,O:50k,C:250k)
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:1.5M(I:1.2M,O:50k,C:250k)
 
 ### line | tokens-millions | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m1.5M\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m1.2M\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m50k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m250k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m1.5M\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m1.2M\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m50k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m250k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | tokens-round-up | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:2k(I:900,O:100,C:500)
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:2k(I:900,O:100,C:500)
 
 ### line | tokens-round-up | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m2k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m900\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m100\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m500\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m2k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m900\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m100\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m500\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | tokens-round-down | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:1k(I:899,O:100,C:500)
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:1k(I:899,O:100,C:500)
 
 ### line | tokens-round-down | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m1k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m899\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m100\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m500\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m1k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m899\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m100\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m500\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | spaced | color=false
-5.5xhigh | proj | git(main) | Ctx: 21% | 5h: 17% | 7d: 16% | Tkn: 904k(I:533k,O:5k,C:366k)
+gpt-5.5 xhigh | proj | git(main) | Ctx: 21% | 5h: 17% | 7d: 16% | Tkn: 904k(I:533k,O:5k,C:366k)
 
 ### line | spaced | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m: \x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m: \x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m: \x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m: \x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5 xhigh\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m: \x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m: \x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m: \x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m | \x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m: \x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+
+### line | version-only-short-effort | color=false
+5.5xh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+
+### line | version-only-short-effort | color=true
+\x1b[38;5;135m5.5xh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | no-token-parts | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k
 
 ### line | no-token-parts | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m
 
 ### line | no-pace | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%(2.0h)|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%(2.0h)|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | no-pace | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m2.0h\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m2.0h\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+
+### line | pace-slow | color=false
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:20%(0.8h,🐢50%)|7d:?|Tkn:904k(I:533k,O:5k,C:366k)
+
+### line | pace-slow | color=true
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m20%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🐢50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+
+### line | pace-normal | color=false
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:50%(0.8h,🤖50%)|7d:?|Tkn:904k(I:533k,O:5k,C:366k)
+
+### line | pace-normal | color=true
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🤖50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+
+### line | pace-fast | color=false
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:80%(0.8h,🔥50%)|7d:?|Tkn:904k(I:533k,O:5k,C:366k)
+
+### line | pace-fast | color=true
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m80%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🔥50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+
+### line | pace-custom-prefixes | color=false
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:80%(0.8h,fast-50%)|7d:?|Tkn:904k(I:533k,O:5k,C:366k)
+
+### line | pace-custom-prefixes | color=true
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m80%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85mfast-50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | subset-segments | color=false
-5.5xhigh|Ctx:21%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|Ctx:21%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | subset-segments | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | reordered-segments | color=false
-Tkn:904k(I:533k,O:5k,C:366k)|git(main)|5.5xhigh
+Tkn:904k(I:533k,O:5k,C:366k)|git(main)|gpt-5.5xhigh
 
 ### line | reordered-segments | color=true
-\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135m5.5xhigh\x1b[0m
+\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mgpt-5.5xhigh\x1b[0m
 
 ### line | runtime-enabled | color=false
-5.5xhigh|proj|git(main) node v24.3.0|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main) node v24.3.0|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | runtime-enabled | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m \x1b[38;5;245mnode v24.3.0\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m \x1b[38;5;245mnode v24.3.0\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | recolored | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | recolored | color=true
-\x1b[38;5;45m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;75mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;45mgpt-5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;75mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | reasoning-low | color=false
-5.5Low|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5Low|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | reasoning-low | color=true
-\x1b[38;5;135m5.5Low\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5Low\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | reasoning-medium | color=false
-5.5Med|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5Med|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | reasoning-medium | color=true
-\x1b[38;5;135m5.5Med\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5Med\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | reasoning-high | color=false
-5.5High|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5High|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | reasoning-high | color=true
-\x1b[38;5;135m5.5High\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135mgpt-5.5High\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### text | default
 Codex HUD 0.0.0 | codex-cli 0.5.5
@@ -139,7 +169,7 @@ Codex
   sandbox: workspace-write / approval on-request
   status line: 2 items, colors on
   items: model, directory
-  usage: 5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+  usage: gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 Workspace
   cwd: /work/proj
@@ -167,7 +197,7 @@ Codex
   sandbox: workspace-write / approval on-request
   status line: 2 items, colors on
   items: model, directory
-  usage: 5.5xhigh|proj|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+  usage: gpt-5.5xhigh|proj|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 Workspace
   cwd: /work/proj
@@ -195,7 +225,7 @@ Codex
   sandbox: workspace-write / approval on-request
   status line: 2 items, colors on
   items: model, directory
-  usage: 5.5xhigh|proj|git(main)|Ctx:?|5h:?|7d:?|Tkn:?
+  usage: gpt-5.5xhigh|proj|git(main)|Ctx:?|5h:?|7d:?|Tkn:?
 
 Workspace
   cwd: /work/proj
@@ -223,7 +253,7 @@ Codex
   sandbox: workspace-write / approval on-request
   status line: 10 items, colors on
   items: a, b, c, d, e, f, g, h +2
-  usage: 5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
+  usage: gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 
 Workspace
   cwd: /work/proj

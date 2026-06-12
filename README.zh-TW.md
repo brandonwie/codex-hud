@@ -29,7 +29,7 @@ Codex HUD 是一個本機 Codex 外掛，會為 OpenAI Codex CLI 工作階段呈
 以下是由 `--line` 印出的精簡狀態列（僅在修補模式下才會渲染為 TUI 內嵌頁尾）：
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,🤖27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > 該列中的區段、標籤、顏色與門檻全部都可設定——請參閱[設定](#設定)。
@@ -96,7 +96,7 @@ npm test
 
 ```text
 $ node plugins/codex-hud/scripts/codex-hud.js --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+gpt-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,🤖30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 在本機執行 `node plugins/codex-hud/scripts/codex-hud.js --line --color`，即可看到帶有 ANSI 色彩樣式的同一條狀態列。
@@ -165,10 +165,15 @@ crit = 90
 # 格式切換開關。
 [format]
 tokenParts = true   # false -> 僅顯示總計，隱藏 (I:.. O:.. C:..)
-showPace = true     # false -> 隱藏 5h/7d 中的步調 %
+showPace = true     # false -> hide the pace % in 5h/7d
+modelStyle = "full" # "version-only" -> 5.5 而不是 gpt-5.5
+effortShort = false # true -> xh 而不是 xhigh
+paceSlowPrefix = "🐢"
+paceNormalPrefix = "🤖"
+paceFastPrefix = "🔥"
 ```
 
-執行 `codex-hud --print-config` 可查看完整解析後的選項集合。
+節奏標記會將用量與均勻消耗速率比較：slow 表示比節奏落後超過 `thresholds.pace.crit`，fast 表示比節奏超前超過 `thresholds.pace.crit`，中間區間為 normal。執行 `codex-hud --print-config` 可查看完整解析後的選項集合。
 
 ## 平台支援
 

@@ -29,7 +29,7 @@ Varsayılan olarak, Codex'in yerel `[tui].status_line` özelliğine eşlik eder;
 `--line` ile yazdırılan kompakt durum satırı (yalnızca yamalı modda TUI içi altbilgi olarak oluşturulur):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,🤖27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > Bu satırdaki segmentler, etiketler, renkler ve eşiklerin tümü yapılandırılabilir — bkz. [Yapılandırma](#yapılandırma).
@@ -96,7 +96,7 @@ Kompakt durum satırının (`--line`) terminal yakalaması:
 
 ```text
 $ node plugins/codex-hud/scripts/codex-hud.js --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+gpt-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,🤖30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 Aynı satırı ANSI renk stilleriyle görmek için yerelde `node plugins/codex-hud/scripts/codex-hud.js --line --color` çalıştırın.
@@ -165,10 +165,15 @@ crit = 90
 # Biçimlendirme anahtarları.
 [format]
 tokenParts = true   # false -> yalnızca toplam, (I:.. O:.. C:..) gizle
-showPace = true     # false -> 5h/7d'deki tempo %'sini gizle
+showPace = true     # false -> hide the pace % in 5h/7d
+modelStyle = "full" # "version-only" -> gpt-5.5 yerine 5.5
+effortShort = false # true -> xhigh yerine xh
+paceSlowPrefix = "🐢"
+paceNormalPrefix = "🤖"
+paceFastPrefix = "🔥"
 ```
 
-Tam çözümlenmiş seçenek setini görmek için `codex-hud --print-config` çalıştırın.
+Pace işaretleri kullanımı eşit tüketim hızıyla karşılaştırır: slow, `thresholds.pace.crit` değerinden fazla geride kalmayı; fast, `thresholds.pace.crit` değerinden fazla önde olmayı; orta bant ise normal durumu gösterir. Tam çözümlenmiş seçenek setini görmek için `codex-hud --print-config` çalıştırın.
 
 ## Platform Desteği
 

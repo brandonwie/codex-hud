@@ -103,7 +103,7 @@ pub fn format_duration_window(minutes: f64) -> String {
 }
 
 /// Port of formatReasoningEffort().
-pub fn format_reasoning_effort(value: Option<&Value>) -> Option<String> {
+pub fn format_reasoning_effort(value: Option<&Value>, effort_short: bool) -> Option<String> {
     let value = value.filter(|v| js::truthy(Some(v)))?;
     let raw = match value {
         Value::String(s) => s.clone(),
@@ -112,7 +112,9 @@ pub fn format_reasoning_effort(value: Option<&Value>) -> Option<String> {
     let normalized = raw.trim().to_string();
     // Oracle regex /^x[-_ ]?high$/i expands to exactly these four forms.
     match normalized.to_lowercase().as_str() {
-        "xhigh" | "x-high" | "x_high" | "x high" => Some("xhigh".to_string()),
+        "xhigh" | "x-high" | "x_high" | "x high" => {
+            Some(if effort_short { "xh" } else { "xhigh" }.to_string())
+        }
         "high" => Some("High".to_string()),
         "medium" => Some("Med".to_string()),
         "low" => Some("Low".to_string()),
@@ -185,7 +187,29 @@ pub fn status_git_branch(data: &Value) -> Option<String> {
 }
 
 /// Port of statusModel().
+#[cfg(test)]
 pub fn status_model(data: &Value) -> Option<String> {
+    let default = hudcfg::default_config();
+    status_model_with_format(data, default.get("format"), "")
+}
+
+fn format_model_name(raw: String, format: Option<&Value>) -> String {
+    if js::get(format, "modelStyle").and_then(|v| v.as_str()) != Some("version-only") {
+        return raw;
+    }
+    // SECURITY: get(..4) avoids a char-boundary panic when an untrusted
+    // model string has a multibyte char at byte 4 (oracle regex never crashes).
+    match raw.get(..4) {
+        Some(prefix) if prefix.eq_ignore_ascii_case("gpt-") => raw[4..].to_string(),
+        _ => raw,
+    }
+}
+
+fn status_model_with_format(
+    data: &Value,
+    format: Option<&Value>,
+    model_effort_separator: &str,
+) -> Option<String> {
     let config = data.get("config");
     let raw_model = js::get(config, "model")
         .filter(|m| js::truthy(Some(m)))
@@ -202,20 +226,16 @@ pub fn status_model(data: &Value) -> Option<String> {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string())
         });
-    let model = raw_model.map(|m| {
-        // SECURITY: get(..4) avoids a char-boundary panic when an untrusted
-        // model string has a multibyte char at byte 4 (oracle regex never crashes).
-        match m.get(..4) {
-            Some(prefix) if prefix.eq_ignore_ascii_case("gpt-") => m[4..].to_string(),
-            _ => m,
-        }
-    });
-    let reasoning = format_reasoning_effort(js::get(config, "reasoning"));
+    let model = raw_model.map(|m| format_model_name(m, format));
+    let reasoning = format_reasoning_effort(
+        js::get(config, "reasoning"),
+        js::truthy(js::get(format, "effortShort")),
+    );
     let joined: String = [model, reasoning]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
-        .join("");
+        .join(model_effort_separator);
     if joined.is_empty() {
         None
     } else {
@@ -231,6 +251,7 @@ pub struct Separators {
     pub label_value: String,
     pub open: String,
     pub close: String,
+    pub model_effort: String,
 }
 
 struct RenderCtx<'a> {
@@ -255,6 +276,12 @@ impl<'a> RenderCtx<'a> {
     }
     fn format_flag(&self, key: &str) -> bool {
         js::truthy(js::get(self.config.get("format"), key))
+    }
+    fn format_text(&self, key: &str) -> String {
+        js::get(self.config.get("format"), key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
     }
     fn label_text(&self, key: &str) -> String {
         match js::get(self.config.get("labels"), key) {
@@ -336,6 +363,24 @@ fn color_by_pace_delta_cfg<'a>(
     ctx.color_of("ok")
 }
 
+fn pace_state_prefix(percent: Option<f64>, pace: Option<f64>, ctx: &RenderCtx) -> String {
+    let (Some(percent), Some(pace)) = (
+        percent.filter(|v| v.is_finite()),
+        pace.filter(|v| v.is_finite()),
+    ) else {
+        return String::new();
+    };
+    let diff = percent - pace;
+    let threshold = ctx.threshold("pace", "crit");
+    if diff < -threshold {
+        return ctx.format_text("paceSlowPrefix");
+    }
+    if diff > threshold {
+        return ctx.format_text("paceFastPrefix");
+    }
+    ctx.format_text("paceNormalPrefix")
+}
+
 /// Port of renderMetric().
 fn render_metric(label: &str, percent: Option<f64>, detail: &str, ctx: &RenderCtx) -> String {
     let e = ctx.color_enabled;
@@ -403,11 +448,12 @@ fn render_rate(label: &str, window: Option<&Value>, ctx: &RenderCtx) -> String {
             let pace_color = ctx
                 .color_of("pace")
                 .or_else(|| color_by_pace_delta_cfg(used_percent, Some(pace_value), ctx));
-            detail_parts.push(colorize(
-                &format_percent_cfg(Some(pace_value), ctx.format_flag("percentRound")),
-                pace_color,
-                e,
-            ));
+            let pace_text = format!(
+                "{}{}",
+                pace_state_prefix(used_percent, Some(pace_value), ctx),
+                format_percent_cfg(Some(pace_value), ctx.format_flag("percentRound"))
+            );
+            detail_parts.push(colorize(&pace_text, pace_color, e));
         }
     }
     let detail = if detail_parts.is_empty() {
@@ -509,9 +555,12 @@ fn render_token_usage(label: &str, tokens: Option<&Value>, ctx: &RenderCtx) -> S
 /// Segment registry dispatch (port of SEGMENTS). Returns (text, joinWithPrevious).
 fn render_segment(id: &str, data: &Value, ctx: &RenderCtx) -> Option<String> {
     match id {
-        "model" => {
-            status_model(data).map(|m| colorize(&m, ctx.color.as_deref(), ctx.color_enabled))
-        }
+        "model" => status_model_with_format(
+            data,
+            ctx.config.get("format"),
+            ctx.separators.model_effort.as_str(),
+        )
+        .map(|m| colorize(&m, ctx.color.as_deref(), ctx.color_enabled)),
         "project" => Some(colorize(
             &status_project_name(data),
             ctx.color.as_deref(),
@@ -616,9 +665,13 @@ pub fn effective_separators(config: &Value) -> Separators {
     let mut label_value = get("labelValue", ":");
     let open = get("open", "(");
     let close = get("close", ")");
+    let model_effort;
     if js::truthy(config.get("space")) {
         segment = format!(" {} ", segment.trim());
         label_value = format!("{} ", label_value.trim_end());
+        model_effort = " ".to_string();
+    } else {
+        model_effort = String::new();
     }
     Separators {
         segment,
@@ -626,6 +679,7 @@ pub fn effective_separators(config: &Value) -> Separators {
         label_value,
         open,
         close,
+        model_effort,
     }
 }
 
@@ -894,7 +948,7 @@ mod tests {
     }
 
     #[test]
-    fn status_model_strips_gpt_prefix_and_normalizes_reasoning() {
+    fn status_model_keeps_full_model_by_default_and_normalizes_reasoning() {
         let data = json!({
             "config": {
                 "model": "gpt-5.5",
@@ -902,7 +956,26 @@ mod tests {
             }
         });
 
-        assert_eq!(status_model(&data), Some("5.5xhigh".to_string()));
+        assert_eq!(status_model(&data), Some("gpt-5.5xhigh".to_string()));
+    }
+
+    #[test]
+    fn status_model_supports_version_only_short_effort_and_spacing() {
+        let data = json!({
+            "config": {
+                "model": "gpt-5.5",
+                "reasoning": "xhigh"
+            }
+        });
+        let format = json!({
+            "modelStyle": "version-only",
+            "effortShort": true
+        });
+
+        assert_eq!(
+            status_model_with_format(&data, Some(&format), " "),
+            Some("5.5 xh".to_string())
+        );
     }
 
     #[test]
