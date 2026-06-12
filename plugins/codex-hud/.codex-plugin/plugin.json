@@ -19,7 +19,7 @@
   "interface": {
     "displayName": "Codex HUD",
     "shortDescription": "Show local Codex context and footer status.",
-    "longDescription": "Codex HUD adds a script-backed skill that summarizes Codex config, git state, project hints, hooks, and runtime context. Standalone commands can render a multiline view; patched Codex TUI mode uses the compact single-line status command.",
+    "longDescription": "Codex HUD adds a script-backed skill that summarizes Codex config, git state, project hints, hooks, and runtime context. Standalone commands can render an expanded workspace view; patched Codex TUI mode uses the compact single-line status command.",
     "developerName": "Brandon Wie",
     "category": "Productivity",
     "capabilities": [

@@ -84,7 +84,7 @@ npm run build:rust   # 任意: rust/target/release/codex-hud-rs をビルド
 開発中は Node レンダラーを直接実行します。
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # standalone multi-line snapshot
+node plugins/codex-hud/scripts/codex-hud.js           # standalone expanded snapshot
 node plugins/codex-hud/scripts/codex-hud.js --line     # single compact line
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # machine-readable

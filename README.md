@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**A workspace HUD for the OpenAI Codex CLI — standalone commands can render a multi-line workspace snapshot, while experimental patched mode renders only the compact, single-line in-TUI footer.**
+**A workspace HUD for the OpenAI Codex CLI — compact single-line footer status for patched mode, plus standalone workspace snapshots for local inspection.**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -24,7 +24,7 @@
 
 ---
 
-Codex HUD is a local Codex plugin with two surfaces: standalone commands can print a multi-line workspace snapshot, and the experimental patched Codex TUI can render the compact `--line` output as a single-line footer.
+Codex HUD is a local Codex plugin with two surfaces: standalone commands can print an expanded workspace snapshot for local inspection, and the experimental patched Codex TUI can render the compact `--line` output as a single-line footer.
 
 By default it is a companion to Codex's native `[tui].status_line`, because stock Codex cannot render arbitrary plugin output under the input area — it exposes a configurable built-in status item array but not a plugin-owned renderer. This repo also ships a maintained patch path for users who want the compact status line to render directly in the real Codex footer.
 
@@ -86,7 +86,7 @@ See [HUD Launcher](#hud-launcher-stock-delegation--default) for details and `npm
 Run the Node renderer directly during development:
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # standalone multi-line snapshot
+node plugins/codex-hud/scripts/codex-hud.js           # standalone expanded snapshot
 node plugins/codex-hud/scripts/codex-hud.js --line     # single compact line
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # machine-readable
@@ -111,7 +111,7 @@ Run `node plugins/codex-hud/scripts/codex-hud.js --line --color` locally to see 
 
 ## Configuration
 
-Both the standalone multi-line snapshot and the compact status line are configurable through an optional `codex-hud.toml`; the Node and Rust renderers read the same `codex-hud.toml` tiers. With no config file you get the defaults shown above; every key is optional and anything you omit inherits the built-in default.
+Both the standalone workspace snapshot and the compact status line are configurable through an optional `codex-hud.toml`; the Node and Rust renderers read the same `codex-hud.toml` tiers. With no config file you get the defaults shown above; every key is optional and anything you omit inherits the built-in default.
 
 The canonical schema lives in [`spec/config-schema.md`](spec/config-schema.md). This README shows the common options; use the schema when changing parser behavior or validating every supported field.
 

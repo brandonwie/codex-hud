@@ -1,6 +1,6 @@
 ---
 name: codex-hud
-description: Show Codex workspace context with local config, git state, hooks, and project hints. Standalone mode can be multiline; patched Codex TUI footer mode is single-line. Use when the user says "codex-hud", "show Codex HUD", "status HUD", "multiline status", or asks for richer Codex context.
+description: Show Codex workspace context with local config, git state, hooks, and project hints. Standalone mode can show an expanded snapshot; patched Codex TUI footer mode is single-line. Use when the user says "codex-hud", "show Codex HUD", "status HUD", "workspace snapshot", or asks for richer Codex context.
 ---
 
 # Codex HUD
