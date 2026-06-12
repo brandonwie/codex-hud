@@ -94,9 +94,14 @@ try {
   assert.match(text.stdout, new RegExp(`Codex HUD ${expectedVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   assert.match(text.stdout, /Workspace/);
   assert.match(text.stdout, /usage: .+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+/);
+  const textLines = text.stdout.trimEnd().split(/\r?\n/);
+  assert(textLines.length > 8, "default HUD output should stay multiline");
+  assert(textLines.some((line) => line === "Codex"), "default HUD should include a Codex section");
+  assert(textLines.some((line) => line === "Workspace"), "default HUD should include a Workspace section");
 
   const line = run(["--line"], { env: fixtureEnv });
   assert.strictEqual(line.status, 0, line.stderr);
+  assert.strictEqual(line.stdout.trimEnd().split(/\r?\n/).length, 1, "--line output should stay single-line");
   assert.doesNotMatch(line.stdout, /gpt-/);
   assert.doesNotMatch(line.stdout, /git:\(/);
   assert.doesNotMatch(line.stdout, /·/);
@@ -113,6 +118,7 @@ try {
 
   const colorLine = run(["--line", "--color"], { env: fixtureEnv });
   assert.strictEqual(colorLine.status, 0, colorLine.stderr);
+  assert.strictEqual(colorLine.stdout.trimEnd().split(/\r?\n/).length, 1, "--line --color output should stay single-line");
   assert.match(colorLine.stdout, /\x1b\[38;5;135m/);
   assert.match(colorLine.stdout, /\x1b\[38;5;245m/);
   assert.match(colorLine.stdout, /\|\x1b\[0m\x1b\[38;5;45mcodex-hud\x1b\[0m\x1b\[38;5;245m\|/);

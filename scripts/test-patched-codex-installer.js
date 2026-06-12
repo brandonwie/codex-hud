@@ -117,6 +117,12 @@ assert(statusSurfaces.includes("fn custom_status_line_from_command"));
 assert(statusSurfaces.includes("std::process::Command::new"));
 assert(statusSurfaces.includes("fn ansi_status_line_to_line"));
 assert(statusSurfaces.includes("ratatui::style::Color::Indexed"));
+assert(statusSurfaces.includes(".lines()"));
+assert(statusSurfaces.includes(".next()"));
+assert(
+  defaultStatusLineCommand().includes("--line --color"),
+  "patched Codex footer command must use compact single-line HUD output"
+);
 
 // --- renderLauncherScript: stock mode ---
 const stockScript = renderLauncherScript({
