@@ -1,6 +1,6 @@
 # Codex HUD Configuration Schema
 
-**Schema version:** `2` (frozen) · **Status:** stable · **Source of truth:**
+**Schema version:** `3` (frozen) · **Status:** stable · **Source of truth:**
 `DEFAULT_CONFIG` in `plugins/codex-hud/scripts/codex-hud.js`
 
 This document freezes the `codex-hud.toml` configuration contract and the
@@ -66,8 +66,9 @@ Aliases expanded before validation: `workspace` → `project,branch,runtime`;
 | `open`       | `"("`   | Opens a detail group (rate detail, tkn). |
 | `close`      | `")"`   | Closes a detail group.                   |
 
-When `space = true`: `segment` becomes `" " + segment.trim() + " "` and
-`labelValue` becomes `labelValue.trimEnd() + " "`.
+When `space = true`: `segment` becomes `" " + segment.trim() + " "`,
+`labelValue` becomes `labelValue.trimEnd() + " "`, and the model segment uses a
+single space between model name and reasoning effort.
 
 ### Labels
 
@@ -137,7 +138,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `tokenUnits`   | `true`  | Use `k`/`M` abbreviation for token counts.               |
 | `tokenParts`   | `true`  | `false` → total only, hide `(I:.. O:.. C:..)`.           |
 | `showPace`     | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
-| `modelStyle`   | `"full"` | `"version-only"` → strip `gpt-` from model names.       |
+| `modelShort`   | `true`  | `false` → keep full model names such as `gpt-5.5`.      |
 | `effortShort`  | `false` | `true` → `xh` instead of `xhigh`.                        |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
 | `paceNormalPrefix` | `"🤖"` | Prefix when usage is within `±pace.crit` of pace.     |
@@ -160,7 +161,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
   format: {
     percentRound: true, tokenUnits: true, tokenParts: true, showPace: true,
-    modelStyle: "full", effortShort: false,
+    modelShort: true, effortShort: false,
     paceSlowPrefix: "🐢", paceNormalPrefix: "🤖", paceFastPrefix: "🔥",
   },
 }

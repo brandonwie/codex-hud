@@ -194,7 +194,7 @@ pub fn status_model(data: &Value) -> Option<String> {
 }
 
 fn format_model_name(raw: String, format: Option<&Value>) -> String {
-    if js::get(format, "modelStyle").and_then(|v| v.as_str()) != Some("version-only") {
+    if !js::truthy(js::get(format, "modelShort")) {
         return raw;
     }
     // SECURITY: get(..4) avoids a char-boundary panic when an untrusted
@@ -948,7 +948,7 @@ mod tests {
     }
 
     #[test]
-    fn status_model_keeps_full_model_by_default_and_normalizes_reasoning() {
+    fn status_model_uses_short_model_by_default_and_normalizes_reasoning() {
         let data = json!({
             "config": {
                 "model": "gpt-5.5",
@@ -956,11 +956,11 @@ mod tests {
             }
         });
 
-        assert_eq!(status_model(&data), Some("gpt-5.5xhigh".to_string()));
+        assert_eq!(status_model(&data), Some("5.5xhigh".to_string()));
     }
 
     #[test]
-    fn status_model_supports_version_only_short_effort_and_spacing() {
+    fn status_model_supports_full_model_short_effort_and_spacing() {
         let data = json!({
             "config": {
                 "model": "gpt-5.5",
@@ -968,13 +968,13 @@ mod tests {
             }
         });
         let format = json!({
-            "modelStyle": "version-only",
+            "modelShort": false,
             "effortShort": true
         });
 
         assert_eq!(
             status_model_with_format(&data, Some(&format), " "),
-            Some("5.5 xh".to_string())
+            Some("gpt-5.5 xh".to_string())
         );
     }
 

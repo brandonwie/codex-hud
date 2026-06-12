@@ -127,7 +127,8 @@ const LINE_CASES = [
   { name: "tokens-round-up", over: { usage: { tokens: { total: 1500, input: 900, output: 100, cache: 500 } } } },
   { name: "tokens-round-down", over: { usage: { tokens: { total: 1499, input: 899, output: 100, cache: 500 } } } },
   { name: "spaced", over: { hud: { config: { space: true } } } },
-  { name: "version-only-short-effort", over: { hud: { config: { format: { modelStyle: "version-only", effortShort: true } } } } },
+  { name: "full-model", over: { hud: { config: { format: { modelShort: false } } } } },
+  { name: "short-model-short-effort", over: { hud: { config: { format: { effortShort: true } } } } },
   { name: "no-token-parts", over: { hud: { config: { format: { tokenParts: false } } } } },
   { name: "no-pace", over: {
     hud: { config: { format: { showPace: false } } },
