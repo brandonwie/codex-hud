@@ -137,6 +137,11 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `tokenUnits`   | `true`  | Use `k`/`M` abbreviation for token counts.               |
 | `tokenParts`   | `true`  | `false` → total only, hide `(I:.. O:.. C:..)`.           |
 | `showPace`     | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
+| `modelStyle`   | `"full"` | `"version-only"` → strip `gpt-` from model names.       |
+| `effortShort`  | `false` | `true` → `xh` instead of `xhigh`.                        |
+| `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
+| `paceNormalPrefix` | `"🤖"` | Prefix when usage is within `±pace.crit` of pace.     |
+| `paceFastPrefix` | `"🔥"` | Prefix when usage is more than `pace.crit` ahead of pace. |
 
 ## Defaults (`DEFAULT_CONFIG`, verbatim)
 
@@ -153,7 +158,11 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
     pace: "mint", ok: "mint", warn: "amber", crit: "coral", none: "dim",
   },
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
-  format: { percentRound: true, tokenUnits: true, tokenParts: true, showPace: true },
+  format: {
+    percentRound: true, tokenUnits: true, tokenParts: true, showPace: true,
+    modelStyle: "full", effortShort: false,
+    paceSlowPrefix: "🐢", paceNormalPrefix: "🤖", paceFastPrefix: "🔥",
+  },
 }
 ```
 
@@ -183,11 +192,14 @@ fixtures lock them; do not "clean them up":
    and **no** reset code — raw text only.
 4. **Empty-segment suppression:** a segment whose value is `null` **or** `""` is
    removed entirely, and **no separator** is emitted around the gap.
-5. **`pace` default `mint` short-circuits** pace-delta coloring (the configured
+5. **Pace state markers use `usedPercent - pacePercent`:** below
+   `-thresholds.pace.crit` is slow, above `thresholds.pace.crit` is fast, and
+   the inclusive middle band is normal.
+6. **`pace` default `mint` short-circuits** pace-delta coloring (the configured
    `pace` color wins over the computed delta color).
-6. **Segment order is exactly `config.segments`**; alias expansion happens before
+7. **Segment order is exactly `config.segments`**; alias expansion happens before
    rendering; arrays replace (never concat) on merge.
-7. **Missing data renders `label:?`** (e.g. `5h:?`, `Tkn:?`), not an omitted
+8. **Missing data renders `label:?`** (e.g. `5h:?`, `Tkn:?`), not an omitted
    segment.
 
 ## Enforcement

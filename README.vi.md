@@ -29,7 +29,7 @@ Mặc định nó là một thành phần đồng hành với `[tui].status_line
 Status line nhỏ gọn, được in bởi `--line` (chỉ được render thành footer trong TUI ở chế độ vá):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,🤖27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > Các segment, nhãn, màu sắc và ngưỡng trong dòng đó đều có thể cấu hình — xem [Cấu hình](#cấu-hình).
@@ -96,7 +96,7 @@ npm test
 
 ```text
 $ node plugins/codex-hud/scripts/codex-hud.js --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+gpt-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,🤖30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 Chạy `node plugins/codex-hud/scripts/codex-hud.js --line --color` cục bộ để xem cùng dòng đó với kiểu màu ANSI.
@@ -165,7 +165,12 @@ crit = 90
 # Các công tắc định dạng.
 [format]
 tokenParts = true   # false -> chỉ tổng, ẩn (I:.. O:.. C:..)
-showPace = true     # false -> ẩn % tốc độ trong 5h/7d
+showPace = true     # false -> hide the pace % in 5h/7d
+modelStyle = "full"
+effortShort = false
+paceSlowPrefix = "🐢"
+paceNormalPrefix = "🤖"
+paceFastPrefix = "🔥"
 ```
 
 Chạy `codex-hud --print-config` để xem toàn bộ tập tùy chọn đã được phân giải.

@@ -31,7 +31,17 @@ pub fn default_config() -> Value {
             "none": "dim"
         },
         "thresholds": { "percent": { "warn": 70, "crit": 90 }, "pace": { "warn": 0, "crit": 15 } },
-        "format": { "percentRound": true, "tokenUnits": true, "tokenParts": true, "showPace": true }
+        "format": {
+            "percentRound": true,
+            "tokenUnits": true,
+            "tokenParts": true,
+            "showPace": true,
+            "modelStyle": "full",
+            "effortShort": false,
+            "paceSlowPrefix": "🐢",
+            "paceNormalPrefix": "🤖",
+            "paceFastPrefix": "🔥"
+        }
     })
 }
 
@@ -456,6 +466,38 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                 None => {}
             }
         }
+        match format.get("modelStyle") {
+            Some(Value::String(s)) if s == "full" || s == "version-only" => {
+                coerced.insert("modelStyle".into(), Value::String(s.clone()));
+            }
+            Some(_) => note(
+                warnings,
+                "format.modelStyle must be \"full\" or \"version-only\"; ignored".to_string(),
+            ),
+            None => {}
+        }
+        match format.get("effortShort") {
+            Some(Value::Bool(b)) => {
+                coerced.insert("effortShort".into(), Value::Bool(*b));
+            }
+            Some(_) => note(
+                warnings,
+                "format.effortShort must be a boolean; ignored".to_string(),
+            ),
+            None => {}
+        }
+        for key in ["paceSlowPrefix", "paceNormalPrefix", "paceFastPrefix"] {
+            match format.get(key) {
+                Some(Value::String(s)) => {
+                    coerced.insert(key.into(), Value::String(s.chars().take(8).collect()));
+                }
+                Some(_) => note(
+                    warnings,
+                    format!("format.{} must be a string; ignored", key),
+                ),
+                None => {}
+            }
+        }
         out.insert("format".into(), Value::Object(coerced));
     }
 
@@ -564,6 +606,11 @@ percentRound = true   # false -> one decimal place
 tokenUnits = true     # false -> raw integers (no k/M)
 tokenParts = true     # false -> total only, hide (I:.. O:.. C:..)
 showPace = true       # false -> hide the pace % in 5h/7d
+modelStyle = "full"   # "version-only" -> 5.5 instead of gpt-5.5
+effortShort = false   # true -> xh instead of xhigh
+paceSlowPrefix = "🐢"   # used more than thresholds.pace.crit behind pace
+paceNormalPrefix = "🤖" # within +/- thresholds.pace.crit of pace
+paceFastPrefix = "🔥"   # used more than thresholds.pace.crit ahead of pace
 "##;
 
 #[cfg(test)]

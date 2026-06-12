@@ -489,10 +489,10 @@ function formatDurationWindow(minutes) {
   return (days < 10 ? days.toFixed(1) : Math.round(days).toString()).replace(/\.0$/, "") + "d";
 }
 
-function formatReasoningEffort(value) {
+function formatReasoningEffort(value, format = DEFAULT_CONFIG.format) {
   if (!value) return null;
   const normalized = String(value).trim();
-  if (/^x[-_ ]?high$/i.test(normalized)) return "xhigh";
+  if (/^x[-_ ]?high$/i.test(normalized)) return format.effortShort ? "xh" : "xhigh";
   if (/^high$/i.test(normalized)) return "High";
   if (/^medium$/i.test(normalized)) return "Med";
   if (/^low$/i.test(normalized)) return "Low";
@@ -519,11 +519,17 @@ function statusGitBranch(data) {
   return data.git.branch + (data.git.dirty > 0 ? "*" : "");
 }
 
-function statusModel(data) {
+function formatModelName(value, format = DEFAULT_CONFIG.format) {
+  if (!value) return null;
+  const raw = String(value);
+  return format.modelStyle === "version-only" ? raw.replace(/^gpt-/i, "") : raw;
+}
+
+function statusModel(data, format = DEFAULT_CONFIG.format, modelEffortSeparator = "") {
   const rawModel = data.config.model || (data.codexVersion || "").split(/\s+/)[0] || null;
-  const model = rawModel ? String(rawModel).replace(/^gpt-/i, "") : null;
-  const reasoning = formatReasoningEffort(data.config.reasoning);
-  return [model, reasoning].filter(Boolean).join("") || null;
+  const model = formatModelName(rawModel, format);
+  const reasoning = formatReasoningEffort(data.config.reasoning, format);
+  return [model, reasoning].filter(Boolean).join(modelEffortSeparator) || null;
 }
 
 // ── Config-driven footer rendering ──────────────────────────────────────────
@@ -621,7 +627,17 @@ const DEFAULT_CONFIG = {
     none: "dim",
   },
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
-  format: { percentRound: true, tokenUnits: true, tokenParts: true, showPace: true },
+  format: {
+    percentRound: true,
+    tokenUnits: true,
+    tokenParts: true,
+    showPace: true,
+    modelStyle: "full",
+    effortShort: false,
+    paceSlowPrefix: "🐢",
+    paceNormalPrefix: "🤖",
+    paceFastPrefix: "🔥",
+  },
 };
 
 // Convenience aliases expanded before id validation, so the simple public form
@@ -665,6 +681,15 @@ function colorByPaceDeltaCfg(percent, pace, ctx) {
   return c.ok;
 }
 
+function paceStatePrefix(percent, pace, ctx) {
+  if (!Number.isFinite(percent) || !Number.isFinite(pace)) return "";
+  const diff = percent - pace;
+  const threshold = ctx.thresholds.pace.crit;
+  if (diff < -threshold) return ctx.format.paceSlowPrefix || "";
+  if (diff > threshold) return ctx.format.paceFastPrefix || "";
+  return ctx.format.paceNormalPrefix || "";
+}
+
 function renderMetric(label, percent, detail, ctx) {
   const e = ctx.colorEnabled;
   const c = ctx.colors;
@@ -688,7 +713,8 @@ function renderRate(label, window, ctx) {
   const detailParts = [];
   if (remaining) detailParts.push(colorize(remaining, c.label, e));
   if (ctx.format.showPace && pace !== null) {
-    detailParts.push(colorize(formatPercentCfg(pace, ctx.format), c.pace || colorByPaceDeltaCfg(window.usedPercent, pace, ctx), e));
+    const paceText = paceStatePrefix(window.usedPercent, pace, ctx) + formatPercentCfg(pace, ctx.format);
+    detailParts.push(colorize(paceText, c.pace || colorByPaceDeltaCfg(window.usedPercent, pace, ctx), e));
   }
   const detail = detailParts.length
     ? colorize(s.open, c.label, e) + detailParts.join(colorize(s.tokenPart, c.label, e)) + colorize(s.close, c.label, e)
@@ -727,7 +753,7 @@ const SEGMENTS = {
   model: {
     id: "model",
     render(data, ctx) {
-      const model = statusModel(data);
+      const model = statusModel(data, ctx.format, ctx.separators.modelEffort);
       return model ? colorize(model, ctx.color, ctx.colorEnabled) : null;
     },
   },
@@ -804,6 +830,9 @@ function effectiveSeparators(config) {
   if (config.space) {
     separators.segment = " " + separators.segment.trim() + " ";
     separators.labelValue = separators.labelValue.trimEnd() + " ";
+    separators.modelEffort = " ";
+  } else {
+    separators.modelEffort = "";
   }
   return separators;
 }
@@ -913,6 +942,11 @@ percentRound = true   # false -> one decimal place
 tokenUnits = true     # false -> raw integers (no k/M)
 tokenParts = true     # false -> total only, hide (I:.. O:.. C:..)
 showPace = true       # false -> hide the pace % in 5h/7d
+modelStyle = "full"   # "version-only" -> 5.5 instead of gpt-5.5
+effortShort = false   # true -> xh instead of xhigh
+paceSlowPrefix = "🐢"   # used more than thresholds.pace.crit behind pace
+paceNormalPrefix = "🤖" # within +/- thresholds.pace.crit of pace
+paceFastPrefix = "🔥"   # used more than thresholds.pace.crit ahead of pace
 `;
 
 function isPlainObject(value) {
@@ -1063,6 +1097,19 @@ function validateAndCoerce(raw, warnings, source) {
     for (const key of ["percentRound", "tokenUnits", "tokenParts", "showPace"]) {
       if (typeof raw.format[key] === "boolean") out.format[key] = raw.format[key];
       else if (raw.format[key] !== undefined) note("format." + key + " must be a boolean; ignored");
+    }
+    if (raw.format.modelStyle !== undefined) {
+      if (raw.format.modelStyle === "full" || raw.format.modelStyle === "version-only") out.format.modelStyle = raw.format.modelStyle;
+      else note('format.modelStyle must be "full" or "version-only"; ignored');
+    }
+    if (raw.format.effortShort !== undefined) {
+      if (typeof raw.format.effortShort === "boolean") out.format.effortShort = raw.format.effortShort;
+      else note("format.effortShort must be a boolean; ignored");
+    }
+    for (const key of ["paceSlowPrefix", "paceNormalPrefix", "paceFastPrefix"]) {
+      if (raw.format[key] === undefined) continue;
+      if (typeof raw.format[key] === "string") out.format[key] = raw.format[key].slice(0, 8);
+      else note("format." + key + " must be a string; ignored");
     }
   }
 

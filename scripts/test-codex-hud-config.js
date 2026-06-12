@@ -45,6 +45,11 @@ try {
     const config = printConfig(baseEnv);
     assert.deepStrictEqual(config.config.segments, DEFAULT_SEGMENTS);
     assert.strictEqual(config.config.space, false);
+    assert.strictEqual(config.config.format.modelStyle, "full");
+    assert.strictEqual(config.config.format.effortShort, false);
+    assert.strictEqual(config.config.format.paceSlowPrefix, "🐢");
+    assert.strictEqual(config.config.format.paceNormalPrefix, "🤖");
+    assert.strictEqual(config.config.format.paceFastPrefix, "🔥");
     assert.deepStrictEqual(config.contributors, []);
     assert.deepStrictEqual(config.warnings, []);
 
@@ -88,11 +93,20 @@ try {
   // 4. Threshold + format overrides.
   {
     const dir = tmpdir();
-    const cfg = writeConfig(dir, "t.toml", "[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenParts = false\n");
+    const cfg = writeConfig(
+      dir,
+      "t.toml",
+      '[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenParts = false\nmodelStyle = "version-only"\neffortShort = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n'
+    );
     const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(config.config.thresholds.percent.warn, 50);
     assert.strictEqual(config.config.thresholds.percent.crit, 60);
     assert.strictEqual(config.config.format.tokenParts, false);
+    assert.strictEqual(config.config.format.modelStyle, "version-only");
+    assert.strictEqual(config.config.format.effortShort, true);
+    assert.strictEqual(config.config.format.paceSlowPrefix, "slow-");
+    assert.strictEqual(config.config.format.paceNormalPrefix, "ok-");
+    assert.strictEqual(config.config.format.paceFastPrefix, "fast-");
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
@@ -124,10 +138,13 @@ try {
   // 7. Ill-typed values are dropped with a note; defaults survive.
   {
     const dir = tmpdir();
-    const cfg = writeConfig(dir, "inv.toml", "[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n");
+    const cfg = writeConfig(dir, "inv.toml", '[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n[format]\nmodelStyle = "compact"\neffortShort = "yes"\npaceFastPrefix = true\n');
     const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(config.config.colors.model, "neonViolet", "invalid color dropped -> default kept");
     assert.strictEqual(config.config.thresholds.percent.warn, 100, "out-of-range threshold clamped to 100");
+    assert.strictEqual(config.config.format.modelStyle, "full", "invalid modelStyle dropped -> default kept");
+    assert.strictEqual(config.config.format.effortShort, false, "invalid effortShort dropped -> default kept");
+    assert.strictEqual(config.config.format.paceFastPrefix, "🔥", "invalid pace prefix dropped -> default kept");
     assert.ok(config.warnings.length >= 1);
     fs.rmSync(dir, { recursive: true, force: true });
   }

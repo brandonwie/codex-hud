@@ -127,10 +127,24 @@ const LINE_CASES = [
   { name: "tokens-round-up", over: { usage: { tokens: { total: 1500, input: 900, output: 100, cache: 500 } } } },
   { name: "tokens-round-down", over: { usage: { tokens: { total: 1499, input: 899, output: 100, cache: 500 } } } },
   { name: "spaced", over: { hud: { config: { space: true } } } },
+  { name: "version-only-short-effort", over: { hud: { config: { format: { modelStyle: "version-only", effortShort: true } } } } },
   { name: "no-token-parts", over: { hud: { config: { format: { tokenParts: false } } } } },
   { name: "no-pace", over: {
     hud: { config: { format: { showPace: false } } },
     usage: { rateLimits: { primary: { usedPercent: 17, windowMinutes: 300, resetsAt: (FIXED / 1000) + 7200 } } },
+  } },
+  { name: "pace-slow", over: {
+    usage: { rateLimits: { primary: { usedPercent: 20, windowMinutes: 100, resetsAt: (FIXED / 1000) + 3000 }, secondary: null } },
+  } },
+  { name: "pace-normal", over: {
+    usage: { rateLimits: { primary: { usedPercent: 50, windowMinutes: 100, resetsAt: (FIXED / 1000) + 3000 }, secondary: null } },
+  } },
+  { name: "pace-fast", over: {
+    usage: { rateLimits: { primary: { usedPercent: 80, windowMinutes: 100, resetsAt: (FIXED / 1000) + 3000 }, secondary: null } },
+  } },
+  { name: "pace-custom-prefixes", over: {
+    hud: { config: { format: { paceSlowPrefix: "slow-", paceNormalPrefix: "ok-", paceFastPrefix: "fast-" } } },
+    usage: { rateLimits: { primary: { usedPercent: 80, windowMinutes: 100, resetsAt: (FIXED / 1000) + 3000 }, secondary: null } },
   } },
   { name: "subset-segments", over: { hud: { config: { segments: ["model", "ctx", "tkn"] } } } },
   { name: "reordered-segments", over: { hud: { config: { segments: ["tkn", "branch", "model"] } } } },

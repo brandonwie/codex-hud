@@ -29,7 +29,7 @@ Codex HUD는 OpenAI Codex CLI 세션을 위한 멀티라인 워크스페이스 H
 다음은 `--line`이 출력하는 간결한 상태 라인입니다(TUI 내부 푸터로는 패치 모드에서만 렌더링됩니다):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,🤖27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > 해당 라인의 세그먼트, 라벨, 색상, 임계값은 모두 설정할 수 있습니다 — [설정](#설정)을 참고하세요.
@@ -96,7 +96,7 @@ npm test
 
 ```text
 $ node plugins/codex-hud/scripts/codex-hud.js --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+gpt-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,🤖30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 ANSI 색상 스타일이 적용된 같은 라인을 보려면 로컬에서 `node plugins/codex-hud/scripts/codex-hud.js --line --color`를 실행하세요.
@@ -165,7 +165,12 @@ crit = 90
 # 포맷팅 토글.
 [format]
 tokenParts = true   # false -> 합계만, (I:.. O:.. C:..) 숨김
-showPace = true     # false -> 5h/7d의 pace % 숨김
+showPace = true     # false -> hide the pace % in 5h/7d
+modelStyle = "full"
+effortShort = false
+paceSlowPrefix = "🐢"
+paceNormalPrefix = "🤖"
+paceFastPrefix = "🔥"
 ```
 
 해석된 전체 옵션 집합을 보려면 `codex-hud --print-config`를 실행하세요.

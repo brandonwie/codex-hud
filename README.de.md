@@ -29,7 +29,7 @@ Standardmäßig ist es ein Begleiter zur nativen `[tui].status_line` von Codex, 
 Die kompakte Status-Line, ausgegeben mit `--line` (nur im Patched-Modus als Fußzeile in der TUI gerendert):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,100%)|7d:16%(5.1d,27%)|Tkn:904k(I:533k,O:5k,C:366k)
+gpt-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,🤖27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > Die Segmente, Labels, Farben und Schwellenwerte in dieser Zeile sind alle konfigurierbar — siehe [Konfiguration](#konfiguration).
@@ -96,7 +96,7 @@ Terminal-Mitschnitt der kompakten Status-Line (`--line`):
 
 ```text
 $ node plugins/codex-hud/scripts/codex-hud.js --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,21%)|7d:20%(4.9d,30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+gpt-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,🤖30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 Führe lokal `node plugins/codex-hud/scripts/codex-hud.js --line --color` aus, um dieselbe Zeile mit ANSI-Farbstilen zu sehen.
@@ -165,7 +165,12 @@ crit = 90
 # Formatierungs-Schalter.
 [format]
 tokenParts = true   # false -> nur Gesamtwert, (I:.. O:.. C:..) ausblenden
-showPace = true     # false -> die Pace-% in 5h/7d ausblenden
+showPace = true     # false -> hide the pace % in 5h/7d
+modelStyle = "full"
+effortShort = false
+paceSlowPrefix = "🐢"
+paceNormalPrefix = "🤖"
+paceFastPrefix = "🔥"
 ```
 
 Führe `codex-hud --print-config` aus, um den vollständigen aufgelösten Optionssatz zu sehen.
