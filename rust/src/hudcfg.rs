@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 pub const HUD_CONFIG_FILENAME: &str = "codex-hud.toml";
 // Oracle truncates labels via String(value).slice(0, 40).
 const MAX_LABEL_LEN: usize = 40;
+// Oracle truncates pace prefixes via String(value).slice(0, 8), measured in
+// UTF-16 code units. Keep Rust coercion aligned without splitting a scalar.
+const MAX_PACE_PREFIX_UTF16_UNITS: usize = 8;
 
 pub fn default_config() -> Value {
     json!({
@@ -43,6 +46,20 @@ pub fn default_config() -> Value {
             "paceFastPrefix": "🔥"
         }
     })
+}
+
+fn truncate_js_utf16_units(value: &str, max_units: usize) -> String {
+    let mut units = 0;
+    let mut end = 0;
+    for (idx, ch) in value.char_indices() {
+        let next_units = units + ch.len_utf16();
+        if next_units > max_units {
+            break;
+        }
+        units = next_units;
+        end = idx + ch.len_utf8();
+    }
+    value[..end].to_string()
 }
 
 pub const KNOWN_SEGMENTS: [&str; 8] = [
@@ -489,7 +506,10 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         for key in ["paceSlowPrefix", "paceNormalPrefix", "paceFastPrefix"] {
             match format.get(key) {
                 Some(Value::String(s)) => {
-                    coerced.insert(key.into(), Value::String(s.chars().take(8).collect()));
+                    coerced.insert(
+                        key.into(),
+                        Value::String(truncate_js_utf16_units(s, MAX_PACE_PREFIX_UTF16_UNITS)),
+                    );
                 }
                 Some(_) => note(
                     warnings,
@@ -648,5 +668,27 @@ mod tests {
                 "missing warning for {key}"
             );
         }
+    }
+
+    #[test]
+    fn validate_and_coerce_truncates_pace_prefixes_like_js_utf16_slice() {
+        let raw = json!({
+            "format": {
+                "paceSlowPrefix": "🐢🐢🐢🐢🐢",
+                "paceNormalPrefix": "abcdefghi",
+                "paceFastPrefix": "🔥🔥🔥🔥x"
+            }
+        });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let format = coerced
+            .get("format")
+            .and_then(Value::as_object)
+            .expect("coerced format object");
+
+        assert_eq!(format.get("paceSlowPrefix"), Some(&json!("🐢🐢🐢🐢")));
+        assert_eq!(format.get("paceNormalPrefix"), Some(&json!("abcdefgh")));
+        assert_eq!(format.get("paceFastPrefix"), Some(&json!("🔥🔥🔥🔥")));
+        assert!(warnings.is_empty());
     }
 }
