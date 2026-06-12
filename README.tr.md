@@ -166,7 +166,7 @@ crit = 90
 [format]
 tokenParts = true   # false -> yalnızca toplam, (I:.. O:.. C:..) gizle
 showPace = true     # false -> hide the pace % in 5h/7d
-modelShort = true # false -> gpt-5.5 yerine 5.5
+modelShort = true # false -> 5.5 yerine gpt-5.5
 effortShort = false # true -> xhigh yerine xh
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "🤖"
