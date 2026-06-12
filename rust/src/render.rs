@@ -453,11 +453,7 @@ fn render_rate(label: &str, window: Option<&Value>, ctx: &RenderCtx) -> String {
                 pace_state_prefix(used_percent, Some(pace_value), ctx),
                 format_percent_cfg(Some(pace_value), ctx.format_flag("percentRound"))
             );
-            detail_parts.push(colorize(
-                &pace_text,
-                pace_color,
-                e,
-            ));
+            detail_parts.push(colorize(&pace_text, pace_color, e));
         }
     }
     let detail = if detail_parts.is_empty() {
@@ -559,14 +555,12 @@ fn render_token_usage(label: &str, tokens: Option<&Value>, ctx: &RenderCtx) -> S
 /// Segment registry dispatch (port of SEGMENTS). Returns (text, joinWithPrevious).
 fn render_segment(id: &str, data: &Value, ctx: &RenderCtx) -> Option<String> {
     match id {
-        "model" => {
-            status_model_with_format(
-                data,
-                ctx.config.get("format"),
-                ctx.separators.model_effort.as_str(),
-            )
-            .map(|m| colorize(&m, ctx.color.as_deref(), ctx.color_enabled))
-        }
+        "model" => status_model_with_format(
+            data,
+            ctx.config.get("format"),
+            ctx.separators.model_effort.as_str(),
+        )
+        .map(|m| colorize(&m, ctx.color.as_deref(), ctx.color_enabled)),
         "project" => Some(colorize(
             &status_project_name(data),
             ctx.color.as_deref(),
