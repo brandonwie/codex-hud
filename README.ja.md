@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**OpenAI Codex CLI 向けのワークスペース HUD — デフォルトは独立した複数行 HUD、加えてコンパクトで色付きのステータスライン（モデル、プロジェクト、git、コンテキスト、5h/7d の使用状況）も備え、実験的なパッチモードではそれが TUI 内フッターになります。**
+**OpenAI Codex CLI 向けのワークスペース HUD — スタンドアロンコマンドでは複数行のワークスペース概要を表示できますが、実験的なパッチ済み Codex TUI フッターは現在コンパクトな 1 行ステータスラインのみを表示します。**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -24,7 +24,7 @@
 
 Codex HUD は、OpenAI Codex CLI のセッション向けに複数行のワークスペース HUD を描画するローカルの Codex プラグインです。
 
-デフォルトでは Codex ネイティブの `[tui].status_line` を補完する役割を担います。標準の Codex は入力エリアの下に任意のプラグイン出力を描画できず、設定可能な組み込みステータス項目の配列は公開していても、プラグインが所有するレンダラーは公開していないためです。このリポジトリには、HUD を実際の Codex フッターに直接描画したいユーザー向けに、メンテナンスされたパッチパスも同梱されています。
+デフォルトでは Codex ネイティブの `[tui].status_line` を補完する役割を担います。標準の Codex は入力エリアの下に任意のプラグイン出力を描画できず、設定可能な組み込みステータス項目の配列は公開していても、プラグインが所有するレンダラーは公開していないためです。このリポジトリには、コンパクトなステータスラインを実際の Codex フッターに直接描画したいユーザー向けに、メンテナンスされたパッチパスも同梱されています。
 
 `--line` が出力するコンパクトなステータスライン（TUI 内フッターとして描画されるのはパッチモードのみ）:
 
@@ -84,7 +84,7 @@ npm run build:rust   # 任意: rust/target/release/codex-hud-rs をビルド
 開発中は Node レンダラーを直接実行します。
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # multiline HUD
+node plugins/codex-hud/scripts/codex-hud.js           # standalone multi-line snapshot
 node plugins/codex-hud/scripts/codex-hud.js --line     # single compact line
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # machine-readable
@@ -109,7 +109,7 @@ ANSI カラースタイル付きの同じ行を見るには、ローカルで `n
 
 ## 設定
 
-複数行 HUD とコンパクトなステータスラインは、どちらも任意の `codex-hud.toml` を通じて設定できます。Node と Rust のレンダラーは同じ `codex-hud.toml` の階層を読み込みます。設定ファイルがない場合は上記のデフォルトが表示されます。すべてのキーは任意で、省略したものは組み込みのデフォルトを継承します。
+スタンドアロンの複数行スナップショットとコンパクトなステータスラインは、どちらも任意の `codex-hud.toml` を通じて設定できます。Node と Rust のレンダラーは同じ `codex-hud.toml` の階層を読み込みます。設定ファイルがない場合は上記のデフォルトが表示されます。すべてのキーは任意で、省略したものは組み込みのデフォルトを継承します。
 
 ```bash
 codex-hud --init-config     # scaffold ~/.codex/codex-hud.toml (--force to overwrite)

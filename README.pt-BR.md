@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**Um HUD de workspace para a CLI do OpenAI Codex — um HUD multilinha independente por padrão, mais uma linha de status compacta e colorida (modelo, projeto, git, contexto, uso de 5h/7d) que se torna um rodapé dentro da TUI no modo experimental com patch.**
+**Um HUD de workspace para a CLI do OpenAI Codex — comandos independentes podem renderizar uma visão multilinha do workspace; o rodapé experimental com patch na TUI do Codex hoje renderiza apenas a linha de status compacta de uma linha.**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -22,9 +22,9 @@
 
 ---
 
-O Codex HUD é um plugin local do Codex que renderiza um HUD de workspace multilinha para sessões da CLI do OpenAI Codex.
+O Codex HUD é um plugin local do Codex com duas superfícies: comandos independentes podem imprimir uma visão multilinha do workspace, e a TUI experimental com patch do Codex pode renderizar a saída compacta de `--line` como um rodapé de uma linha.
 
-Por padrão, ele é um complemento do `[tui].status_line` nativo do Codex, porque o Codex de fábrica não consegue renderizar saída arbitrária de plugins abaixo da área de entrada — ele expõe um array configurável de itens de status embutidos, mas não um renderizador controlado por plugin. Este repositório também oferece um caminho de patch mantido para quem deseja que o HUD renderize diretamente no rodapé real do Codex.
+Por padrão, ele é um complemento do `[tui].status_line` nativo do Codex, porque o Codex de fábrica não consegue renderizar saída arbitrária de plugins abaixo da área de entrada — ele expõe um array configurável de itens de status embutidos, mas não um renderizador controlado por plugin. Este repositório também oferece um caminho de patch mantido para quem deseja que a linha de status compacta renderize diretamente no rodapé real do Codex.
 
 A linha de status compacta, impressa por `--line` (renderizada como rodapé dentro da TUI apenas no modo com patch):
 
@@ -84,7 +84,7 @@ Inicie uma nova thread do Codex após instalar ou reinstalar para que a lista de
 Execute o renderizador Node diretamente durante o desenvolvimento:
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # HUD multilinha
+node plugins/codex-hud/scripts/codex-hud.js           # visão multilinha independente
 node plugins/codex-hud/scripts/codex-hud.js --line     # linha compacta única
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # legível por máquina
@@ -109,7 +109,7 @@ O `codex-hud-rs` (após `npm run build:rust`) expõe a mesma superfície de flag
 
 ## Configuração
 
-Tanto o HUD multilinha quanto a linha de status compacta são configuráveis através de um `codex-hud.toml` opcional; os renderizadores Node e Rust leem as mesmas camadas de `codex-hud.toml`. Sem arquivo de configuração, você obtém os padrões mostrados acima; toda chave é opcional e tudo o que você omitir herda o padrão embutido.
+Tanto a visão multilinha independente quanto a linha de status compacta são configuráveis através de um `codex-hud.toml` opcional; os renderizadores Node e Rust leem as mesmas camadas de `codex-hud.toml`. Sem arquivo de configuração, você obtém os padrões mostrados acima; toda chave é opcional e tudo o que você omitir herda o padrão embutido.
 
 ```bash
 codex-hud --init-config     # cria a estrutura de ~/.codex/codex-hud.toml (--force para sobrescrever)

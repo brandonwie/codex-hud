@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**Ein Workspace-HUD für die OpenAI Codex CLI — standardmäßig ein eigenständiges mehrzeiliges HUD, plus eine kompakte, farbige Status-Line (Modell, Projekt, Git, Kontext, 5h/7d-Nutzung), die im experimentellen Patched-Modus zur Fußzeile in der TUI wird.**
+**Ein Workspace-HUD für die OpenAI Codex CLI — eigenständige Befehle können eine mehrzeilige Workspace-Übersicht ausgeben; der experimentell gepatchte Codex-TUI-Footer zeigt derzeit nur die kompakte einzeilige Status-Line.**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -84,7 +84,7 @@ Starte nach dem Installieren oder Neuinstallieren einen neuen Codex-Thread, dami
 Führe den Node-Renderer während der Entwicklung direkt aus:
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # mehrzeiliges HUD
+node plugins/codex-hud/scripts/codex-hud.js           # eigenständige mehrzeilige Übersicht
 node plugins/codex-hud/scripts/codex-hud.js --line     # einzelne kompakte Zeile
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # maschinenlesbar

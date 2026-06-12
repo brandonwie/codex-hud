@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**A workspace HUD for the OpenAI Codex CLI — a standalone multiline HUD by default, plus a compact, colored status line (model, project, git, context, 5h/7d usage) that becomes an in-TUI footer in experimental patched mode.**
+**A workspace HUD for the OpenAI Codex CLI — standalone commands can render a multi-line workspace snapshot, while experimental patched mode renders only the compact, single-line in-TUI footer.**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -24,9 +24,9 @@
 
 ---
 
-Codex HUD is a local Codex plugin that renders a multiline workspace HUD for OpenAI Codex CLI sessions.
+Codex HUD is a local Codex plugin with two surfaces: standalone commands can print a multi-line workspace snapshot, and the experimental patched Codex TUI can render the compact `--line` output as a single-line footer.
 
-By default it is a companion to Codex's native `[tui].status_line`, because stock Codex cannot render arbitrary plugin output under the input area — it exposes a configurable built-in status item array but not a plugin-owned renderer. This repo also ships a maintained patch path for users who want the HUD to render directly in the real Codex footer.
+By default it is a companion to Codex's native `[tui].status_line`, because stock Codex cannot render arbitrary plugin output under the input area — it exposes a configurable built-in status item array but not a plugin-owned renderer. This repo also ships a maintained patch path for users who want the compact status line to render directly in the real Codex footer.
 
 The compact status line, printed by `--line` (rendered as an in-TUI footer only in patched mode):
 
@@ -86,7 +86,7 @@ See [HUD Launcher](#hud-launcher-stock-delegation--default) for details and `npm
 Run the Node renderer directly during development:
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # multiline HUD
+node plugins/codex-hud/scripts/codex-hud.js           # standalone multi-line snapshot
 node plugins/codex-hud/scripts/codex-hud.js --line     # single compact line
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # machine-readable
@@ -111,7 +111,7 @@ Run `node plugins/codex-hud/scripts/codex-hud.js --line --color` locally to see 
 
 ## Configuration
 
-Both the multiline HUD and the compact status line are configurable through an optional `codex-hud.toml`; the Node and Rust renderers read the same `codex-hud.toml` tiers. With no config file you get the defaults shown above; every key is optional and anything you omit inherits the built-in default.
+Both the standalone multi-line snapshot and the compact status line are configurable through an optional `codex-hud.toml`; the Node and Rust renderers read the same `codex-hud.toml` tiers. With no config file you get the defaults shown above; every key is optional and anything you omit inherits the built-in default.
 
 The canonical schema lives in [`spec/config-schema.md`](spec/config-schema.md). This README shows the common options; use the schema when changing parser behavior or validating every supported field.
 
@@ -242,7 +242,7 @@ npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and stages the executable under `~/.local/bin/codex-hud-codex.d/<version>/codex`. The staged payload must pass a `--version` health check **before** anything is activated; only then is `~/.local/bin/codex-hud-codex` atomically retargeted to the new payload, and the previous version is kept on disk for rollback. A failed build is kept aside as `<version>.failed` and the active runtime is left untouched. It also writes `~/.local/bin/codex-hud-tui` in patched mode, a launcher that passes the colored HUD command through Codex's `-c tui.status_line_command=...` override without changing `~/.codex/config.toml`. With the default `--renderer auto`, the injected command is `'~/.local/bin/codex-hud-rs' --line --color` when the Rust renderer is installed, falling back to `node .../plugins/codex-hud/scripts/codex-hud.js --line --color` otherwise. The executable path and `argv[0]` both keep Codex-visible names, so terminal integrations such as Herdr can still recognize the pane as a Codex session.
+The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and stages the executable under `~/.local/bin/codex-hud-codex.d/<version>/codex`. The staged payload must pass a `--version` health check **before** anything is activated; only then is `~/.local/bin/codex-hud-codex` atomically retargeted to the new payload, and the previous version is kept on disk for rollback. A failed build is kept aside as `<version>.failed` and the active runtime is left untouched. It also writes `~/.local/bin/codex-hud-tui` in patched mode, a launcher that passes the colored status-line command through Codex's `-c tui.status_line_command=...` override without changing `~/.codex/config.toml`. With the default `--renderer auto`, the injected command is `'~/.local/bin/codex-hud-rs' --line --color` when the Rust renderer is installed, falling back to `node .../plugins/codex-hud/scripts/codex-hud.js --line --color` otherwise. The executable path and `argv[0]` both keep Codex-visible names, so terminal integrations such as Herdr can still recognize the pane as a Codex session.
 
 Safe launcher mode leaves your normal `codex` command alone:
 

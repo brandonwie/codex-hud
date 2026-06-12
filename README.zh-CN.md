@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**为 OpenAI Codex CLI 打造的工作区 HUD —— 默认是独立的多行 HUD，外加一条紧凑的彩色状态行（模型、项目、git、上下文、5h/7d 用量），在实验性补丁模式下会成为 TUI 内嵌页脚。**
+**为 OpenAI Codex CLI 打造的工作区 HUD —— 独立命令可以渲染多行工作区快照；实验性补丁版 Codex TUI 页脚目前只渲染紧凑的单行状态行。**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -24,7 +24,7 @@
 
 Codex HUD 是一个本地 Codex 插件，为 OpenAI Codex CLI 会话渲染多行工作区 HUD。
 
-默认情况下，它是 Codex 原生 `[tui].status_line` 的辅助伙伴，因为原生 Codex 无法在输入区下方渲染任意插件输出 —— 它公开了一个可配置的内置状态项数组，但没有提供由插件掌控的渲染器。本仓库还附带了一条持续维护的补丁路径，供希望让 HUD 直接渲染到真实 Codex 页脚的用户使用。
+默认情况下，它是 Codex 原生 `[tui].status_line` 的辅助伙伴，因为原生 Codex 无法在输入区下方渲染任意插件输出 —— 它公开了一个可配置的内置状态项数组，但没有提供由插件掌控的渲染器。本仓库还附带了一条持续维护的补丁路径，供希望让紧凑状态行直接渲染到真实 Codex 页脚的用户使用。
 
 由 `--line` 打印的紧凑状态行（仅在补丁模式下才会渲染为 TUI 内嵌页脚）：
 
@@ -84,7 +84,7 @@ npm run build:rust   # 可选:构建 rust/target/release/codex-hud-rs
 在开发期间直接运行 Node 渲染器：
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # 多行 HUD
+node plugins/codex-hud/scripts/codex-hud.js           # 独立多行快照
 node plugins/codex-hud/scripts/codex-hud.js --line     # 单行紧凑展示
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # 机器可读
@@ -109,7 +109,7 @@ $ node plugins/codex-hud/scripts/codex-hud.js --line
 
 ## 配置
 
-多行 HUD 和紧凑状态行都可以通过一个可选的 `codex-hud.toml` 进行配置；Node 与 Rust 渲染器读取同一套 `codex-hud.toml` 配置层级。若没有配置文件，你将得到上方展示的默认值；每个键都是可选的，凡是省略的项都会继承内置默认值。
+独立多行快照和紧凑状态行都可以通过一个可选的 `codex-hud.toml` 进行配置；Node 与 Rust 渲染器读取同一套 `codex-hud.toml` 配置层级。若没有配置文件，你将得到上方展示的默认值；每个键都是可选的，凡是省略的项都会继承内置默认值。
 
 ```bash
 codex-hud --init-config     # 生成 ~/.codex/codex-hud.toml（用 --force 覆盖）

@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**為 OpenAI Codex CLI 打造的工作區 HUD——預設是獨立的多行 HUD，外加一條精簡彩色狀態列（模型、專案、git、上下文、5h/7d 用量），在實驗性修補模式下會成為 TUI 內嵌頁尾。**
+**為 OpenAI Codex CLI 打造的工作區 HUD——獨立命令可以渲染多行工作區快照；實驗性修補版 Codex TUI 頁尾目前只渲染精簡的單行狀態列。**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -24,7 +24,7 @@
 
 Codex HUD 是一個本機 Codex 外掛，會為 OpenAI Codex CLI 工作階段呈現多行的工作區 HUD。
 
-預設情況下，它是 Codex 原生 `[tui].status_line` 的搭配工具，因為原版 Codex 無法在輸入區下方繪製任意外掛輸出——它只公開一個可設定的內建狀態項目陣列，而非由外掛掌控的渲染器。本儲存庫同時提供一條持續維護的修補路徑，供希望讓 HUD 直接在真正的 Codex 頁尾中渲染的使用者使用。
+預設情況下，它是 Codex 原生 `[tui].status_line` 的搭配工具，因為原版 Codex 無法在輸入區下方繪製任意外掛輸出——它只公開一個可設定的內建狀態項目陣列，而非由外掛掌控的渲染器。本儲存庫同時提供一條持續維護的修補路徑，供希望讓精簡狀態列直接在真正的 Codex 頁尾中渲染的使用者使用。
 
 以下是由 `--line` 印出的精簡狀態列（僅在修補模式下才會渲染為 TUI 內嵌頁尾）：
 
@@ -84,7 +84,7 @@ npm run build:rust   # 可選:建置 rust/target/release/codex-hud-rs
 在開發過程中直接執行 Node 渲染器：
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # 多行 HUD
+node plugins/codex-hud/scripts/codex-hud.js           # 獨立多行快照
 node plugins/codex-hud/scripts/codex-hud.js --line     # 單行精簡列
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # 機器可讀格式
@@ -109,7 +109,7 @@ $ node plugins/codex-hud/scripts/codex-hud.js --line
 
 ## 設定
 
-多行 HUD 與精簡狀態列都可透過選用的 `codex-hud.toml` 進行設定；Node 與 Rust 渲染器讀取相同的 `codex-hud.toml` 設定層級。若沒有設定檔，你會得到上方所示的預設值；每個鍵都是選用的，任何省略的項目都會沿用內建預設值。
+獨立多行快照與精簡狀態列都可透過選用的 `codex-hud.toml` 進行設定；Node 與 Rust 渲染器讀取相同的 `codex-hud.toml` 設定層級。若沒有設定檔，你會得到上方所示的預設值；每個鍵都是選用的，任何省略的項目都會沿用內建預設值。
 
 ```bash
 codex-hud --init-config     # 建立 ~/.codex/codex-hud.toml 樣板（--force 可覆寫）

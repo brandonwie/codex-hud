@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**OpenAI Codex CLI를 위한 워크스페이스 HUD — 기본은 독립 실행형 멀티라인 HUD이며, 간결하고 색상이 입혀진 상태 라인(모델, 프로젝트, git, 컨텍스트, 5h/7d 사용량)은 실험적인 패치 모드에서 TUI 내부 푸터가 됩니다.**
+**OpenAI Codex CLI를 위한 워크스페이스 HUD — 독립 실행형 명령은 멀티라인 워크스페이스 스냅샷을 출력할 수 있지만, 실험적 패치 Codex TUI 푸터는 현재 컴팩트한 단일 줄 상태 라인만 렌더링합니다.**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -24,7 +24,7 @@
 
 Codex HUD는 OpenAI Codex CLI 세션을 위한 멀티라인 워크스페이스 HUD를 렌더링하는 로컬 Codex 플러그인입니다.
 
-기본적으로 이는 Codex의 네이티브 `[tui].status_line`을 보완하는 도구입니다. 기본 Codex는 입력 영역 아래에 임의의 플러그인 출력을 렌더링할 수 없기 때문입니다 — 설정 가능한 내장 상태 항목 배열은 제공하지만 플러그인이 소유하는 렌더러는 제공하지 않습니다. 이 저장소는 HUD를 실제 Codex 푸터에 직접 렌더링하기를 원하는 사용자를 위해 유지 관리되는 패치 경로도 함께 제공합니다.
+기본적으로 이는 Codex의 네이티브 `[tui].status_line`을 보완하는 도구입니다. 기본 Codex는 입력 영역 아래에 임의의 플러그인 출력을 렌더링할 수 없기 때문입니다 — 설정 가능한 내장 상태 항목 배열은 제공하지만 플러그인이 소유하는 렌더러는 제공하지 않습니다. 이 저장소는 컴팩트 상태 라인을 실제 Codex 푸터에 직접 렌더링하기를 원하는 사용자를 위해 유지 관리되는 패치 경로도 함께 제공합니다.
 
 다음은 `--line`이 출력하는 간결한 상태 라인입니다(TUI 내부 푸터로는 패치 모드에서만 렌더링됩니다):
 
@@ -84,7 +84,7 @@ npm run build:rust   # 선택: rust/target/release/codex-hud-rs 빌드
 개발 중에는 Node 렌더러를 직접 실행할 수 있습니다.
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # 멀티라인 HUD
+node plugins/codex-hud/scripts/codex-hud.js           # 독립 실행형 멀티라인 스냅샷
 node plugins/codex-hud/scripts/codex-hud.js --line     # 단일 간결 라인
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # 기계가 읽을 수 있는 형식
@@ -109,7 +109,7 @@ ANSI 색상 스타일이 적용된 같은 라인을 보려면 로컬에서 `node
 
 ## 설정
 
-멀티라인 HUD와 간결한 상태 라인 모두 선택적인 `codex-hud.toml`을 통해 설정할 수 있으며, Node와 Rust 렌더러는 동일한 `codex-hud.toml` 계층을 읽습니다. 설정 파일이 없으면 위에 표시된 기본값이 적용되며, 모든 키는 선택 사항이고 생략한 항목은 내장 기본값을 상속합니다.
+독립 실행형 멀티라인 스냅샷과 간결한 상태 라인 모두 선택적인 `codex-hud.toml`을 통해 설정할 수 있으며, Node와 Rust 렌더러는 동일한 `codex-hud.toml` 계층을 읽습니다. 설정 파일이 없으면 위에 표시된 기본값이 적용되며, 모든 키는 선택 사항이고 생략한 항목은 내장 기본값을 상속합니다.
 
 ```bash
 codex-hud --init-config     # ~/.codex/codex-hud.toml 스캐폴딩 (--force로 덮어쓰기)

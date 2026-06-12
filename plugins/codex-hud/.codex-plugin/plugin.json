@@ -1,7 +1,7 @@
 {
   "name": "codex-hud",
   "version": "0.3.1",
-  "description": "Multiline local context HUD for Codex CLI sessions.",
+  "description": "Local context HUD and compact footer line for Codex CLI sessions.",
   "author": {
     "name": "Brandon Wie",
     "url": "https://github.com/brandonwie"
@@ -18,8 +18,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex HUD",
-    "shortDescription": "Show a multiline local context HUD for Codex.",
-    "longDescription": "Codex HUD adds a script-backed skill that summarizes Codex config, git state, project hints, hooks, and runtime context in a compact multiline view. It can also feed a patched Codex TUI status-line command.",
+    "shortDescription": "Show local Codex context and footer status.",
+    "longDescription": "Codex HUD adds a script-backed skill that summarizes Codex config, git state, project hints, hooks, and runtime context. Standalone commands can render a multiline view; patched Codex TUI mode uses the compact single-line status command.",
     "developerName": "Brandon Wie",
     "category": "Productivity",
     "capabilities": [

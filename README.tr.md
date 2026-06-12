@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**OpenAI Codex CLI için bir çalışma alanı HUD'u — varsayılan olarak bağımsız, çok satırlı bir HUD; buna ek olarak deneysel yamalı modda TUI içi altbilgiye dönüşen kompakt, renkli bir durum satırı (model, proje, git, bağlam, 5s/7g kullanımı).**
+**OpenAI Codex CLI için bir çalışma alanı HUD'u — bağımsız komutlar çok satırlı workspace görünümü üretebilir; deneysel yamalı Codex TUI altbilgisi şu anda yalnızca kompakt tek satırlı durum satırını gösterir.**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -22,9 +22,9 @@
 
 ---
 
-Codex HUD, OpenAI Codex CLI oturumları için çok satırlı bir çalışma alanı HUD'u oluşturan yerel bir Codex eklentisidir.
+Codex HUD iki yüzeyi olan yerel bir Codex eklentisidir: bağımsız komutlar çok satırlı workspace görünümü yazdırabilir, deneysel yamalı Codex TUI ise kompakt `--line` çıktısını tek satırlı altbilgi olarak render eder.
 
-Varsayılan olarak, Codex'in yerel `[tui].status_line` özelliğine eşlik eder; çünkü standart Codex, giriş alanının altında rastgele eklenti çıktısı gösteremez — yapılandırılabilir bir yerleşik durum öğesi dizisi sunar ancak eklentinin sahip olduğu bir oluşturucu sunmaz. Bu depo ayrıca, HUD'un doğrudan gerçek Codex altbilgisinde oluşturulmasını isteyen kullanıcılar için bakımı yapılan bir yama yolu da sunar.
+Varsayılan olarak, Codex'in yerel `[tui].status_line` özelliğine eşlik eder; çünkü standart Codex, giriş alanının altında rastgele eklenti çıktısı gösteremez — yapılandırılabilir bir yerleşik durum öğesi dizisi sunar ancak eklentinin sahip olduğu bir oluşturucu sunmaz. Bu depo ayrıca, kompakt durum satırını doğrudan gerçek Codex altbilgisinde oluşturmak isteyen kullanıcılar için bakımı yapılan bir yama yolu da sunar.
 
 `--line` ile yazdırılan kompakt durum satırı (yalnızca yamalı modda TUI içi altbilgi olarak oluşturulur):
 
@@ -84,7 +84,7 @@ Beceri listesinin yenilenmesi için kurulumdan veya yeniden kurulumdan sonra yen
 Geliştirme sırasında Node oluşturucusunu doğrudan çalıştırın:
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # çok satırlı HUD
+node plugins/codex-hud/scripts/codex-hud.js           # bağımsız çok satırlı görünüm
 node plugins/codex-hud/scripts/codex-hud.js --line     # tek kompakt satır
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # makine tarafından okunabilir
@@ -109,7 +109,7 @@ Aynı satırı ANSI renk stilleriyle görmek için yerelde `node plugins/codex-h
 
 ## Yapılandırma
 
-Hem çok satırlı HUD hem de kompakt durum satırı, isteğe bağlı bir `codex-hud.toml` dosyası aracılığıyla yapılandırılabilir; Node ve Rust oluşturucuları aynı `codex-hud.toml` katmanlarını okur. Yapılandırma dosyası olmadığında yukarıda gösterilen varsayılanları alırsınız; her anahtar isteğe bağlıdır ve atladığınız her şey yerleşik varsayılanı devralır.
+Hem bağımsız çok satırlı görünüm hem de kompakt durum satırı, isteğe bağlı bir `codex-hud.toml` dosyası aracılığıyla yapılandırılabilir; Node ve Rust oluşturucuları aynı `codex-hud.toml` katmanlarını okur. Yapılandırma dosyası olmadığında yukarıda gösterilen varsayılanları alırsınız; her anahtar isteğe bağlıdır ve atladığınız her şey yerleşik varsayılanı devralır.
 
 ```bash
 codex-hud --init-config     # ~/.codex/codex-hud.toml dosyasını oluştur (üzerine yazmak için --force)

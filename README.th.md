@@ -4,7 +4,7 @@
 
 # Codex HUD
 
-**HUD พื้นที่ทำงานสำหรับ OpenAI Codex CLI — HUD หลายบรรทัดแบบสแตนด์อโลนโดยค่าเริ่มต้น พร้อม status line แบบกะทัดรัดและมีสีสัน (โมเดล, โปรเจกต์, git, คอนเท็กซ์, การใช้งานรอบ 5h/7d) ที่จะกลายเป็น footer ใน TUI เมื่อใช้โหมดแพตช์แบบทดลอง**
+**HUD พื้นที่ทำงานสำหรับ OpenAI Codex CLI — คำสั่งแบบสแตนด์อโลนสามารถแสดงสแนปช็อตหลายบรรทัดของ workspace ได้ แต่ footer ใน Codex TUI โหมดแพตช์แบบทดลองตอนนี้แสดงเฉพาะ status line แบบกะทัดรัดหนึ่งบรรทัด**
 
 [![Version](https://img.shields.io/github/package-json/v/brandonwie/codex-hud?style=for-the-badge&logo=semver&logoColor=white&color=8a63d2&label=version)](https://github.com/brandonwie/codex-hud/blob/main/package.json)
 [![License](https://img.shields.io/github/license/brandonwie/codex-hud?style=for-the-badge&color=2ea44f)](LICENSE)
@@ -24,7 +24,7 @@
 
 Codex HUD เป็นปลั๊กอิน Codex แบบโลคัลที่เรนเดอร์ HUD พื้นที่ทำงานแบบหลายบรรทัดสำหรับเซสชัน OpenAI Codex CLI
 
-โดยค่าเริ่มต้น มันทำหน้าที่เป็นส่วนเสริมของ `[tui].status_line` แบบเนทีฟของ Codex เพราะ Codex รุ่นมาตรฐานไม่สามารถเรนเดอร์เอาต์พุตใด ๆ ของปลั๊กอินใต้พื้นที่พิมพ์ได้ — มันเปิดให้ปรับแต่งอาร์เรย์ของรายการสถานะที่ติดตั้งมาในตัวได้ แต่ไม่มีตัวเรนเดอร์ที่ปลั๊กอินเป็นเจ้าของ รีโปนี้ยังมาพร้อมเส้นทางการแพตช์ที่ดูแลรักษาไว้สำหรับผู้ใช้ที่ต้องการให้ HUD เรนเดอร์ลงใน footer จริงของ Codex โดยตรง
+โดยค่าเริ่มต้น มันทำหน้าที่เป็นส่วนเสริมของ `[tui].status_line` แบบเนทีฟของ Codex เพราะ Codex รุ่นมาตรฐานไม่สามารถเรนเดอร์เอาต์พุตใด ๆ ของปลั๊กอินใต้พื้นที่พิมพ์ได้ — มันเปิดให้ปรับแต่งอาร์เรย์ของรายการสถานะที่ติดตั้งมาในตัวได้ แต่ไม่มีตัวเรนเดอร์ที่ปลั๊กอินเป็นเจ้าของ รีโปนี้ยังมาพร้อมเส้นทางการแพตช์ที่ดูแลรักษาไว้สำหรับผู้ใช้ที่ต้องการให้ status line แบบกะทัดรัดเรนเดอร์ลงใน footer จริงของ Codex โดยตรง
 
 Status line แบบกะทัดรัดซึ่งพิมพ์ด้วย `--line` (จะถูกเรนเดอร์เป็น footer ใน TUI เฉพาะในโหมดแพตช์เท่านั้น):
 
@@ -84,7 +84,7 @@ npm run build:rust   # ตัวเลือก: คอมไพล์ rust/targ
 รันตัวเรนเดอร์ Node โดยตรงระหว่างการพัฒนา:
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # HUD หลายบรรทัด
+node plugins/codex-hud/scripts/codex-hud.js           # สแนปช็อตหลายบรรทัดแบบสแตนด์อโลน
 node plugins/codex-hud/scripts/codex-hud.js --line     # บรรทัดกะทัดรัดบรรทัดเดียว
 node plugins/codex-hud/scripts/codex-hud.js --line --color
 node plugins/codex-hud/scripts/codex-hud.js --json      # อ่านได้ด้วยเครื่อง
