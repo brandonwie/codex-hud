@@ -39,7 +39,7 @@ pub fn default_config() -> Value {
             "tokenUnits": true,
             "tokenParts": true,
             "showPace": true,
-            "modelStyle": "full",
+            "modelShort": true,
             "effortShort": false,
             "paceSlowPrefix": "🐢",
             "paceNormalPrefix": "🤖",
@@ -471,7 +471,20 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
 
     if let Some(format) = object_section(raw_map, "format", warnings, source) {
         let mut coerced = Map::new();
-        for key in ["percentRound", "tokenUnits", "tokenParts", "showPace"] {
+        if format.contains_key("modelStyle") {
+            note(
+                warnings,
+                "format.modelStyle is ignored; use format.modelShort = false for full model names"
+                    .to_string(),
+            );
+        }
+        for key in [
+            "percentRound",
+            "tokenUnits",
+            "tokenParts",
+            "showPace",
+            "modelShort",
+        ] {
             match format.get(key) {
                 Some(Value::Bool(b)) => {
                     coerced.insert(key.into(), Value::Bool(*b));
@@ -482,16 +495,6 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                 ),
                 None => {}
             }
-        }
-        match format.get("modelStyle") {
-            Some(Value::String(s)) if s == "full" || s == "version-only" => {
-                coerced.insert("modelStyle".into(), Value::String(s.clone()));
-            }
-            Some(_) => note(
-                warnings,
-                "format.modelStyle must be \"full\" or \"version-only\"; ignored".to_string(),
-            ),
-            None => {}
         }
         match format.get("effortShort") {
             Some(Value::Bool(b)) => {
@@ -626,7 +629,7 @@ percentRound = true   # false -> one decimal place
 tokenUnits = true     # false -> raw integers (no k/M)
 tokenParts = true     # false -> total only, hide (I:.. O:.. C:..)
 showPace = true       # false -> hide the pace % in 5h/7d
-modelStyle = "full"   # "version-only" -> 5.5 instead of gpt-5.5
+modelShort = true     # false -> gpt-5.5 instead of 5.5
 effortShort = false   # true -> xh instead of xhigh
 paceSlowPrefix = "🐢"   # used more than thresholds.pace.crit behind pace
 paceNormalPrefix = "🤖" # within +/- thresholds.pace.crit of pace
@@ -690,5 +693,24 @@ mod tests {
         assert_eq!(format.get("paceNormalPrefix"), Some(&json!("abcdefgh")));
         assert_eq!(format.get("paceFastPrefix"), Some(&json!("🔥🔥🔥🔥")));
         assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn validate_and_coerce_warns_for_legacy_model_style() {
+        let raw = json!({
+            "format": {
+                "modelStyle": "full"
+            }
+        });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let format = coerced
+            .get("format")
+            .and_then(Value::as_object)
+            .expect("coerced format object");
+
+        assert!(!format.contains_key("modelStyle"));
+        assert!(warnings.iter().any(|warning| warning
+            == "test.toml: format.modelStyle is ignored; use format.modelShort = false for full model names"));
     }
 }

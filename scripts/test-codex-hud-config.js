@@ -45,7 +45,7 @@ try {
     const config = printConfig(baseEnv);
     assert.deepStrictEqual(config.config.segments, DEFAULT_SEGMENTS);
     assert.strictEqual(config.config.space, false);
-    assert.strictEqual(config.config.format.modelStyle, "full");
+    assert.strictEqual(config.config.format.modelShort, true);
     assert.strictEqual(config.config.format.effortShort, false);
     assert.strictEqual(config.config.format.paceSlowPrefix, "🐢");
     assert.strictEqual(config.config.format.paceNormalPrefix, "🤖");
@@ -96,13 +96,13 @@ try {
     const cfg = writeConfig(
       dir,
       "t.toml",
-      '[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenParts = false\nmodelStyle = "version-only"\neffortShort = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n'
+      '[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenParts = false\nmodelShort = false\neffortShort = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n'
     );
     const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(config.config.thresholds.percent.warn, 50);
     assert.strictEqual(config.config.thresholds.percent.crit, 60);
     assert.strictEqual(config.config.format.tokenParts, false);
-    assert.strictEqual(config.config.format.modelStyle, "version-only");
+    assert.strictEqual(config.config.format.modelShort, false);
     assert.strictEqual(config.config.format.effortShort, true);
     assert.strictEqual(config.config.format.paceSlowPrefix, "slow-");
     assert.strictEqual(config.config.format.paceNormalPrefix, "ok-");
@@ -138,13 +138,21 @@ try {
   // 7. Ill-typed values are dropped with a note; defaults survive.
   {
     const dir = tmpdir();
-    const cfg = writeConfig(dir, "inv.toml", '[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n[format]\nmodelStyle = "compact"\neffortShort = "yes"\npaceFastPrefix = true\n');
+    const cfg = writeConfig(
+      dir,
+      "inv.toml",
+      '[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n[format]\nmodelStyle = "full"\nmodelShort = "yes"\neffortShort = "yes"\npaceFastPrefix = true\n'
+    );
     const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(config.config.colors.model, "neonViolet", "invalid color dropped -> default kept");
     assert.strictEqual(config.config.thresholds.percent.warn, 100, "out-of-range threshold clamped to 100");
-    assert.strictEqual(config.config.format.modelStyle, "full", "invalid modelStyle dropped -> default kept");
+    assert.strictEqual(config.config.format.modelShort, true, "invalid modelShort dropped -> default kept");
     assert.strictEqual(config.config.format.effortShort, false, "invalid effortShort dropped -> default kept");
     assert.strictEqual(config.config.format.paceFastPrefix, "🔥", "invalid pace prefix dropped -> default kept");
+    assert.ok(
+      config.warnings.some((w) => /format\.modelStyle is ignored/.test(w)),
+      "legacy modelStyle should warn"
+    );
     assert.ok(config.warnings.length >= 1);
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -193,7 +201,7 @@ try {
     fs.rmSync(initHome, { recursive: true, force: true });
   }
 
-  // 10. --json exposes the resolved hud.config.
+  // 11. --json exposes the resolved hud.config.
   {
     const result = run(["--json"], baseEnv);
     assert.strictEqual(result.status, 0, result.stderr);

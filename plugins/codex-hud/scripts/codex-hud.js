@@ -522,7 +522,7 @@ function statusGitBranch(data) {
 function formatModelName(value, format = DEFAULT_CONFIG.format) {
   if (!value) return null;
   const raw = String(value);
-  return format.modelStyle === "version-only" ? raw.replace(/^gpt-/i, "") : raw;
+  return format.modelShort ? raw.replace(/^gpt-/i, "") : raw;
 }
 
 function statusModel(data, format = DEFAULT_CONFIG.format, modelEffortSeparator = "") {
@@ -632,7 +632,7 @@ const DEFAULT_CONFIG = {
     tokenUnits: true,
     tokenParts: true,
     showPace: true,
-    modelStyle: "full",
+    modelShort: true,
     effortShort: false,
     paceSlowPrefix: "🐢",
     paceNormalPrefix: "🤖",
@@ -942,7 +942,7 @@ percentRound = true   # false -> one decimal place
 tokenUnits = true     # false -> raw integers (no k/M)
 tokenParts = true     # false -> total only, hide (I:.. O:.. C:..)
 showPace = true       # false -> hide the pace % in 5h/7d
-modelStyle = "full"   # "version-only" -> 5.5 instead of gpt-5.5
+modelShort = true     # false -> gpt-5.5 instead of 5.5
 effortShort = false   # true -> xh instead of xhigh
 paceSlowPrefix = "🐢"   # used more than thresholds.pace.crit behind pace
 paceNormalPrefix = "🤖" # within +/- thresholds.pace.crit of pace
@@ -1094,13 +1094,12 @@ function validateAndCoerce(raw, warnings, source) {
 
   if (isPlainObject(raw.format)) {
     out.format = {};
-    for (const key of ["percentRound", "tokenUnits", "tokenParts", "showPace"]) {
+    if (raw.format.modelStyle !== undefined) {
+      note("format.modelStyle is ignored; use format.modelShort = false for full model names");
+    }
+    for (const key of ["percentRound", "tokenUnits", "tokenParts", "showPace", "modelShort"]) {
       if (typeof raw.format[key] === "boolean") out.format[key] = raw.format[key];
       else if (raw.format[key] !== undefined) note("format." + key + " must be a boolean; ignored");
-    }
-    if (raw.format.modelStyle !== undefined) {
-      if (raw.format.modelStyle === "full" || raw.format.modelStyle === "version-only") out.format.modelStyle = raw.format.modelStyle;
-      else note('format.modelStyle must be "full" or "version-only"; ignored');
     }
     if (raw.format.effortShort !== undefined) {
       if (typeof raw.format.effortShort === "boolean") out.format.effortShort = raw.format.effortShort;

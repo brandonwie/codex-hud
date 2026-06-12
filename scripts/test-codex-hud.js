@@ -102,7 +102,7 @@ try {
   const line = run(["--line"], { env: fixtureEnv });
   assert.strictEqual(line.status, 0, line.stderr);
   assert.strictEqual(line.stdout.trimEnd().split(/\r?\n/).length, 1, "--line output should stay single-line");
-  assert.match(line.stdout, /gpt-5\.5xhigh/);
+  assert.match(line.stdout, /5\.5xhigh/);
   assert.doesNotMatch(line.stdout, /git:\(/);
   assert.doesNotMatch(line.stdout, /·/);
   assert.doesNotMatch(line.stdout, /node v/);
@@ -112,14 +112,14 @@ try {
   // loose for the live branch and optional dirty marker.
   assert.match(
     line.stdout.trim(),
-    /^gpt-5\.5xhigh\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,🐢100%\)\|7d:16%\(5\.1d,🤖27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
+    /^5\.5xhigh\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,🐢100%\)\|7d:16%\(5\.1d,🤖27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
   );
   assert.doesNotMatch(line.stdout, /now/);
 
   const formatCfg = path.join(tmpCodexHome, "format.toml");
   fs.writeFileSync(
     formatCfg,
-    '[format]\nmodelStyle = "version-only"\neffortShort = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n',
+    '[format]\neffortShort = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n',
     "utf8"
   );
   const shortLine = run(["--line"], { env: { ...fixtureEnv, CODEX_HUD_CONFIG: formatCfg } });
@@ -133,7 +133,7 @@ try {
   fs.writeFileSync(spacedCfg, "space = true\n", "utf8");
   const spacedLine = run(["--line"], { env: { ...fixtureEnv, CODEX_HUD_CONFIG: spacedCfg } });
   assert.strictEqual(spacedLine.status, 0, spacedLine.stderr);
-  assert.match(spacedLine.stdout, /^gpt-5\.5 xhigh \| /);
+  assert.match(spacedLine.stdout, /^5\.5 xhigh \| /);
 
   const colorLine = run(["--line", "--color"], { env: fixtureEnv });
   assert.strictEqual(colorLine.status, 0, colorLine.stderr);
