@@ -1094,6 +1094,9 @@ function validateAndCoerce(raw, warnings, source) {
 
   if (isPlainObject(raw.format)) {
     out.format = {};
+    if (raw.format.modelStyle !== undefined) {
+      note("format.modelStyle is ignored; use format.modelShort = false for full model names");
+    }
     for (const key of ["percentRound", "tokenUnits", "tokenParts", "showPace", "modelShort"]) {
       if (typeof raw.format[key] === "boolean") out.format[key] = raw.format[key];
       else if (raw.format[key] !== undefined) note("format." + key + " must be a boolean; ignored");

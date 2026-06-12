@@ -138,13 +138,21 @@ try {
   // 7. Ill-typed values are dropped with a note; defaults survive.
   {
     const dir = tmpdir();
-    const cfg = writeConfig(dir, "inv.toml", '[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n[format]\nmodelShort = "yes"\neffortShort = "yes"\npaceFastPrefix = true\n');
+    const cfg = writeConfig(
+      dir,
+      "inv.toml",
+      '[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n[format]\nmodelStyle = "full"\nmodelShort = "yes"\neffortShort = "yes"\npaceFastPrefix = true\n'
+    );
     const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(config.config.colors.model, "neonViolet", "invalid color dropped -> default kept");
     assert.strictEqual(config.config.thresholds.percent.warn, 100, "out-of-range threshold clamped to 100");
     assert.strictEqual(config.config.format.modelShort, true, "invalid modelShort dropped -> default kept");
     assert.strictEqual(config.config.format.effortShort, false, "invalid effortShort dropped -> default kept");
     assert.strictEqual(config.config.format.paceFastPrefix, "🔥", "invalid pace prefix dropped -> default kept");
+    assert.ok(
+      config.warnings.some((w) => /format\.modelStyle is ignored/.test(w)),
+      "legacy modelStyle should warn"
+    );
     assert.ok(config.warnings.length >= 1);
     fs.rmSync(dir, { recursive: true, force: true });
   }
