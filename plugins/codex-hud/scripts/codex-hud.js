@@ -630,12 +630,12 @@ const DEFAULT_CONFIG = {
   format: {
     percentRound: true,
     tokenUnits: true,
-    tokenParts: true,
-    showPace: true,
+    tokenUsage: true,
+    pace: true,
     modelShort: true,
     effortShort: false,
     paceSlowPrefix: "🐢",
-    paceNormalPrefix: "🤖",
+    paceNormalPrefix: "👾",
     paceFastPrefix: "🔥",
   },
 };
@@ -712,7 +712,7 @@ function renderRate(label, window, ctx) {
   const pace = ratePacePercent(window);
   const detailParts = [];
   if (remaining) detailParts.push(colorize(remaining, c.label, e));
-  if (ctx.format.showPace && pace !== null) {
+  if (ctx.format.pace && pace !== null) {
     const paceText = paceStatePrefix(window.usedPercent, pace, ctx) + formatPercentCfg(pace, ctx.format);
     detailParts.push(colorize(paceText, c.pace || colorByPaceDeltaCfg(window.usedPercent, pace, ctx), e));
   }
@@ -733,7 +733,7 @@ function renderTokenUsage(label, tokens, ctx) {
   if (!tokens) return labelText + colorize(s.labelValue + "?", c.label, e);
 
   const total = colorize(formatTokenCountCfg(tokens.total, ctx.format), c.tokenTotal, e);
-  if (!ctx.format.tokenParts) {
+  if (!ctx.format.tokenUsage) {
     return labelText + colorize(s.labelValue, c.label, e) + total;
   }
   const input = colorize(formatTokenCountCfg(tokens.input, ctx.format), c.tokenInput, e);
@@ -940,12 +940,12 @@ crit = 15
 [format]
 percentRound = true   # false -> one decimal place
 tokenUnits = true     # false -> raw integers (no k/M)
-tokenParts = true     # false -> total only, hide (I:.. O:.. C:..)
-showPace = true       # false -> hide the pace % in 5h/7d
+tokenUsage = true     # false -> total only, hide (I:.. O:.. C:..)
+pace = true           # false -> hide the pace % in 5h/7d
 modelShort = true     # false -> gpt-5.5 instead of 5.5
 effortShort = false   # true -> xh instead of xhigh
 paceSlowPrefix = "🐢"   # used more than thresholds.pace.crit behind pace
-paceNormalPrefix = "🤖" # within +/- thresholds.pace.crit of pace
+paceNormalPrefix = "👾" # within +/- thresholds.pace.crit of pace
 paceFastPrefix = "🔥"   # used more than thresholds.pace.crit ahead of pace
 `;
 
@@ -1097,9 +1097,15 @@ function validateAndCoerce(raw, warnings, source) {
     if (raw.format.modelStyle !== undefined) {
       note("format.modelStyle is ignored; use format.modelShort = false for full model names");
     }
-    for (const key of ["percentRound", "tokenUnits", "tokenParts", "showPace", "modelShort"]) {
+    for (const key of ["percentRound", "tokenUnits", "modelShort"]) {
       if (typeof raw.format[key] === "boolean") out.format[key] = raw.format[key];
       else if (raw.format[key] !== undefined) note("format." + key + " must be a boolean; ignored");
+    }
+    for (const [key, legacyKey] of [["tokenUsage", "tokenParts"], ["pace", "showPace"]]) {
+      const value = raw.format[key] !== undefined ? raw.format[key] : raw.format[legacyKey];
+      const sourceKey = raw.format[key] !== undefined ? key : legacyKey;
+      if (typeof value === "boolean") out.format[key] = value;
+      else if (value !== undefined) note("format." + sourceKey + " must be a boolean; ignored");
     }
     if (raw.format.effortShort !== undefined) {
       if (typeof raw.format.effortShort === "boolean") out.format.effortShort = raw.format.effortShort;

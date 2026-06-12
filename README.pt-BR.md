@@ -29,7 +29,7 @@ Por padrão, ele é um complemento do `[tui].status_line` nativo do Codex, porqu
 A linha de status compacta, impressa por `--line` (renderizada como rodapé dentro da TUI apenas no modo com patch):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,🤖27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > Os segmentos, rótulos, cores e limites dessa linha são todos configuráveis — veja [Configuração](#configuração).
@@ -96,7 +96,7 @@ Captura de terminal da linha de status compacta (`--line`):
 
 ```text
 $ node plugins/codex-hud/scripts/codex-hud.js --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,🤖30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 Execute `node plugins/codex-hud/scripts/codex-hud.js --line --color` localmente para ver a mesma linha com estilos de cor ANSI.
@@ -164,12 +164,14 @@ crit = 90
 
 # Alternadores de formatação.
 [format]
-tokenParts = true   # false -> apenas total, oculta (I:.. O:.. C:..)
-showPace = true     # false -> hide the pace % in 5h/7d
+percentRound = true # false -> one decimal place
+tokenUnits = true   # false -> raw integers (no k/M)
+tokenUsage = true   # false -> apenas total, oculta (I:.. O:.. C:..)
+pace = true     # false -> hide the pace % in 5h/7d
 modelShort = true # false -> gpt-5.5 em vez de 5.5
 effortShort = false # true -> xh em vez de xhigh
 paceSlowPrefix = "🐢"
-paceNormalPrefix = "🤖"
+paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"
 ```
 

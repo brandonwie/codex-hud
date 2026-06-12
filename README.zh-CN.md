@@ -29,7 +29,7 @@ Codex HUD 是一个本地 Codex 插件，为 OpenAI Codex CLI 会话渲染多行
 由 `--line` 打印的紧凑状态行（仅在补丁模式下才会渲染为 TUI 内嵌页脚）：
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,🤖27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > 该行中的各段、标签、颜色和阈值都是可配置的 —— 参见[配置](#配置)。
@@ -96,7 +96,7 @@ npm test
 
 ```text
 $ node plugins/codex-hud/scripts/codex-hud.js --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,🤖30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 在本地运行 `node plugins/codex-hud/scripts/codex-hud.js --line --color` 可查看带 ANSI 彩色样式的同一行。
@@ -164,12 +164,14 @@ crit = 90
 
 # 格式化开关。
 [format]
-tokenParts = true   # false -> 仅总计，隐藏 (I:.. O:.. C:..)
-showPace = true     # false -> hide the pace % in 5h/7d
+percentRound = true # false -> one decimal place
+tokenUnits = true   # false -> raw integers (no k/M)
+tokenUsage = true   # false -> 仅总计，隐藏 (I:.. O:.. C:..)
+pace = true     # false -> hide the pace % in 5h/7d
 modelShort = true # false -> gpt-5.5 而不是 5.5
 effortShort = false # true -> xh 而不是 xhigh
 paceSlowPrefix = "🐢"
-paceNormalPrefix = "🤖"
+paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"
 ```
 

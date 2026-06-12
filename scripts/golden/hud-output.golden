@@ -88,10 +88,10 @@ gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 ### line | short-model-short-effort | color=true
 \x1b[38;5;135m5.5xh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
-### line | no-token-parts | color=false
+### line | no-token-usage | color=false
 5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k
 
-### line | no-token-parts | color=true
+### line | no-token-usage | color=true
 \x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m16%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m
 
 ### line | no-pace | color=false
@@ -107,10 +107,10 @@ gpt-5.5xhigh|proj|git(main)|Ctx:21%|5h:17%|7d:16%|Tkn:904k(I:533k,O:5k,C:366k)
 \x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m20%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🐢50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | pace-normal | color=false
-5.5xhigh|proj|git(main)|Ctx:21%|5h:50%(0.8h,🤖50%)|7d:?|Tkn:904k(I:533k,O:5k,C:366k)
+5.5xhigh|proj|git(main)|Ctx:21%|5h:50%(0.8h,👾50%)|7d:?|Tkn:904k(I:533k,O:5k,C:366k)
 
 ### line | pace-normal | color=true
-\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🤖50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
+\x1b[38;5;135m5.5xhigh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m👾50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mTkn\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m904k\x1b[0m\x1b[38;5;245m(I:\x1b[0m\x1b[38;5;45m533k\x1b[0m\x1b[38;5;245m,O:\x1b[0m\x1b[38;5;45m5k\x1b[0m\x1b[38;5;245m,C:\x1b[0m\x1b[38;5;45m366k\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | pace-fast | color=false
 5.5xhigh|proj|git(main)|Ctx:21%|5h:80%(0.8h,🔥50%)|7d:?|Tkn:904k(I:533k,O:5k,C:366k)

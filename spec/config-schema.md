@@ -136,12 +136,12 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | -------------- | ------- | -------------------------------------------------------- |
 | `percentRound` | `true`  | Round percentages to whole numbers.                      |
 | `tokenUnits`   | `true`  | Use `k`/`M` abbreviation for token counts.               |
-| `tokenParts`   | `true`  | `false` → total only, hide `(I:.. O:.. C:..)`.           |
-| `showPace`     | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
+| `tokenUsage`   | `true`  | `false` → total only, hide `(I:.. O:.. C:..)`.           |
+| `pace`         | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
 | `modelShort`   | `true`  | `false` → keep full model names such as `gpt-5.5`.      |
 | `effortShort`  | `false` | `true` → `xh` instead of `xhigh`.                        |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
-| `paceNormalPrefix` | `"🤖"` | Prefix when usage is within `±pace.crit` of pace.     |
+| `paceNormalPrefix` | `"👾"` | Prefix when usage is within `±pace.crit` of pace.     |
 | `paceFastPrefix` | `"🔥"` | Prefix when usage is more than `pace.crit` ahead of pace. |
 
 ## Defaults (`DEFAULT_CONFIG`, verbatim)
@@ -160,9 +160,9 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
   },
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
   format: {
-    percentRound: true, tokenUnits: true, tokenParts: true, showPace: true,
+    percentRound: true, tokenUnits: true, tokenUsage: true, pace: true,
     modelShort: true, effortShort: false,
-    paceSlowPrefix: "🐢", paceNormalPrefix: "🤖", paceFastPrefix: "🔥",
+    paceSlowPrefix: "🐢", paceNormalPrefix: "👾", paceFastPrefix: "🔥",
   },
 }
 ```

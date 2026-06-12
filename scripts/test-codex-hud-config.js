@@ -8,6 +8,7 @@ const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const hudScript = path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js");
+const { DEFAULT_CONFIG } = require(hudScript);
 
 function run(args, env) {
   return spawnSync(process.execPath, [hudScript, ...args], {
@@ -33,7 +34,24 @@ function printConfig(env) {
   return JSON.parse(result.stdout);
 }
 
+function readmeFormatKeys() {
+  const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+  const match = readme.match(/# Formatting toggles\.\n\[format\]\n([\s\S]*?)```/);
+  assert.ok(match, "README.md must include the [format] config example");
+  return match[1]
+    .split(/\r?\n/)
+    .map((line) => /^([A-Za-z0-9_]+)\s*=/.exec(line))
+    .filter(Boolean)
+    .map((match) => match[1]);
+}
+
 const DEFAULT_SEGMENTS = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
+
+assert.deepStrictEqual(
+  readmeFormatKeys(),
+  Object.keys(DEFAULT_CONFIG.format),
+  "README.md [format] example must cover every default format key",
+);
 
 // Isolated CODEX_HOME with no sessions/config so config resolution is deterministic.
 const home = tmpdir();
@@ -47,8 +65,10 @@ try {
     assert.strictEqual(config.config.space, false);
     assert.strictEqual(config.config.format.modelShort, true);
     assert.strictEqual(config.config.format.effortShort, false);
+    assert.strictEqual(config.config.format.tokenUsage, true);
+    assert.strictEqual(config.config.format.pace, true);
     assert.strictEqual(config.config.format.paceSlowPrefix, "🐢");
-    assert.strictEqual(config.config.format.paceNormalPrefix, "🤖");
+    assert.strictEqual(config.config.format.paceNormalPrefix, "👾");
     assert.strictEqual(config.config.format.paceFastPrefix, "🔥");
     assert.deepStrictEqual(config.contributors, []);
     assert.deepStrictEqual(config.warnings, []);
@@ -96,12 +116,12 @@ try {
     const cfg = writeConfig(
       dir,
       "t.toml",
-      '[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenParts = false\nmodelShort = false\neffortShort = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n'
+      '[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenUsage = false\nmodelShort = false\neffortShort = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n'
     );
     const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(config.config.thresholds.percent.warn, 50);
     assert.strictEqual(config.config.thresholds.percent.crit, 60);
-    assert.strictEqual(config.config.format.tokenParts, false);
+    assert.strictEqual(config.config.format.tokenUsage, false);
     assert.strictEqual(config.config.format.modelShort, false);
     assert.strictEqual(config.config.format.effortShort, true);
     assert.strictEqual(config.config.format.paceSlowPrefix, "slow-");
@@ -157,7 +177,19 @@ try {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  // 8. Precedence: env tier overrides user tier (CODEX_HOME file).
+  // 8. Legacy format toggles still map onto the current resolved names.
+  {
+    const dir = tmpdir();
+    const cfg = writeConfig(dir, "legacy.toml", "[format]\ntokenParts = false\nshowPace = false\n");
+    const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
+    assert.strictEqual(config.config.format.tokenUsage, false);
+    assert.strictEqual(config.config.format.pace, false);
+    assert.strictEqual(config.config.format.tokenParts, undefined);
+    assert.strictEqual(config.config.format.showPace, undefined);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  // 9. Precedence: env tier overrides user tier (CODEX_HOME file).
   {
     writeConfig(home, "codex-hud.toml", 'separator = "USER"\n');
     const envDir = tmpdir();
@@ -169,7 +201,7 @@ try {
     fs.rmSync(envDir, { recursive: true, force: true });
   }
 
-  // 9. --config-path reports the three tiers.
+  // 10. --config-path reports the three tiers.
   {
     const result = run(["--config-path"], baseEnv);
     assert.strictEqual(result.status, 0, result.stderr);

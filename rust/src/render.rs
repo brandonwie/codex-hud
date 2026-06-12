@@ -443,7 +443,7 @@ fn render_rate(label: &str, window: Option<&Value>, ctx: &RenderCtx) -> String {
     if !remaining.is_empty() {
         detail_parts.push(colorize(&remaining, ctx.color_of("label"), e));
     }
-    if ctx.format_flag("showPace") {
+    if ctx.format_flag("pace") {
         if let Some(pace_value) = pace {
             let pace_color = ctx
                 .color_of("pace")
@@ -502,7 +502,7 @@ fn render_token_usage(label: &str, tokens: Option<&Value>, ctx: &RenderCtx) -> S
         ctx.color_of("tokenTotal"),
         e,
     );
-    if !ctx.format_flag("tokenParts") {
+    if !ctx.format_flag("tokenUsage") {
         return format!(
             "{}{}{}",
             label_text,

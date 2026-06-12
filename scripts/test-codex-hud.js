@@ -112,7 +112,7 @@ try {
   // loose for the live branch and optional dirty marker.
   assert.match(
     line.stdout.trim(),
-    /^5\.5xhigh\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,🐢100%\)\|7d:16%\(5\.1d,🤖27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
+    /^5\.5xhigh\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,🐢100%\)\|7d:16%\(5\.1d,👾27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
   );
   assert.doesNotMatch(line.stdout, /now/);
 
@@ -153,7 +153,7 @@ try {
   assert.match(colorLine.stdout, /\(I:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
   assert.match(colorLine.stdout, /,O:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
   assert.match(colorLine.stdout, /,C:\x1b\[0m\x1b\[38;5;45m[^)\n]+\x1b\[0m/);
-  assert.match(colorLine.stdout, /\x1b\[38;5;245m,\x1b\[0m\x1b\[38;5;85m(?:🐢|🤖|🔥)\d+%\x1b\[0m\x1b\[38;5;245m\)\x1b\[0m/);
+  assert.match(colorLine.stdout, /\x1b\[38;5;245m,\x1b\[0m\x1b\[38;5;85m(?:🐢|👾|🔥)\d+%\x1b\[0m\x1b\[38;5;245m\)\x1b\[0m/);
   assert.match(
     colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
     /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+$/

@@ -37,12 +37,12 @@ pub fn default_config() -> Value {
         "format": {
             "percentRound": true,
             "tokenUnits": true,
-            "tokenParts": true,
-            "showPace": true,
+            "tokenUsage": true,
+            "pace": true,
             "modelShort": true,
             "effortShort": false,
             "paceSlowPrefix": "🐢",
-            "paceNormalPrefix": "🤖",
+            "paceNormalPrefix": "👾",
             "paceFastPrefix": "🔥"
         }
     })
@@ -478,13 +478,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                     .to_string(),
             );
         }
-        for key in [
-            "percentRound",
-            "tokenUnits",
-            "tokenParts",
-            "showPace",
-            "modelShort",
-        ] {
+        for key in ["percentRound", "tokenUnits", "modelShort"] {
             match format.get(key) {
                 Some(Value::Bool(b)) => {
                     coerced.insert(key.into(), Value::Bool(*b));
@@ -492,6 +486,22 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                 Some(_) => note(
                     warnings,
                     format!("format.{} must be a boolean; ignored", key),
+                ),
+                None => {}
+            }
+        }
+        for (key, legacy_key) in [("tokenUsage", "tokenParts"), ("pace", "showPace")] {
+            let (value, source_key) = match format.get(key) {
+                Some(value) => (Some(value), key),
+                None => (format.get(legacy_key), legacy_key),
+            };
+            match value {
+                Some(Value::Bool(b)) => {
+                    coerced.insert(key.into(), Value::Bool(*b));
+                }
+                Some(_) => note(
+                    warnings,
+                    format!("format.{} must be a boolean; ignored", source_key),
                 ),
                 None => {}
             }
@@ -627,12 +637,12 @@ crit = 15
 [format]
 percentRound = true   # false -> one decimal place
 tokenUnits = true     # false -> raw integers (no k/M)
-tokenParts = true     # false -> total only, hide (I:.. O:.. C:..)
-showPace = true       # false -> hide the pace % in 5h/7d
+tokenUsage = true     # false -> total only, hide (I:.. O:.. C:..)
+pace = true           # false -> hide the pace % in 5h/7d
 modelShort = true     # false -> gpt-5.5 instead of 5.5
 effortShort = false   # true -> xh instead of xhigh
 paceSlowPrefix = "🐢"   # used more than thresholds.pace.crit behind pace
-paceNormalPrefix = "🤖" # within +/- thresholds.pace.crit of pace
+paceNormalPrefix = "👾" # within +/- thresholds.pace.crit of pace
 paceFastPrefix = "🔥"   # used more than thresholds.pace.crit ahead of pace
 "##;
 
@@ -692,6 +702,28 @@ mod tests {
         assert_eq!(format.get("paceSlowPrefix"), Some(&json!("🐢🐢🐢🐢")));
         assert_eq!(format.get("paceNormalPrefix"), Some(&json!("abcdefgh")));
         assert_eq!(format.get("paceFastPrefix"), Some(&json!("🔥🔥🔥🔥")));
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn validate_and_coerce_maps_legacy_format_toggles() {
+        let raw = json!({
+            "format": {
+                "tokenParts": false,
+                "showPace": false
+            }
+        });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let format = coerced
+            .get("format")
+            .and_then(Value::as_object)
+            .expect("coerced format object");
+
+        assert_eq!(format.get("tokenUsage"), Some(&json!(false)));
+        assert_eq!(format.get("pace"), Some(&json!(false)));
+        assert!(!format.contains_key("tokenParts"));
+        assert!(!format.contains_key("showPace"));
         assert!(warnings.is_empty());
     }
 

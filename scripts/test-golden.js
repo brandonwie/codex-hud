@@ -129,9 +129,9 @@ const LINE_CASES = [
   { name: "spaced", over: { hud: { config: { space: true } } } },
   { name: "full-model", over: { hud: { config: { format: { modelShort: false } } } } },
   { name: "short-model-short-effort", over: { hud: { config: { format: { effortShort: true } } } } },
-  { name: "no-token-parts", over: { hud: { config: { format: { tokenParts: false } } } } },
+  { name: "no-token-usage", over: { hud: { config: { format: { tokenUsage: false } } } } },
   { name: "no-pace", over: {
-    hud: { config: { format: { showPace: false } } },
+    hud: { config: { format: { pace: false } } },
     usage: { rateLimits: { primary: { usedPercent: 17, windowMinutes: 300, resetsAt: (FIXED / 1000) + 7200 } } },
   } },
   { name: "pace-slow", over: {
