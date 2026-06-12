@@ -1,6 +1,6 @@
 # Codex HUD Configuration Schema
 
-**Schema version:** `3` (frozen) · **Status:** stable · **Source of truth:**
+**Schema version:** `4` (frozen) · **Status:** stable · **Source of truth:**
 `DEFAULT_CONFIG` in `plugins/codex-hud/scripts/codex-hud.js`
 
 This document freezes the `codex-hud.toml` configuration contract and the
