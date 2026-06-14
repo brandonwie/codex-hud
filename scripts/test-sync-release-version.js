@@ -70,7 +70,7 @@ assert.match(result.stderr, /Expected exactly one Cargo\.lock codex-hud package 
 // @semantic-release/git assets, so a release commits every file the prepare
 // step rewrites. Checked against the real repo, not the temp fixture.
 const syncSource = fs.readFileSync(path.join(repoRoot, "scripts", "sync-release-version.js"), "utf8");
-const filesBlock = syncSource.match(/const files = \{([\s\S]*?)\n\};/);
+const filesBlock = syncSource.match(/const files = \{([\s\S]*?)\r?\n\};/);
 assert(filesBlock, "could not locate the files block in sync-release-version.js");
 const syncSurfaces = [...filesBlock[1].matchAll(/path\.join\(repoRoot,\s*([^)]+)\)/g)]
   .map((m) => m[1].split(",").map((part) => part.trim().replace(/^["']|["']$/g, "")).join("/"))

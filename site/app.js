@@ -60,6 +60,7 @@
   // Mirror plugins/codex-hud/scripts/codex-hud.js formatReasoningEffort():
   // effortShort abbreviates only xhigh; high/medium/low always render High/Med/Low.
   const formatEffort = (value, short) => {
+    if (!value) return null;
     const normalized = String(value).trim();
     if (/^x[-_ ]?high$/i.test(normalized)) return short ? "xh" : "xhigh";
     if (/^high$/i.test(normalized)) return "High";
@@ -158,7 +159,7 @@
   };
 
   const formatPercent = (value, state) => (
-    state.percentRound ? `${Math.round(value)}%` : `${Number(value).toFixed(1)}%`
+    `${state.percentRound ? Math.round(value) : Math.round(value * 10) / 10}%`
   );
 
   const formatToken = (value, state) => {

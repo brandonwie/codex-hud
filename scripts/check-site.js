@@ -432,6 +432,16 @@ const runInteractiveSmoke = () => {
   }
   elements.effort.value = "xhigh";
   elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5xhigh")) {
+    fail.push("xhigh effort must render as xhigh when effortShort is false");
+  }
+  elements["short-effort"].checked = true;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5xh")) {
+    fail.push("xhigh effort must abbreviate to xh when effortShort is true");
+  }
+  elements["short-effort"].checked = false;
+  elements.effort.dispatchEvent({ type: "input" });
 
   elements["five-hour"].value = "35";
   elements["five-hour"].dispatchEvent({ type: "input" });
@@ -505,13 +515,13 @@ const runInteractiveSmoke = () => {
   if (customLine.includes("node v24")) {
     fail.push("runtime segment must be removable with its checkbox");
   }
-  if (!customLine.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88.0%")) {
+  if (!customLine.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88%")) {
     fail.push("interactive preview must apply spacing, separator, labels, percent precision, and short effort controls");
   }
-  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88.0%")) {
+  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88%")) {
     fail.push("hero preview must apply the same panel settings as the result preview");
   }
-  if (!customLine.includes("5h: 6.0%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
+  if (!customLine.includes("5h: 6%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
     fail.push("interactive preview must hide pace detail when format.pace is false");
   }
   if (!customLine.endsWith("Tkn: 42000")) {
@@ -544,7 +554,7 @@ const runInteractiveSmoke = () => {
   elements["seven-day"].value = "34";
   elements["seven-day-pace"].value = "100";
   elements["hud-form"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("7d: 34.0%(4.6d,S100.0%)")) {
+  if (!elements["hud-line"].textContent.includes("7d: 34%(4.6d,S100%)")) {
     fail.push("7d pace control must stay separate from usage and cap at 100%");
   }
   if (elements["hud-line"].textContent.includes("113%")) {
