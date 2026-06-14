@@ -4,8 +4,8 @@
 // Golden parity harness for the Codex HUD *parsing* layer (collect()).
 //
 // Where scripts/test-golden.js locks the formatting layer (synthetic data ->
-// formatUsageLine/formatText), this harness locks the INPUT layer: it drives the
-// real collect() over controlled inputs and captures the parsed `data` object.
+// rendered text), this harness locks the INPUT layer: it drives the real Rust
+// collect path over controlled inputs and captures the parsed `data` object.
 //
 //   - git porcelain parsing: a throwaway temp git repo is mutated into a known
 //     state (modified / staged-add / staged-delete / staged-rename / untracked)
@@ -17,8 +17,8 @@
 // Volatile fields (temp paths, generatedAt, nodeVersion) are redacted; the
 // parsed values are kept and diffed against scripts/golden/collect-parsing.golden.
 //
-//   node scripts/test-parsing-golden.js            # check (CI)
-//   node scripts/test-parsing-golden.js --update    # re-capture
+//   node scripts/test-parsing-golden.js [path-to-binary]            # check
+//   node scripts/test-parsing-golden.js [path-to-binary] --update   # re-capture
 
 const assert = require("assert");
 const fs = require("fs");
@@ -27,7 +27,6 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
-const hudScript = path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js");
 const GOLDEN = path.join(__dirname, "golden", "collect-parsing.golden");
 const NOW_MS = Date.parse("2026-06-08T00:00:00.000Z");
 // Deliberately tiny so context percentage math is readable in the golden.
@@ -41,6 +40,25 @@ const TEST_CONTEXT_WINDOW = 1000;
 const GIT_CLEAN_ENV = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))
 );
+
+function rustBinaryName() {
+  return process.platform === "win32" ? "codex-hud.exe" : "codex-hud";
+}
+
+function resolveBinary(argv = process.argv.slice(2)) {
+  const positional = argv.find((arg) => !arg.startsWith("-"));
+  const binName = rustBinaryName();
+  const candidates = [
+    positional,
+    process.env.CODEX_HUD_RUST_BIN,
+    path.join(repoRoot, "rust", "target", "release", binName),
+    path.join(repoRoot, "rust", "target", "debug", binName),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return path.resolve(candidate);
+  }
+  throw new Error("codex-hud binary not found - run: npm run build:rust");
+}
 
 function git(cwd, args) {
   const r = spawnSync(
@@ -135,7 +153,7 @@ const ROLLOUTS = {
 
 // Drive collect() via --json under the fixture inputs and return a normalized,
 // parsing-only view (volatile fields redacted).
-function collectParsed(gitState, rolloutKey) {
+function collectParsed(binary, gitState, rolloutKey) {
   const gitDir = makeGitRepo(gitState);
   const homeDir = makeCodexHome(ROLLOUTS[rolloutKey]);
   const childEnv = {
@@ -146,10 +164,7 @@ function collectParsed(gitState, rolloutKey) {
     USERPROFILE: process.env.USERPROFILE,
   };
   try {
-    // CODEX_HUD_BIN overrides the renderer under test (e.g. the Rust port);
-    // default stays the Node oracle script.
-    const hudBin = process.env.CODEX_HUD_BIN;
-    const r = spawnSync(hudBin || process.execPath, hudBin ? ["--json"] : [hudScript, "--json"], {
+    const r = spawnSync(binary, ["--json"], {
       cwd: gitDir,
       encoding: "utf8",
       env: Object.fromEntries(Object.entries(childEnv).filter(([, value]) => value)),
@@ -203,14 +218,15 @@ const CASES = [
 
 const splitBlocks = (s) => s.trim().split(/\n\n(?=### )/);
 
-function build() {
-  const blocks = CASES.map((c) => "### " + c.name + "\n" + JSON.stringify(collectParsed(c.git, c.rollout), null, 2));
+function build(binary) {
+  const blocks = CASES.map((c) => "### " + c.name + "\n" + JSON.stringify(collectParsed(binary, c.git, c.rollout), null, 2));
   return blocks.join("\n\n") + "\n";
 }
 
 function main() {
   const update = process.argv.includes("--update");
-  const built = build();
+  const binary = resolveBinary();
+  const built = build(binary);
   const count = splitBlocks(built).length;
 
   if (update) {
@@ -220,7 +236,7 @@ function main() {
     return;
   }
   if (!fs.existsSync(GOLDEN)) {
-    console.error("parsing golden missing — run: node scripts/test-parsing-golden.js --update");
+    console.error("parsing golden missing — run: npm run golden:update");
     process.exit(1);
   }
   const expected = fs.readFileSync(GOLDEN, "utf8");

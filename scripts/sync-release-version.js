@@ -11,7 +11,6 @@ const files = {
   packageJson: path.join(repoRoot, "package.json"),
   packageLock: path.join(repoRoot, "package-lock.json"),
   pluginManifest: path.join(repoRoot, "plugins", "codex-hud", ".codex-plugin", "plugin.json"),
-  hudScript: path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js"),
   cargoToml: path.join(repoRoot, "rust", "Cargo.toml"),
   cargoLock: path.join(repoRoot, "rust", "Cargo.lock"),
   siteIndex: path.join(repoRoot, "site", "index.html"),
@@ -24,22 +23,6 @@ function readJson(file) {
 
 function writeJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf8");
-}
-
-function readHudVersion() {
-  const source = fs.readFileSync(files.hudScript, "utf8");
-  const match = source.match(/const VERSION = "([^"]+)";/);
-  if (!match) throw new Error("Could not find HUD VERSION constant");
-  return match[1];
-}
-
-function writeHudVersion(version) {
-  const source = fs.readFileSync(files.hudScript, "utf8");
-  const match = source.match(/const VERSION = "([^"]+)";/);
-  if (!match) throw new Error("Could not find HUD VERSION constant");
-  if (match[1] === version) return;
-  const updated = source.replace(/const VERSION = "[^"]+";/, `const VERSION = "${version}";`);
-  fs.writeFileSync(files.hudScript, updated, "utf8");
 }
 
 function readCargoTomlVersion() {
@@ -103,7 +86,6 @@ function getVersions() {
     packageLock: packageLock.version,
     packageLockRoot: packageLock.packages && packageLock.packages[""] && packageLock.packages[""].version,
     pluginManifest: pluginManifest.version,
-    hudScript: readHudVersion(),
     cargoToml: readCargoTomlVersion(),
     cargoLock: readCargoLockVersion(),
     siteIndex: readSiteVersion(),
@@ -134,7 +116,6 @@ function updateVersion(version) {
   pluginManifest.version = version;
   writeJson(files.pluginManifest, pluginManifest);
 
-  writeHudVersion(version);
   writeCargoTomlVersion(version);
   writeCargoLockVersion(version);
   writeSiteVersion(version);

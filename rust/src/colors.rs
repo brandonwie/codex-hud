@@ -1,4 +1,4 @@
-use crate::js;
+use crate::compat;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -37,7 +37,7 @@ pub fn resolve_color(input: Option<&Value>, fallback: Option<String>) -> Option<
     let numeric_string = matches!(input, Value::String(s)
         if (1..=3).contains(&s.len()) && s.chars().all(|c| c.is_ascii_digit()));
     if input.is_number() || numeric_string {
-        let n = js::js_number(Some(input));
+        let n = compat::js_number(Some(input));
         if n.is_finite() && n == n.trunc() && (0.0..=255.0).contains(&n) {
             return Some(format!("\x1b[38;5;{}m", n as i64));
         }
@@ -75,8 +75,8 @@ pub fn nearest_xterm256(r: u8, g: u8, b: u8) -> i64 {
     let cube_idx = 16 + 36 * ri as i64 + 6 * gi as i64 + bi as i64;
     let cube = [STEPS[ri], STEPS[gi], STEPS[bi]];
 
-    let gray = js::js_round((r + g + b) as f64 / 3.0) as i64;
-    let gray_level = (js::js_round((gray - 8) as f64 / 10.0) as i64).clamp(0, 23);
+    let gray = compat::js_round((r + g + b) as f64 / 3.0) as i64;
+    let gray_level = (compat::js_round((gray - 8) as f64 / 10.0) as i64).clamp(0, 23);
     let gray_val = 8 + gray_level * 10;
     let gray_idx = 232 + gray_level;
 

@@ -21,7 +21,7 @@ const { spawnSync } = require("child_process");
 const FIXED = Date.UTC(2026, 0, 1, 0, 0, 0); // matches test-golden.js
 
 function rustBinaryName() {
-  return process.platform === "win32" ? "codex-hud-rs.exe" : "codex-hud-rs";
+  return process.platform === "win32" ? "codex-hud.exe" : "codex-hud";
 }
 
 function resolveBinary() {
@@ -33,7 +33,7 @@ function resolveBinary() {
     path.join(__dirname, "..", "rust", "target", "debug", binName),
   ].filter(Boolean);
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
+    if (fs.existsSync(candidate)) return path.resolve(candidate);
   }
   console.error("rust binary not found — run: cargo build --manifest-path rust/Cargo.toml");
   process.exit(1);
@@ -101,8 +101,7 @@ try {
 
   // 3. Malformed TOML: --line exits 0, still renders, and emits exactly one
   //    stderr warning line (mirrors config-test block 6); --json keeps stderr
-  //    clean — warnings ride inside the JSON, matching the node oracle's
-  //    text/line-only emission.
+  //    clean because warnings ride inside the JSON payload.
   {
     const dir = tmpdir();
     cleanups.push(dir);

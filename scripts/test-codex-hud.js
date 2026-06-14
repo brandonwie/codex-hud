@@ -7,11 +7,30 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
-const hudScript = path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js");
 const expectedVersion = require(path.join(repoRoot, "package.json")).version;
 
+function rustBinaryName() {
+  return process.platform === "win32" ? "codex-hud.exe" : "codex-hud";
+}
+
+function resolveBinary() {
+  const binName = rustBinaryName();
+  const candidates = [
+    process.argv[2],
+    process.env.CODEX_HUD_RUST_BIN,
+    path.join(repoRoot, "rust", "target", "release", binName),
+    path.join(repoRoot, "rust", "target", "debug", binName),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return path.resolve(candidate);
+  }
+  throw new Error("codex-hud binary not found - run: npm run build:rust");
+}
+
+const hudBin = resolveBinary();
+
 function run(args, options = {}) {
-  return spawnSync(process.execPath, [hudScript, ...args], {
+  return spawnSync(hudBin, args, {
     cwd: repoRoot,
     encoding: "utf8",
     env: { ...process.env, ...(options.env || {}) },

@@ -6,7 +6,6 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
-  defaultStatusLineCommand,
   detectCodexVersion,
   detectLegacyLayout,
   detectStockCodex,
@@ -120,8 +119,8 @@ assert(statusSurfaces.includes("ratatui::style::Color::Indexed"));
 assert(statusSurfaces.includes(".lines()"));
 assert(statusSurfaces.includes(".next()"));
 assert(
-  defaultStatusLineCommand().includes("--line --color"),
-  "patched Codex footer command must use compact single-line HUD output"
+  statusLineCommandFor({ kind: "rust", path: "/tmp/test-prefix/codex-hud" }).includes("--line --color"),
+  "patched Codex footer command must use compact single-line HUD output",
 );
 
 // --- renderLauncherScript: stock mode ---
@@ -149,6 +148,8 @@ const patchedScript = renderLauncherScript({
   stockPath: "/opt/homebrew/bin/codex",
   stockRealpath: "/opt/homebrew/Cellar/codex/0.139.0/bin/codex",
   stockVersion: "0.139.0",
+  statusLineCommand: "'/tmp/test-prefix/codex-hud' --line --color",
+  renderer: "rust",
   builtAt: "2026-06-10T00:00:00.000Z",
 });
 assert(patchedScript.includes("# codex-hud-launcher v2 mode=patched"));
@@ -200,10 +201,10 @@ assert.throws(() => parseArgs(["--launcher-name", "codex*"]), /--launcher-name m
 assert.throws(() => parseArgs(["--version", "../../0.139.0"]), /--version must be a semver-like/);
 assert.strictEqual(parsed.renderer, "auto", "default renderer must be auto");
 assert.strictEqual(parseArgs(["--renderer", "rust"]).renderer, "rust");
-assert.strictEqual(parseArgs(["--renderer", "js"]).renderer, "js");
-assert.throws(() => parseArgs(["--renderer", "python"]), /--renderer must be auto, rust, or js/);
-assert.throws(() => parseArgs(["--bin-name", "codex-hud-rs"]), /Refusing to use codex-hud-rs/);
-assert.throws(() => parseArgs(["--launcher-name", "codex-hud-rs"]), /Refusing to use codex-hud-rs/);
+assert.throws(() => parseArgs(["--renderer", "js"]), /--renderer must be auto or rust/);
+assert.throws(() => parseArgs(["--renderer", "python"]), /--renderer must be auto or rust/);
+assert.throws(() => parseArgs(["--bin-name", "codex-hud"]), /Refusing to use codex-hud/);
+assert.throws(() => parseArgs(["--launcher-name", "codex-hud"]), /Refusing to use codex-hud/);
 
 // --- stock discovery: HUD-managed candidates skipped ---
 const versionShimRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-version-shim-test-"));
@@ -288,7 +289,13 @@ assert(fs.existsSync(path.join(stagePrefix, "codex-hud-codex.d", "1.0.0", "codex
 // --- staged install: failed health check must not touch the active runtime ---
 const failLauncherPath = installLauncher(
   { prefix: stagePrefix, binName: "codex-hud-codex", launcherName: "codex-hud-tui" },
-  { mode: "patched", patchedBinary: stagedV2.target, patchedVersion: "2.0.0" },
+  {
+    mode: "patched",
+    patchedBinary: stagedV2.target,
+    patchedVersion: "2.0.0",
+    statusLineCommand: "'/tmp/test-prefix/codex-hud' --line --color",
+    renderer: "rust",
+  },
 );
 const launcherBytesBefore = fs.readFileSync(failLauncherPath, "utf8");
 
@@ -354,15 +361,15 @@ assert(!fs.existsSync(sentinel), "fallback discovery must never execute a HUD-ma
 
 // --- rust renderer: verify / install / resolve ---
 const rendererRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-renderer-test-"));
-const rendererSource = path.join(rendererRoot, "source", "codex-hud-rs");
+const rendererSource = path.join(rendererRoot, "source", "codex-hud");
 const missingSource = path.join(rendererRoot, "source", "not-built");
 writeExecutable(rendererSource, '#!/usr/bin/env bash\necho "codex-hud 0.2.0"\n');
 const rendererPrefix = path.join(rendererRoot, "bin");
 const rendererArgs = { prefix: rendererPrefix, renderer: "auto" };
 
-assert.strictEqual(rendererBinaryName("darwin"), "codex-hud-rs");
-assert.strictEqual(rendererBinaryName("linux"), "codex-hud-rs");
-assert.strictEqual(rendererBinaryName("win32"), "codex-hud-rs.exe");
+assert.strictEqual(rendererBinaryName("darwin"), "codex-hud");
+assert.strictEqual(rendererBinaryName("linux"), "codex-hud");
+assert.strictEqual(rendererBinaryName("win32"), "codex-hud.exe");
 assert.strictEqual(verifyRustRenderer(rendererSource), "0.2.0");
 const crlfRenderer = path.join(rendererRoot, "source", "crlf");
 writeExecutable(crlfRenderer, '#!/usr/bin/env bash\nprintf "codex-hud 0.2.0\\r\\nUsage\\r\\n"\n');
@@ -377,13 +384,13 @@ assert.throws(
 const installedRenderer = installRustRenderer(rendererArgs, { sourcePath: rendererSource });
 assert.deepStrictEqual(installedRenderer, {
   status: "installed",
-  path: path.join(rendererPrefix, "codex-hud-rs"),
+  path: path.join(rendererPrefix, "codex-hud"),
   version: "0.2.0",
 });
 assert(fs.statSync(installedRenderer.path).mode & 0o111, "installed renderer must be executable");
 
 const cleanupPrefix = path.join(rendererRoot, "cleanup-bin");
-fs.mkdirSync(path.join(cleanupPrefix, "codex-hud-rs"), { recursive: true });
+fs.mkdirSync(path.join(cleanupPrefix, "codex-hud"), { recursive: true });
 const cleanupResult = installRustRenderer({ prefix: cleanupPrefix }, { sourcePath: rendererSource });
 assert.strictEqual(cleanupResult.status, "broken");
 assert(
@@ -394,23 +401,23 @@ assert(
 const existingRenderer = installRustRenderer(rendererArgs, { sourcePath: missingSource });
 assert.deepStrictEqual(existingRenderer, {
   status: "existing",
-  path: path.join(rendererPrefix, "codex-hud-rs"),
+  path: path.join(rendererPrefix, "codex-hud"),
   version: "0.2.0",
 });
 assert.deepStrictEqual(resolveRenderer(rendererArgs, { sourcePath: missingSource }), {
   kind: "rust",
-  path: path.join(rendererPrefix, "codex-hud-rs"),
+  path: path.join(rendererPrefix, "codex-hud"),
 });
 
-writeExecutable(path.join(rendererPrefix, "codex-hud-rs"), "#!/usr/bin/env bash\nexit 1\n");
+writeExecutable(path.join(rendererPrefix, "codex-hud"), "#!/usr/bin/env bash\nexit 1\n");
 const brokenInstalled = installRustRenderer(rendererArgs, { sourcePath: missingSource });
 assert.strictEqual(brokenInstalled.status, "broken");
-assert.strictEqual(brokenInstalled.path, path.join(rendererPrefix, "codex-hud-rs"));
+assert.strictEqual(brokenInstalled.path, path.join(rendererPrefix, "codex-hud"));
 assert.match(brokenInstalled.error, /--help/, "broken renderer result must carry the health-check failure cause");
-assert.deepStrictEqual(
-  resolveRenderer(rendererArgs, { sourcePath: missingSource }),
-  { kind: "js" },
-  "auto must fall back to js when the installed renderer is broken",
+assert.throws(
+  () => resolveRenderer(rendererArgs, { sourcePath: missingSource }),
+  /renderer unavailable: .*failed its --help health check/,
+  "auto must fail loudly when the installed renderer is broken",
 );
 assert.throws(
   () => resolveRenderer({ prefix: rendererPrefix, renderer: "rust" }, { sourcePath: missingSource }),
@@ -426,12 +433,12 @@ const brokenSourceResult = installRustRenderer({ prefix: brokenSourcePrefix }, {
 assert.strictEqual(brokenSourceResult.status, "broken-source");
 assert.strictEqual(brokenSourceResult.path, brokenSource);
 assert.match(brokenSourceResult.error, /--help/);
-assert.deepStrictEqual(
-  resolveRenderer({ prefix: brokenSourcePrefix, renderer: "auto" }, { sourcePath: brokenSource }),
-  { kind: "js" },
-  "auto must fall back to js when the built source binary is broken",
+assert.throws(
+  () => resolveRenderer({ prefix: brokenSourcePrefix, renderer: "auto" }, { sourcePath: brokenSource }),
+  /renderer unavailable: .*failed its --help health check/,
+  "auto must fail loudly when the built source binary is broken",
 );
-assert(!fs.existsSync(path.join(brokenSourcePrefix, "codex-hud-rs")), "a broken source binary must never be installed");
+assert(!fs.existsSync(path.join(brokenSourcePrefix, "codex-hud")), "a broken source binary must never be installed");
 assert.throws(
   () => resolveRenderer({ prefix: brokenSourcePrefix, renderer: "rust" }, { sourcePath: brokenSource }),
   /failed its --help health check/,
@@ -439,24 +446,28 @@ assert.throws(
 
 // broken source + healthy installed target: keep the working install
 const keepPrefix = path.join(rendererRoot, "keep-bin");
-writeExecutable(path.join(keepPrefix, "codex-hud-rs"), '#!/usr/bin/env bash\necho "codex-hud 0.2.0"\n');
+writeExecutable(path.join(keepPrefix, "codex-hud"), '#!/usr/bin/env bash\necho "codex-hud 0.2.0"\n');
 assert.deepStrictEqual(
   resolveRenderer({ prefix: keepPrefix, renderer: "auto" }, { sourcePath: brokenSource }),
-  { kind: "rust", path: path.join(keepPrefix, "codex-hud-rs") },
+  { kind: "rust", path: path.join(keepPrefix, "codex-hud") },
   "a broken build artifact must not downgrade a healthy installed renderer",
 );
 
 const emptyRendererPrefix = path.join(rendererRoot, "empty-bin");
 assert.deepStrictEqual(installRustRenderer({ prefix: emptyRendererPrefix }, { sourcePath: missingSource }), {
   status: "missing",
-  path: path.join(emptyRendererPrefix, "codex-hud-rs"),
+  path: path.join(emptyRendererPrefix, "codex-hud"),
 });
-assert.deepStrictEqual(
-  resolveRenderer({ prefix: emptyRendererPrefix, renderer: "auto" }, { sourcePath: missingSource }),
-  { kind: "js" },
-  "auto must fall back to js when nothing is built",
+assert.throws(
+  () => resolveRenderer({ prefix: emptyRendererPrefix, renderer: "auto" }, { sourcePath: missingSource }),
+  /codex-hud is not built or installed/,
+  "auto must fail loudly when nothing is built",
 );
-assert.deepStrictEqual(resolveRenderer({ prefix: emptyRendererPrefix, renderer: "js" }, { sourcePath: rendererSource }), { kind: "js" });
+assert.deepStrictEqual(
+  resolveRenderer({ prefix: emptyRendererPrefix, renderer: "auto" }, { sourcePath: missingSource, allowMissing: true }),
+  { kind: "rust", path: path.join(emptyRendererPrefix, "codex-hud"), missing: true },
+  "stock-mode metadata can tolerate a missing renderer without inventing another fallback",
+);
 assert.throws(
   () => resolveRenderer({ prefix: emptyRendererPrefix, renderer: "rust" }, { sourcePath: missingSource }),
   /npm run build:rust/,
@@ -466,21 +477,25 @@ assert.throws(
 const previewPrefix = path.join(rendererRoot, "preview-bin");
 assert.deepStrictEqual(
   resolveRenderer({ prefix: previewPrefix, renderer: "auto" }, { install: false, sourcePath: rendererSource }),
-  { kind: "rust", path: path.join(previewPrefix, "codex-hud-rs"), preview: true },
+  { kind: "rust", path: path.join(previewPrefix, "codex-hud"), preview: true },
 );
-assert(!fs.existsSync(path.join(previewPrefix, "codex-hud-rs")), "resolveRenderer install:false must not write to the prefix");
+assert(!fs.existsSync(path.join(previewPrefix, "codex-hud")), "resolveRenderer install:false must not write to the prefix");
 assert(!fs.existsSync(previewPrefix), "resolveRenderer install:false must not create the prefix");
+assert.throws(
+  () => resolveRenderer({ prefix: previewPrefix, renderer: "auto" }, { install: false, sourcePath: missingSource }),
+  /codex-hud is not built or installed/,
+);
 assert.deepStrictEqual(
-  resolveRenderer({ prefix: previewPrefix, renderer: "auto" }, { install: false, sourcePath: missingSource }),
-  { kind: "js" },
+  resolveRenderer({ prefix: previewPrefix, renderer: "auto" }, { install: false, sourcePath: missingSource, allowMissing: true }),
+  { kind: "rust", path: path.join(previewPrefix, "codex-hud"), missing: true },
 );
 
 // preview must health-check binaries so --print-config / the patched-install
 // preview can never disagree with what the real install resolves.
-assert.deepStrictEqual(
-  resolveRenderer(rendererArgs, { install: false, sourcePath: missingSource }),
-  { kind: "js" },
-  "preview must fall back to js for a broken installed renderer, matching the install path",
+assert.throws(
+  () => resolveRenderer(rendererArgs, { install: false, sourcePath: missingSource }),
+  /renderer unavailable: .*failed its --help health check/,
+  "preview must fail for a broken installed renderer, matching the install path",
 );
 assert.throws(
   () => resolveRenderer({ prefix: rendererPrefix, renderer: "rust" }, { install: false, sourcePath: missingSource }),
@@ -488,25 +503,24 @@ assert.throws(
 );
 assert.deepStrictEqual(
   resolveRenderer(rendererArgs, { install: false, sourcePath: rendererSource }),
-  { kind: "rust", path: path.join(rendererPrefix, "codex-hud-rs"), preview: true },
+  { kind: "rust", path: path.join(rendererPrefix, "codex-hud"), preview: true },
   "preview must offer the healthy source when the installed target is broken",
 );
 assert.deepStrictEqual(
   resolveRenderer({ prefix: keepPrefix, renderer: "auto" }, { install: false, sourcePath: brokenSource }),
-  { kind: "rust", path: path.join(keepPrefix, "codex-hud-rs") },
+  { kind: "rust", path: path.join(keepPrefix, "codex-hud") },
   "preview must keep a healthy installed renderer despite a broken build artifact",
 );
 
 // --- statusLineCommandFor ---
 assert.strictEqual(
-  statusLineCommandFor({ kind: "rust", path: "/x/bin/codex-hud-rs" }),
-  "'/x/bin/codex-hud-rs' --line --color",
+  statusLineCommandFor({ kind: "rust", path: "/x/bin/codex-hud" }),
+  "'/x/bin/codex-hud' --line --color",
 );
-assert.strictEqual(statusLineCommandFor({ kind: "js" }), defaultStatusLineCommand());
-assert.match(statusLineCommandFor({ kind: "js" }), /^node '.*codex-hud\.js' --line --color$/);
+assert.throws(() => statusLineCommandFor({ kind: "js" }), /unsupported renderer kind/);
 
 // --- launcher renderer marker round-trips; stock stays free of status_line_command ---
-const rustStatusLineCommand = statusLineCommandFor({ kind: "rust", path: path.join(rendererPrefix, "codex-hud-rs") });
+const rustStatusLineCommand = statusLineCommandFor({ kind: "rust", path: path.join(rendererPrefix, "codex-hud") });
 const rustPatchedScript = renderLauncherScript({
   mode: "patched",
   prefix: rendererPrefix,
@@ -517,7 +531,7 @@ const rustPatchedScript = renderLauncherScript({
 });
 assert(rustPatchedScript.includes("# renderer=rust"));
 assert(rustPatchedScript.includes("exec -a codex "), "rust-renderer patched launcher must preserve argv[0] as codex");
-assert(rustPatchedScript.includes("codex-hud-rs"), "patched -c override must carry the rust renderer");
+assert(rustPatchedScript.includes("codex-hud"), "patched -c override must carry the rust renderer");
 assert.strictEqual(parseLauncherMetadata(rustPatchedScript).renderer, "rust");
 
 const rustStockScript = renderLauncherScript({
@@ -536,7 +550,7 @@ assert.strictEqual(parseLauncherMetadata(stockScript).renderer, undefined, "olde
 const patchedExecPrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-patched-exec-test-"));
 const fakePatchedCodex = path.join(patchedExecPrefix, "fake-patched-codex");
 writeExecutable(fakePatchedCodex, "#!/usr/bin/env bash\nprintf '%s\\n' \"$@\"\n");
-const patchedExecCommand = statusLineCommandFor({ kind: "rust", path: path.join(patchedExecPrefix, "codex-hud-rs") });
+const patchedExecCommand = statusLineCommandFor({ kind: "rust", path: path.join(patchedExecPrefix, "codex-hud") });
 const patchedExecLauncher = installLauncher(
   { prefix: patchedExecPrefix, binName: "codex-hud-codex", launcherName: "codex-hud-tui" },
   {
@@ -557,7 +571,7 @@ assert.strictEqual(
   `tui.status_line_command=${JSON.stringify(patchedExecCommand)}`,
   "layered quoting must survive bash and deliver the exact TOML override",
 );
-assert(patchedExecArgv[1].includes("codex-hud-rs"));
+assert(patchedExecArgv[1].includes("codex-hud"));
 assert.deepStrictEqual(patchedExecArgv.slice(2), ["resume", "--last"], "user args must arrive verbatim after the -c override");
 
 // --- pruneVersionDirs ---
@@ -708,6 +722,8 @@ installLauncher(doctorStaleArgs, {
   stockPath: doctorFakeStock,
   stockRealpath: doctorFakeStock,
   stockVersion: "0.138.0",
+  statusLineCommand: `'${path.join(doctorStaleRoot, "codex-hud")}' --line --color`,
+  renderer: "rust",
 });
 const staleReport = doctor(doctorStaleArgs, {
   env: { PATH: doctorStockBin },
@@ -762,7 +778,7 @@ assert.strictEqual(isManagedDefaultShim(shim, launcher), true);
 // --- doctor renderer reporting ---
 const repoPackageVersion = require("../package.json").version;
 
-// (1a) stock launcher with renderer=rust marker, no codex-hud-rs binary: informational only.
+// (1a) stock launcher with renderer=rust marker, no codex-hud binary: informational only.
 const doctorRendererStockRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-renderer-stock-test-"));
 const doctorRendererStockArgs = { prefix: doctorRendererStockRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
 installLauncher(doctorRendererStockArgs, {
@@ -778,10 +794,10 @@ const rendererStockReport = doctor(doctorRendererStockArgs, {
 });
 assert.strictEqual(rendererStockReport.renderer.configured, "rust");
 assert.strictEqual(rendererStockReport.renderer.installed, false);
-assert.strictEqual(rendererStockReport.renderer.binPath, path.join(doctorRendererStockRoot, "codex-hud-rs"));
+assert.strictEqual(rendererStockReport.renderer.binPath, path.join(doctorRendererStockRoot, "codex-hud"));
 assert.strictEqual(rendererStockReport.healthy, true, "missing renderer must not break a stock entrypoint chain");
 assert(
-  !rendererStockReport.recommendations.some((entry) => entry.includes("codex-hud-rs")),
+  !rendererStockReport.recommendations.some((entry) => entry.includes("codex-hud")),
   "stock-mode missing renderer must stay informational, not a recommendation",
 );
 
@@ -811,6 +827,7 @@ installLauncher(doctorRendererPatchedArgs, {
   stockPath: doctorFakeStock,
   stockRealpath: doctorFakeStock,
   stockVersion: "0.139.0",
+  statusLineCommand: `'${path.join(doctorRendererPatchedRoot, "codex-hud")}' --line --color`,
   renderer: "rust",
 });
 const rendererPatchedReport = doctor(doctorRendererPatchedArgs, {
@@ -821,38 +838,38 @@ assert.strictEqual(rendererPatchedReport.renderer.configured, "rust");
 assert.strictEqual(rendererPatchedReport.renderer.installed, false);
 assert.strictEqual(rendererPatchedReport.healthy, true, "missing renderer must not break a patched entrypoint chain");
 assert(
-  rendererPatchedReport.recommendations.some((entry) => /codex-hud-rs.*missing/.test(entry)),
+  rendererPatchedReport.recommendations.some((entry) => /codex-hud.*missing/.test(entry)),
   "patched-mode missing renderer must recommend a rebuild",
 );
 
-// (2) installed codex-hud-rs matching the repo version: no renderer recommendation.
-writeExecutable(path.join(doctorRendererPatchedRoot, "codex-hud-rs"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
+// (2) installed codex-hud matching the repo version: no renderer recommendation.
+writeExecutable(path.join(doctorRendererPatchedRoot, "codex-hud"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
 const rendererInstalledReport = doctor(doctorRendererPatchedArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud-rs") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
 });
 assert.strictEqual(rendererInstalledReport.renderer.installed, true);
 assert.strictEqual(rendererInstalledReport.renderer.version, repoPackageVersion);
-assert(!rendererInstalledReport.recommendations.some((entry) => entry.includes("codex-hud-rs")));
+assert(!rendererInstalledReport.recommendations.some((entry) => entry.includes("codex-hud")));
 
-// (3) installed codex-hud-rs behind the repo version: staleness recommendation.
+// (3) installed codex-hud behind the repo version: staleness recommendation.
 const rendererStaleReport = doctor(doctorRendererPatchedArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud-rs") ? "codex-hud 0.1.0\n" : "codex-cli 0.139.0\n"),
+  runCommand: (command) => (command.endsWith("codex-hud") ? "codex-hud 0.1.0\n" : "codex-cli 0.139.0\n"),
 });
 assert.strictEqual(rendererStaleReport.renderer.installed, true);
 assert.strictEqual(rendererStaleReport.renderer.version, "0.1.0");
 assert(
-  rendererStaleReport.recommendations.some((entry) => entry.includes("codex-hud-rs") && /rebuild/.test(entry)),
+  rendererStaleReport.recommendations.some((entry) => entry.includes("codex-hud") && /rebuild/.test(entry)),
   "stale renderer must recommend a rebuild",
 );
 
-// (3b) installed codex-hud-rs whose --help health check fails: reported broken (not missing)
+// (3b) installed codex-hud whose --help health check fails: reported broken (not missing)
 // and, in patched mode, the entrypoint chain is unhealthy because every launch injects it.
 const rendererBrokenReport = doctor(doctorRendererPatchedArgs, {
   env: { PATH: doctorStockBin },
   runCommand: (command) => {
-    if (command.endsWith("codex-hud-rs")) {
+    if (command.endsWith("codex-hud")) {
       throw new Error("exec format error");
     }
     return "codex-cli 0.139.0\n";
@@ -862,7 +879,7 @@ assert.strictEqual(rendererBrokenReport.renderer.installed, false);
 assert.strictEqual(rendererBrokenReport.renderer.broken, true);
 assert.strictEqual(rendererBrokenReport.healthy, false, "patched-mode broken renderer must break the entrypoint chain");
 assert(
-  rendererBrokenReport.anomalies.some((entry) => entry.includes("installed codex-hud-rs failed --help health check")),
+  rendererBrokenReport.anomalies.some((entry) => entry.includes("installed codex-hud failed --help health check")),
   "broken renderer must surface the health-check failure as an anomaly",
 );
 assert(
@@ -870,12 +887,12 @@ assert(
   "patched-mode broken renderer must recommend a rebuild and say broken, not missing",
 );
 
-// (4) v2 launcher without a renderer marker means the js renderer.
+// (4) v2 launcher without a renderer marker means the Rust renderer.
 const rendererDefaultReport = doctor(doctorStockArgs, {
   env: { PATH: doctorStockBin },
   runCommand: () => "codex-cli 0.139.0\n",
 });
-assert.strictEqual(rendererDefaultReport.renderer.configured, "js");
+assert.strictEqual(rendererDefaultReport.renderer.configured, "rust");
 assert.strictEqual(rendererDefaultReport.renderer.installed, false);
 
 const rendererDefaultRun = spawnSync(
@@ -885,16 +902,16 @@ const rendererDefaultRun = spawnSync(
 );
 assert.strictEqual(rendererDefaultRun.status, 0);
 assert(
-  rendererDefaultRun.stdout.includes("renderer: js (node renderer; rust binary missing at"),
-  "js-configured doctor output must still mention the missing rust binary",
+  rendererDefaultRun.stdout.includes("renderer: rust configured but binary missing at"),
+  "doctor output must mention the missing rust binary",
 );
 
-writeExecutable(path.join(doctorStockRoot, "codex-hud-rs"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
+writeExecutable(path.join(doctorStockRoot, "codex-hud"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
 const rendererDefaultInstalledReport = doctor(doctorStockArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud-rs") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
 });
-assert.strictEqual(rendererDefaultInstalledReport.renderer.configured, "js");
+assert.strictEqual(rendererDefaultInstalledReport.renderer.configured, "rust");
 assert.strictEqual(rendererDefaultInstalledReport.renderer.installed, true);
 assert.strictEqual(rendererDefaultInstalledReport.renderer.version, repoPackageVersion);
 
@@ -905,8 +922,8 @@ const rendererDefaultInstalledRun = spawnSync(
 );
 assert.strictEqual(rendererDefaultInstalledRun.status, 0);
 assert(
-  rendererDefaultInstalledRun.stdout.includes(`renderer: rust (${path.join(doctorStockRoot, "codex-hud-rs")}, v${repoPackageVersion}`),
-  "doctor output must show an installed rust renderer even when configured renderer is js",
+  rendererDefaultInstalledRun.stdout.includes(`renderer: rust (${path.join(doctorStockRoot, "codex-hud")}, v${repoPackageVersion}`),
+  "doctor output must show an installed rust renderer",
 );
 
 console.log("patched Codex installer tests passed");

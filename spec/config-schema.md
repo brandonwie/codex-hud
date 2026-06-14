@@ -1,15 +1,14 @@
 # Codex HUD Configuration Schema
 
 **Schema version:** `4` (frozen) · **Status:** stable · **Source of truth:**
-`DEFAULT_CONFIG` in `plugins/codex-hud/scripts/codex-hud.js`
+`default_config()` in `rust/src/hudcfg.rs`
 
 This document freezes the `codex-hud.toml` configuration contract and the
-output-formatting invariants that any reimplementation (e.g. a future native
-build) MUST reproduce byte-for-byte. The JS renderer is the reference oracle;
-`scripts/test-golden.js` enforces parity against the captured fixtures in
+output-formatting invariants that the Rust renderer MUST reproduce
+byte-for-byte. `scripts/test-golden.js` enforces the captured fixtures in
 `scripts/golden/`.
 
-> When the contract changes, bump **Schema version**, update `DEFAULT_CONFIG`,
+> When the contract changes, bump **Schema version**, update `default_config()`,
 > and regenerate goldens (`npm run golden:update`) in the same commit. A change
 > to rendered bytes without a schema-version bump is a regression.
 

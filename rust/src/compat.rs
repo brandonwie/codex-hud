@@ -1,5 +1,5 @@
-//! JS-semantics helpers. The Node renderer is the parity oracle, so every
-//! numeric/string coercion here mirrors the exact JS builtin it replaces.
+//! JavaScript-compatible coercion helpers kept for output compatibility with
+//! earlier renderer releases.
 
 use serde_json::Value;
 
@@ -15,8 +15,8 @@ pub fn truthy(value: Option<&Value>) -> bool {
 }
 
 /// JS `Number(value)` for the value shapes this codebase feeds it.
-/// `None` represents JS `undefined` (-> NaN). Objects/arrays -> NaN (close enough
-/// for this data; the oracle never feeds arrays to Number()).
+/// `None` represents JS `undefined` (-> NaN). Objects/arrays -> NaN, which is
+/// sufficient for the data shapes this renderer consumes.
 pub fn js_number(value: Option<&Value>) -> f64 {
     match value {
         None => f64::NAN,
@@ -95,7 +95,7 @@ pub fn to_fixed1(x: f64) -> String {
 }
 
 /// JSON-number Value from an f64, preferring integer representation when exact
-/// (keeps `--json` output looking like the Node oracle's).
+/// (keeps `--json` output compatible with earlier releases).
 pub fn number_value(x: f64) -> Value {
     if x.is_finite() && x == x.trunc() && x.abs() < 9.007199254740992e15 {
         Value::from(x as i64)

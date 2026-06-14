@@ -1,23 +1,19 @@
 #!/usr/bin/env node
 "use strict";
 
-// Measurement harness for the Rust HUD port: real binary size + startup
-// latency vs the Node oracle. Replaces the estimate-based numbers from the
-// pre-port planning notes.
+// Measurement harness for the Rust HUD renderer: real binary size + startup
+// latency for the user-facing --line path.
 //
 //   node scripts/measure-rust-hud.js [runs]
 //
-// Both renderers run `--line` in this repo with the same environment, so the
-// comparison includes git subprocess + rollout scanning work, not just process
-// boot. Requires: cargo build --release --manifest-path rust/Cargo.toml
+// Requires: cargo build --release --manifest-path rust/Cargo.toml
 
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
-const nodeScript = path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js");
-const rustBin = path.join(repoRoot, "rust", "target", "release", "codex-hud-rs");
+const rustBin = path.join(repoRoot, "rust", "target", "release", "codex-hud");
 const RUNS = Math.max(3, Number(process.argv[2]) || 15);
 
 if (!fs.existsSync(rustBin)) {
@@ -60,6 +56,4 @@ console.log(`codex-hud measurement (${RUNS} runs each, --line, cwd=${path.basena
 console.log(`\nBinary size:`);
 console.log(`  rust release          ${(rustSize / 1024).toFixed(1)} KB (${rustSize} bytes)`);
 console.log(`\nStartup + render latency:`);
-const nodeStats = measure("node oracle", process.execPath, [nodeScript, "--line"]);
-const rustStats = measure("rust port", rustBin, ["--line"]);
-console.log(`\nSpeedup (median): ${(nodeStats.median / rustStats.median).toFixed(1)}x`);
+measure("rust renderer", rustBin, ["--line"]);

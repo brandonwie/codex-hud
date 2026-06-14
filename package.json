@@ -4,17 +4,14 @@
   "description": "Local context HUD and compact footer line for Codex CLI sessions.",
   "license": "MIT",
   "type": "commonjs",
-  "bin": {
-    "codex-hud": "./plugins/codex-hud/scripts/codex-hud.js"
-  },
   "scripts": {
-    "test": "node scripts/test-codex-hud.js && node scripts/test-codex-hud-config.js && node scripts/test-patched-codex-installer.js && node scripts/test-sync-release-version.js && node scripts/test-golden.js && node scripts/test-parsing-golden.js && node scripts/test-readme-i18n.js && node scripts/check-readme-i18n.js && node scripts/sync-release-version.js --check && npm run site:check",
+    "test": "npm run build:rust && node scripts/test-codex-hud.js rust/target/release/codex-hud && node scripts/test-codex-hud-config.js rust/target/release/codex-hud && node scripts/test-patched-codex-installer.js && node scripts/test-sync-release-version.js && node scripts/test-golden.js rust/target/release/codex-hud && node scripts/test-parsing-golden.js rust/target/release/codex-hud && node scripts/test-readme-i18n.js && node scripts/check-readme-i18n.js && node scripts/sync-release-version.js --check && npm run site:check",
     "site:check": "node scripts/check-site.js",
     "check:i18n": "node scripts/check-readme-i18n.js",
-    "hud": "node plugins/codex-hud/scripts/codex-hud.js",
-    "golden:update": "node scripts/test-golden.js --update && node scripts/test-parsing-golden.js --update",
+    "hud": "rust/target/release/codex-hud",
+    "golden:update": "npm run build:rust && node scripts/test-golden.js rust/target/release/codex-hud --update && node scripts/test-parsing-golden.js rust/target/release/codex-hud --update",
     "build:rust": "cargo build --release --manifest-path rust/Cargo.toml",
-    "test:rust": "npm run build:rust && node scripts/test-rust-golden.js rust/target/release/codex-hud-rs && node scripts/test-rust-parsing-golden.js rust/target/release/codex-hud-rs && node scripts/test-rust-cli.js rust/target/release/codex-hud-rs",
+    "test:rust": "npm run build:rust && node scripts/test-golden.js rust/target/release/codex-hud && node scripts/test-parsing-golden.js rust/target/release/codex-hud && node scripts/test-rust-cli.js rust/target/release/codex-hud",
     "measure:rust": "node scripts/measure-rust-hud.js",
     "install:launcher": "node scripts/install-patched-codex.js --mode stock",
     "doctor": "node scripts/install-patched-codex.js --doctor",
@@ -23,8 +20,7 @@
     "prepare": "husky",
     "release": "semantic-release",
     "release:dry-run": "semantic-release --dry-run",
-    "sync:version": "node scripts/sync-release-version.js",
-    "vendor:toml": "node scripts/vendor-toml.js"
+    "sync:version": "node scripts/sync-release-version.js"
   },
   "keywords": [
     "codex",
@@ -44,7 +40,6 @@
     "@semantic-release/github": "^12.0.8",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "husky": "^9.1.7",
-    "semantic-release": "^25.0.3",
-    "smol-toml": "^1.6.1"
+    "semantic-release": "^25.0.3"
   }
 }

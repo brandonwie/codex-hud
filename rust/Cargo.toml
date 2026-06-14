@@ -3,10 +3,10 @@ name = "codex-hud"
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
-description = "Rust port of the codex-hud renderer (golden-parity with the Node oracle)."
+description = "Rust renderer for Codex HUD."
 
 [[bin]]
-name = "codex-hud-rs"
+name = "codex-hud"
 path = "src/main.rs"
 
 [dependencies]

@@ -19,7 +19,6 @@
           "package.json",
           "package-lock.json",
           "plugins/codex-hud/.codex-plugin/plugin.json",
-          "plugins/codex-hud/scripts/codex-hud.js",
           "rust/Cargo.toml",
           "rust/Cargo.lock",
           "site/index.html"

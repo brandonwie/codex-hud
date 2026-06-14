@@ -1,40 +1,68 @@
 #!/usr/bin/env node
 "use strict";
 
-// Golden parity harness for the Codex HUD renderer.
+// Golden harness for the Codex HUD renderer.
 //
-// The renderer is the reference oracle: this harness feeds it deterministic,
-// synthetic `data` objects and captures the exact rendered bytes. A future
-// reimplementation must reproduce these fixtures byte-for-byte. See
-// spec/config-schema.md for the frozen contract.
+// This harness feeds the Rust renderer deterministic, synthetic `data` objects
+// and captures the exact rendered bytes. See spec/config-schema.md for the
+// frozen contract.
 //
-//   node scripts/test-golden.js            # check against goldens (CI)
-//   node scripts/test-golden.js --update   # re-capture goldens
+//   node scripts/test-golden.js [path-to-binary]            # check against goldens
+//   node scripts/test-golden.js [path-to-binary] --update   # re-capture goldens
 //
-// Time is frozen BEFORE the renderer is required so any Date-based logic
-// (rate-limit reset durations, pace) is deterministic.
+// Time is pinned via CODEX_HUD_NOW_MS so rate-limit reset durations and pace are
+// deterministic.
 
 const FIXED = Date.UTC(2026, 0, 1, 0, 0, 0); // 2026-01-01T00:00:00.000Z
 const RealDate = Date;
-// eslint-disable-next-line no-global-assign
-global.Date = class extends RealDate {
-  constructor(...args) {
-    if (args.length === 0) super(FIXED);
-    else super(...args);
-  }
-  static now() {
-    return FIXED;
-  }
-};
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
-const R = require("../plugins/codex-hud/scripts/codex-hud.js");
+const { spawnSync } = require("child_process");
 
+const repoRoot = path.resolve(__dirname, "..");
 const FIXED_ISO = new RealDate(FIXED).toISOString();
 const GOLDEN = path.join(__dirname, "golden", "hud-output.golden");
+let DEFAULT_CONFIG = null;
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
+
+function rustBinaryName() {
+  return process.platform === "win32" ? "codex-hud.exe" : "codex-hud";
+}
+
+function resolveBinary(argv = process.argv.slice(2)) {
+  const positional = argv.find((arg) => !arg.startsWith("-"));
+  const binName = rustBinaryName();
+  const candidates = [
+    positional,
+    process.env.CODEX_HUD_RUST_BIN,
+    path.join(repoRoot, "rust", "target", "release", binName),
+    path.join(repoRoot, "rust", "target", "debug", binName),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return path.resolve(candidate);
+  }
+  throw new Error("codex-hud binary not found - run: npm run build:rust");
+}
+
+function readDefaultConfig(binary) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-golden-home-"));
+  try {
+    const result = spawnSync(binary, ["--print-config"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: { ...process.env, CODEX_HOME: home, CODEX_HUD_NOW_MS: String(FIXED) },
+    });
+    if (result.status !== 0) {
+      throw new Error("--print-config failed: " + (result.stderr || ""));
+    }
+    return JSON.parse(result.stdout).config;
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+}
 
 function deepMerge(base, over) {
   if (over === null || typeof over !== "object" || Array.isArray(over)) {
@@ -57,9 +85,12 @@ function deepMerge(base, over) {
 // Canonical, fully-populated, deterministic data object. Mirrors the shape of
 // collect() output so every segment and the multiline view have real inputs.
 function baseData() {
+  if (!DEFAULT_CONFIG) {
+    throw new Error("DEFAULT_CONFIG not loaded from codex-hud --print-config");
+  }
   return {
     codexHudVersion: "0.0.0",
-    hud: { config: clone(R.DEFAULT_CONFIG), contributors: [], warnings: [] },
+    hud: { config: clone(DEFAULT_CONFIG), contributors: [], warnings: [] },
     generatedAt: FIXED_ISO,
     cwd: "/work/proj",
     codexHome: "/home/user/.codex",
@@ -172,24 +203,53 @@ const esc = (s) => String(s).replace(/\x1b/g, "\\x1b");
 // lines, so we split on the header boundary, not on every blank line.
 const splitBlocks = (s) => s.trim().split(/\n\n(?=### )/);
 
-function build() {
-  const blocks = [];
+function renderBatch(binary, requests) {
+  const input =
+    requests.map((r) => JSON.stringify({ mode: r.mode, color: r.color, data: r.data })).join("\n") + "\n";
+  const result = spawnSync(binary, ["--render-json"], {
+    input,
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: { ...process.env, CODEX_HUD_NOW_MS: String(FIXED) },
+  });
+  if (result.status !== 0) {
+    throw new Error("--render-json failed: " + (result.stderr || ""));
+  }
+  const raw = result.stdout.trim();
+  if (!raw) {
+    throw new Error("--render-json returned no output");
+  }
+  return raw.split("\n").map((line, index) => {
+    try {
+      return JSON.parse(line);
+    } catch (error) {
+      throw new Error(`invalid JSON on --render-json output line ${index + 1}: ${JSON.stringify(line)}\n${error}`);
+    }
+  });
+}
+
+function build(binary) {
+  DEFAULT_CONFIG = readDefaultConfig(binary);
+  const requests = [];
   for (const c of LINE_CASES) {
     for (const color of [false, true]) {
-      const out = R.formatUsageLine(makeData(c.over), { color });
-      blocks.push(`### line | ${c.name} | color=${color}\n${esc(out)}`);
+      requests.push({ name: `line | ${c.name} | color=${color}`, mode: "line", color, data: makeData(c.over) });
     }
   }
   for (const c of TEXT_CASES) {
-    const out = R.formatText(makeData(c.over));
-    blocks.push(`### text | ${c.name}\n${esc(out)}`);
+    requests.push({ name: `text | ${c.name}`, mode: "text", color: false, data: makeData(c.over) });
   }
-  return blocks.join("\n\n") + "\n";
+  const outputs = renderBatch(binary, requests);
+  if (outputs.length !== requests.length) {
+    throw new Error(`expected ${requests.length} render outputs, got ${outputs.length}`);
+  }
+  return requests.map((request, index) => `### ${request.name}\n${esc(outputs[index])}`).join("\n\n") + "\n";
 }
 
 function main() {
   const update = process.argv.includes("--update");
-  const built = build();
+  const binary = resolveBinary();
+  const built = build(binary);
   const blockCount = splitBlocks(built).length;
 
   if (update) {
@@ -200,7 +260,7 @@ function main() {
   }
 
   if (!fs.existsSync(GOLDEN)) {
-    console.error("golden file missing — run: node scripts/test-golden.js --update");
+    console.error("golden file missing — run: npm run golden:update");
     process.exit(1);
   }
 

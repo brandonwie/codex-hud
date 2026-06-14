@@ -34,7 +34,7 @@ Varsayılan olarak, Codex'in yerel `[tui].status_line` özelliğine eşlik eder;
 
 > Bu satırdaki segmentler, etiketler, renkler ve eşiklerin tümü yapılandırılabilir — bkz. [Yapılandırma](#yapılandırma).
 
-Varsayılan durum satırı oluşturucusu, bu deponun küçük Rust ikili dosyası olan `codex-hud-rs`'tir; Node betiği (`plugins/codex-hud/scripts/codex-hud.js`) belgelenmiş yedek ve birebir eşlik referansı (parity oracle) olarak kalmaya devam eder. Bu README'de iki farklı "Rust" geçer: yukarı akış Codex CLI'nin kendisi bir Rust programıdır (aşağıdaki deneysel yamanın derleme hedefi); `codex-hud-rs` ise depo içindeki durum satırı oluşturucusudur.
+The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
 
 ## Özellikler
 
@@ -67,10 +67,10 @@ npm run install:launcher -- --make-default  # isteğe bağlı: `codex` başlatı
 rehash
 ```
 
-İsteğe bağlı olarak Rust durum satırı oluşturucusunu derleyin. Bu, stok olarak başlatılan bir TUI'de görünür hiçbir şeyi değiştirmez — deneysel yamalı altbilgi ve bağımsız `codex-hud-rs` kullanımı (`--watch` ya da `status_line_command`'ı başka araçlara elle bağlama) için önemlidir. Bir kez derlendiğinde kurulum aracı, yamalı mod ve `--print-config` için onu otomatik olarak algılar (`--renderer auto`):
+İsteğe bağlı olarak Rust durum satırı oluşturucusunu derleyin. Bu, stok olarak başlatılan bir TUI'de görünür hiçbir şeyi değiştirmez — deneysel yamalı altbilgi ve bağımsız `codex-hud` kullanımı (`--watch` ya da `status_line_command`'ı başka araçlara elle bağlama) için önemlidir. Bir kez derlendiğinde kurulum aracı, yamalı mod ve `--print-config` için onu otomatik olarak algılar (`--renderer auto`):
 
 ```bash
-npm run build:rust   # isteğe bağlı: rust/target/release/codex-hud-rs derlenir
+npm run build:rust   # isteğe bağlı: rust/target/release/codex-hud derlenir
 ```
 
 Ayrıntılar için aşağıdaki "HUD Başlatıcısı" bölümüne, tanılama için `npm run doctor` komutuna bakın.
@@ -81,35 +81,36 @@ Beceri listesinin yenilenmesi için kurulumdan veya yeniden kurulumdan sonra yen
 
 ## Kullanım
 
-Geliştirme sırasında Node oluşturucusunu doğrudan çalıştırın:
+Run the Rust renderer directly during development:
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # bağımsız çok satırlı görünüm
-node plugins/codex-hud/scripts/codex-hud.js --line     # tek kompakt satır
-node plugins/codex-hud/scripts/codex-hud.js --line --color
-node plugins/codex-hud/scripts/codex-hud.js --json      # makine tarafından okunabilir
-node plugins/codex-hud/scripts/codex-hud.js --watch 5   # her 5 saniyede bir yenile
+npm run build:rust
+./rust/target/release/codex-hud           # bağımsız çok satırlı görünüm
+./rust/target/release/codex-hud --line     # tek kompakt satır
+./rust/target/release/codex-hud --line --color
+./rust/target/release/codex-hud --json      # makine tarafından okunabilir
+./rust/target/release/codex-hud --watch 5   # her 5 saniyede bir yenile
 npm test
 ```
 
 Kompakt durum satırının (`--line`) terminal yakalaması:
 
 ```text
-$ node plugins/codex-hud/scripts/codex-hud.js --line
+$ ./rust/target/release/codex-hud --line
 5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
-Aynı satırı ANSI renk stilleriyle görmek için yerelde `node plugins/codex-hud/scripts/codex-hud.js --line --color` çalıştırın.
+The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
 
-`codex-hud-rs` (`npm run build:rust` sonrasında) birebir aynı bayrak yüzeyini sunar — `--line` / `--status-line` / `--color` / `--json` / `--watch` / `--init-config` / `--print-config` / `--config-path`:
+`codex-hud` (`npm run build:rust` sonrasında) birebir aynı bayrak yüzeyini sunar — `--line` / `--status-line` / `--color` / `--json` / `--watch` / `--init-config` / `--print-config` / `--config-path`:
 
 ```bash
-./rust/target/release/codex-hud-rs --line --color
+./rust/target/release/codex-hud --line --color
 ```
 
 ## Yapılandırma
 
-Hem bağımsız çok satırlı görünüm hem de kompakt durum satırı, isteğe bağlı bir `codex-hud.toml` dosyası aracılığıyla yapılandırılabilir; Node ve Rust oluşturucuları aynı `codex-hud.toml` katmanlarını okur. Yapılandırma dosyası olmadığında yukarıda gösterilen varsayılanları alırsınız; her anahtar isteğe bağlıdır ve atladığınız her şey yerleşik varsayılanı devralır.
+Both the standalone workspace snapshot and the compact status line are configurable through an optional `codex-hud.toml`. With no config file you get the defaults shown above; every key is optional and anything you omit inherits the built-in default.
 
 ```bash
 codex-hud --init-config     # ~/.codex/codex-hud.toml dosyasını oluştur (üzerine yazmak için --force)
@@ -209,14 +210,14 @@ codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bi
 launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
 launcher metadata: stock_path=/opt/homebrew/bin/codex stock_realpath=/opt/homebrew/Cellar/codex/0.139.0/bin/codex stock_version=0.139.0 renderer=rust built_at=2026-06-10T12:00:00.000Z
 stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
-renderer: rust (/Users/you/.local/bin/codex-hud-rs, v0.2.0; used by --print-config/patched mode only — stock launcher does not invoke it)
+renderer: rust (/Users/you/.local/bin/codex-hud, v0.2.0; used by --print-config/patched mode only — stock launcher does not invoke it)
 patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
 patched versions: (none)
 patched command: (none)
 status: healthy
 ```
 
-Yalnızca etkin giriş zinciri bozulduğunda sıfırdan farklı bir kodla çıkar — oluşturucu tarafındaki bir bozulma, sağlıklı (healthy) durumu asla değiştirmez. Oluşturucu için yeniden derleme önerisi sürüm (release) ayrıntı düzeyinde çalışır: derleme zamanındaki `codex-hud-rs` sürümünü `package.json` ile karşılaştırır; bu yüzden her commit'te değil, yalnızca bir release sürüm numarasını ilerlettiğinde tetiklenir.
+Yalnızca etkin giriş zinciri bozulduğunda sıfırdan farklı bir kodla çıkar — oluşturucu tarafındaki bir bozulma, sağlıklı (healthy) durumu asla değiştirmez. Oluşturucu için yeniden derleme önerisi sürüm (release) ayrıntı düzeyinde çalışır: derleme zamanındaki `codex-hud` sürümünü `package.json` ile karşılaştırır; bu yüzden her commit'te değil, yalnızca bir release sürüm numarasını ilerlettiğinde tetiklenir.
 
 ## Sorun giderme
 
@@ -237,7 +238,7 @@ npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-Kurulum aracı eşleşen OpenAI Codex etiketini yamalar, Rust CLI'yi derler ve yürütülebilir dosyayı `~/.local/bin/codex-hud-codex.d/<version>/codex` altında hazırlar. Hazırlanan yük, herhangi bir etkinleştirmeden **önce** `--version` sağlık denetimini geçmek zorundadır; ancak o zaman `~/.local/bin/codex-hud-codex` atomik olarak yeni yüke yönlendirilir ve önceki sürüm geri alma için diskte tutulur. Başarısız bir derleme `<version>.failed` olarak kenara konur ve etkin çalışma zamanı dokunulmadan kalır. Ayrıca yamalı modda `~/.local/bin/codex-hud-tui` yazılır: renkli HUD komutunu `~/.codex/config.toml` dosyasını değiştirmeden Codex'in `-c tui.status_line_command=...` geçersiz kılmasıyla ileten bir başlatıcı. Varsayılan `--renderer auto` ile, Rust oluşturucusu kuruluysa enjekte edilen komut `'~/.local/bin/codex-hud-rs' --line --color` olur; kurulu değilse `node .../plugins/codex-hud/scripts/codex-hud.js --line --color` komutuna geri döner. Yürütülebilir dosya yolu ve `argv[0]` Codex olarak görünen adları korur; böylece Herdr gibi terminal entegrasyonları paneli Codex oturumu olarak tanımaya devam eder.
+The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and stages the executable under `~/.local/bin/codex-hud-codex.d/<version>/codex`. The staged payload must pass a `--version` health check **before** anything is activated; only then is `~/.local/bin/codex-hud-codex` atomically retargeted to the new payload, and the previous version is kept on disk for rollback. A failed build is kept aside as `<version>.failed` and the active runtime is left untouched. It also writes `~/.local/bin/codex-hud-tui` in patched mode, a launcher that passes the colored status-line command through Codex's `-c tui.status_line_command=...` override without changing `~/.codex/config.toml`. With the default `--renderer auto`, the injected command is `'~/.local/bin/codex-hud' --line --color`; if that Rust renderer is missing or fails its health check, the patched install stops instead of falling back to another renderer. The executable path and `argv[0]` both keep Codex-visible names, so terminal integrations such as Herdr can still recognize the pane as a Codex session.
 
 Güvenli başlatıcı modu normal `codex` komutunuza dokunmaz:
 
@@ -267,18 +268,14 @@ which codex
 Kalıcı yapılandırma tercih ediyorsanız yazdırılan satırı mevcut `[tui]` tablonuzun altına ekleyin; ancak stok Codex sürümlerinin bilinmeyen alanları reddedebileceğini unutmayın. Makinenize özel satırı depo kökünden üretin (`node scripts/install-patched-codex.js --print-config`, oluşturucuyu kurulum aracıyla aynı şekilde çözümler):
 
 ```bash
-echo "status_line_command = \"$HOME/.local/bin/codex-hud-rs --line --color\""
-# Node yedeği (Rust derlemesi yoksa):
-echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
+echo "status_line_command = \"$HOME/.local/bin/codex-hud --line --color\""
 ```
 
 Sonra `~/.codex/config.toml` içindeki `[tui]` altına yapıştırın:
 
 ```toml
 # /Users/you kısmını ev dizininizle değiştirin.
-status_line_command = "/Users/you/.local/bin/codex-hud-rs --line --color"
-# Node yedeği — /path/to/codex-hud kısmını yerel klon yolunuzla değiştirin:
-# status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
+status_line_command = "/Users/you/.local/bin/codex-hud --line --color"
 ```
 
 Kompakt alt bilgiyi görmek için `codex-hud-tui` çalıştırın. Yamalı ikili dosya stok Codex güncellemelerini izlemez: derlemeden sonra stok Codex değişirse, yamalı başlatıcı açılışta tek satırlık bir uyarı yazdırır (yine de seçtiğiniz yamalı ikiliyi çalıştırır) — `npm run patch:codex` ile yeniden derleyin veya `npm run install:launcher` ile stok delegasyonuna geri dönün. Her yeniden derleme hazırlanır, sağlık denetiminden geçer ve atomik olarak etkinleştirilir; önceki çalışan sürüm geri alma için `~/.local/bin/codex-hud-codex.d/` altında kalır ve `npm run doctor` bayatlık ile bozuk yükleri bildirir. Yönetilen `codex` şimi etkinken kurulum aracı, temel Codex sürümünü algılarken bu şimi atlar ve `PATH` üzerindeki bir sonraki gerçek `codex` dosyasını kullanır; yeniden derleme hedefini açıkça sabitlemeniz gerekirse `--version <version>` geçin.
@@ -289,10 +286,8 @@ codex-hud/
 ├─ plugins/
 │  └─ codex-hud/
 │     ├─ .codex-plugin/plugin.json
-│     ├─ scripts/codex-hud.js        # HUD oluşturucu + yapılandırma yükleyici
-│     ├─ vendor/toml.js              # gömülü TOML ayrıştırıcı (smol-toml)
 │     └─ skills/codex-hud/SKILL.md
-├─ rust/                             # codex-hud-rs kaynağı (varsayılan durum satırı oluşturucusu)
+├─ rust/                             # codex-hud kaynağı (varsayılan durum satırı oluşturucusu)
 └─ scripts/
    ├─ test-codex-hud.js
    ├─ test-codex-hud-config.js
@@ -300,14 +295,13 @@ codex-hud/
    ├─ test-rust-golden.js
    ├─ test-rust-parsing-golden.js
    ├─ test-rust-cli.js
-   ├─ vendor-toml.js                 # vendor/toml.js dosyasını yeniden oluşturur
    └─ install-patched-codex.js
 ```
 
 ## Yol Haritası
 
 - Codex, eklentiler için kararlı bir yerel oturum durumu API'si sunarsa daha zengin oturum dökümü özetleri eklemek.
-- `codex-hud-rs`'i Node oluşturucusuyla birebir eşlikte (golden parity) tutmak (`npm run test:rust`, her ikisini de aynı fikstürlere karşı doğrular).
+- Keep `codex-hud` covered by the golden fixtures (`npm run test:rust` verifies the Rust renderer against them).
 - Yukarı akış OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827) takip edilsin. 2026-06-10 itibarıyla stok Codex yerleşik `[tui].status_line` öğelerine sahip, ancak komut destekli veya eklentiye ait bir oluşturucu yok; yamayı yalnızca desteklenen özel bir oluşturucu yayınlandığında emekliye ayırın.
 
 ## Katkıda Bulunma
@@ -316,7 +310,7 @@ Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. 
 
 ### Bakımcı betikleri
 
-Yaygın bakım komutları: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version` ve `npm run vendor:toml`.
+Yaygın bakım komutları: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`.
 
 ## Lisans
 

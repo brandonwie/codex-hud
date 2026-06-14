@@ -8,7 +8,7 @@ const { spawnSync } = require("child_process");
 const OPENAI_CODEX_REPO = "https://github.com/openai/codex.git";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
 const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
-const RUST_RENDERER_BIN_NAME = "codex-hud-rs";
+const RUST_RENDERER_BIN_NAME = "codex-hud";
 const SAFE_COMMAND_NAME_RE = /^[A-Za-z0-9_-]+$/;
 const CODEX_VERSION_PATTERN = "\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?";
 const CODEX_VERSION_RE = new RegExp(`(${CODEX_VERSION_PATTERN})`);
@@ -38,7 +38,7 @@ install, so Codex updates are picked up automatically. Patched mode
 
 Options:
   --mode <stock|patched>    Install mode. Defaults to stock.
-  --renderer <auto|rust|js> Status-line renderer. Defaults to auto (rust when built, else node).
+  --renderer <auto|rust>    Status-line renderer. Defaults to auto (Rust renderer).
   --doctor                  Print install/runtime diagnostics and exit.
   --version <version>       Codex CLI version to patch (patched mode). Defaults to installed codex version.
   --prefix <dir>            Install directory prefix. Defaults to ~/.local/bin.
@@ -267,8 +267,8 @@ function parseArgs(argv) {
   if (args.mode !== "stock" && args.mode !== "patched") {
     throw new Error(`--mode must be stock or patched, got: ${args.mode}`);
   }
-  if (args.renderer !== "auto" && args.renderer !== "rust" && args.renderer !== "js") {
-    throw new Error(`--renderer must be auto, rust, or js, got: ${args.renderer}`);
+  if (args.renderer !== "auto" && args.renderer !== "rust") {
+    throw new Error(`--renderer must be auto or rust, got: ${args.renderer}`);
   }
   const reservedRendererNames = new Set([RUST_RENDERER_BIN_NAME, rendererBinaryName()]);
   if (reservedRendererNames.has(args.binName) || reservedRendererNames.has(args.launcherName)) {
@@ -291,11 +291,6 @@ function parseArgs(argv) {
 
 function repoRoot() {
   return path.resolve(__dirname, "..");
-}
-
-function defaultStatusLineCommand() {
-  const hudScript = path.join(repoRoot(), "plugins", "codex-hud", "scripts", "codex-hud.js");
-  return `node ${shellQuote(hudScript)} --line --color`;
 }
 
 function rustRendererSourcePath() {
@@ -359,11 +354,15 @@ function brokenRendererDetail(brokenPath, errorMessage) {
   return `${brokenPath} failed its --help health check (${errorMessage})`;
 }
 
-function resolveRenderer(args, options = {}) {
-  if (args.renderer === "js") {
-    return { kind: "js" };
-  }
+function missingRendererError() {
+  return `codex-hud is not built or installed. Run: npm run build:rust`;
+}
 
+function rendererUnavailableError(detail) {
+  return detail ? `renderer unavailable: ${detail}. Rebuild: npm run build:rust` : missingRendererError();
+}
+
+function resolveRenderer(args, options = {}) {
   if (options.install === false) {
     const target = path.join(args.prefix, rendererBinaryName());
     const source = options.sourcePath || rustRendererSourcePath();
@@ -384,16 +383,13 @@ function resolveRenderer(args, options = {}) {
         brokenDetail = brokenDetail || brokenRendererDetail(source, error.message);
       }
     }
-    if (args.renderer === "rust") {
-      if (brokenDetail) {
-        throw new Error(`renderer rust requested but ${brokenDetail}. Rebuild: npm run build:rust`);
-      }
-      throw new Error("renderer rust requested but codex-hud-rs is not built. Run: npm run build:rust");
-    }
     if (brokenDetail) {
-      console.error(`warning: ${brokenDetail}; falling back to the node renderer`);
+      throw new Error(rendererUnavailableError(brokenDetail));
     }
-    return { kind: "js" };
+    if (options.allowMissing) {
+      return { kind: "rust", path: target, missing: true };
+    }
+    throw new Error(rendererUnavailableError(null));
   }
 
   const installed = installRustRenderer(args, options);
@@ -407,23 +403,22 @@ function resolveRenderer(args, options = {}) {
   }
   if (installed.status === "broken" || installed.status === "broken-source") {
     const detail = brokenRendererDetail(installed.path, installed.error);
-    if (args.renderer === "rust") {
-      throw new Error(`renderer rust requested but ${detail}. Rebuild: npm run build:rust`);
-    }
-    console.error(`warning: ${detail}; falling back to the node renderer`);
-    return { kind: "js" };
+    throw new Error(rendererUnavailableError(detail));
   }
-  if (args.renderer === "rust") {
-    throw new Error("renderer rust requested but codex-hud-rs is not built. Run: npm run build:rust");
+  if (options.allowMissing) {
+    return { kind: "rust", path: installed.path, missing: true };
   }
-  return { kind: "js" };
+  throw new Error(rendererUnavailableError(null));
 }
 
 function statusLineCommandFor(renderer) {
   if (renderer.kind === "rust") {
+    if (renderer.missing) {
+      throw new Error(rendererUnavailableError(null));
+    }
     return `${shellQuote(renderer.path)} --line --color`;
   }
-  return defaultStatusLineCommand();
+  throw new Error(`unsupported renderer kind: ${renderer.kind}`);
 }
 
 function detectStockCodex(options = {}) {
@@ -1078,7 +1073,10 @@ exec -a codex "$stock" "$@"
   if (!opts.patchedBinary) {
     throw new Error("Patched launcher requires patchedBinary.");
   }
-  const statusLineCommand = opts.statusLineCommand || defaultStatusLineCommand();
+  if (!opts.statusLineCommand) {
+    throw new Error("Patched launcher requires statusLineCommand.");
+  }
+  const statusLineCommand = opts.statusLineCommand;
   const staleWarning =
     `codex-hud: stock Codex changed since this patched runtime was built; ` +
     `running experimental patched Codex ${opts.patchedVersion || "(unknown version)"}. ` +
@@ -1374,7 +1372,7 @@ function doctor(args, options = {}) {
     report.launcher.status = metadata.format;
     report.launcher.mode = metadata.mode || null;
     report.launcher.metadata = metadata;
-    report.renderer.configured = metadata.renderer || (metadata.format === "v2" ? "js" : null);
+    report.renderer.configured = metadata.renderer || (metadata.format === "v2" ? "rust" : null);
   }
 
   if (executableExists(report.renderer.binPath)) {
@@ -1386,7 +1384,7 @@ function doctor(args, options = {}) {
       report.renderer.installed = true;
     } catch (error) {
       report.renderer.broken = true;
-      report.anomalies.push(`installed codex-hud-rs failed --help health check: ${error.message}`);
+      report.anomalies.push(`installed codex-hud failed --help health check: ${error.message}`);
     }
   }
 
@@ -1512,7 +1510,7 @@ function doctor(args, options = {}) {
     const repoVersion = require(path.join(repoRoot(), "package.json")).version;
     if (report.renderer.version !== repoVersion) {
       report.recommendations.push(
-        `codex-hud-rs is v${report.renderer.version} but the repo is v${repoVersion} -> rebuild: npm run build:rust && rerun the installer`,
+        `codex-hud is v${report.renderer.version} but the repo is v${repoVersion} -> rebuild: npm run build:rust && rerun the installer`,
       );
     }
   }
@@ -1550,8 +1548,6 @@ function printDoctorReport(report) {
       lines.push(`renderer: rust (${report.renderer.binPath}, v${report.renderer.version}${stockQualifier})`);
     } else if (report.renderer.broken) {
       lines.push(`renderer: rust binary is broken at ${report.renderer.binPath} — failed --help health check${stockQualifier}`);
-    } else if (report.renderer.configured === "js") {
-      lines.push(`renderer: js (node renderer; rust binary missing at ${report.renderer.binPath})`);
     } else if (report.renderer.configured === "rust") {
       lines.push(`renderer: rust configured but binary missing at ${report.renderer.binPath}${stockQualifier}`);
     } else {
@@ -1595,14 +1591,17 @@ function runStockInstall(args) {
   console.log(`Stock Codex: ${stock.path} (${stock.version})`);
 
   if (args.dryRun) {
-    const previewRenderer = resolveRenderer(args, { install: false });
+    const previewRenderer = resolveRenderer(args, { install: false, allowMissing: true });
     console.log(`Would install stock-delegating HUD launcher: ${path.join(args.prefix, args.launcherName)}`);
-    console.log(`renderer (used by patched mode and --print-config only): ${previewRenderer.kind}`);
+    console.log(
+      `renderer (used by patched mode and --print-config only): ${previewRenderer.kind}` +
+      (previewRenderer.missing ? ` (missing at ${previewRenderer.path})` : ""),
+    );
     console.log("Dry run complete; nothing installed.");
     return;
   }
 
-  const renderer = resolveRenderer(args);
+  const renderer = resolveRenderer(args, { allowMissing: true });
 
   const launcher = installLauncher(args, {
     mode: "stock",
@@ -1614,7 +1613,10 @@ function runStockInstall(args) {
   });
   console.log(`Installed stock-delegating HUD launcher: ${launcher}`);
   console.log("Codex updates are picked up automatically; no rebuild needed.");
-  console.log(`renderer (used by patched mode and --print-config only): ${renderer.kind}`);
+  console.log(
+    `renderer (used by patched mode and --print-config only): ${renderer.kind}` +
+    (renderer.missing ? ` (missing at ${renderer.path})` : ""),
+  );
 
   const legacy = reviewLegacyBinEntry(args);
   if (legacy.status === "ok") {
@@ -1675,9 +1677,6 @@ function runPatchedInstall(args) {
   const renderer = resolveRenderer(args);
   const statusLineCommand = statusLineCommandFor(renderer);
   console.log(`HUD command: ${statusLineCommand}`);
-  if (renderer.kind === "js" && args.renderer === "auto") {
-    console.log("rust renderer not available; using node renderer (run npm run build:rust && rerun to enable)");
-  }
   const installed = installBinary(sourceDir, args);
   const launcher = installLauncher(args, {
     mode: "patched",
@@ -1752,7 +1751,6 @@ if (require.main === module) {
 
 module.exports = {
   activateStagedBinary,
-  defaultStatusLineCommand,
   detectCodexVersion,
   detectLegacyLayout,
   detectStockCodex,

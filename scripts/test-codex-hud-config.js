@@ -7,11 +7,29 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
-const hudScript = path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js");
-const { DEFAULT_CONFIG } = require(hudScript);
+
+function rustBinaryName() {
+  return process.platform === "win32" ? "codex-hud.exe" : "codex-hud";
+}
+
+function resolveBinary() {
+  const binName = rustBinaryName();
+  const candidates = [
+    process.argv[2],
+    process.env.CODEX_HUD_RUST_BIN,
+    path.join(repoRoot, "rust", "target", "release", binName),
+    path.join(repoRoot, "rust", "target", "debug", binName),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return path.resolve(candidate);
+  }
+  throw new Error("codex-hud binary not found - run: npm run build:rust");
+}
+
+const hudBin = resolveBinary();
 
 function run(args, env) {
-  return spawnSync(process.execPath, [hudScript, ...args], {
+  return spawnSync(hudBin, args, {
     cwd: repoRoot,
     encoding: "utf8",
     env: { ...process.env, ...(env || {}) },
@@ -47,12 +65,6 @@ function readmeFormatKeys() {
 
 const DEFAULT_SEGMENTS = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
 
-assert.deepStrictEqual(
-  readmeFormatKeys(),
-  Object.keys(DEFAULT_CONFIG.format),
-  "README.md [format] example must cover every default format key",
-);
-
 // Isolated CODEX_HOME with no sessions/config so config resolution is deterministic.
 const home = tmpdir();
 const baseEnv = { CODEX_HOME: home };
@@ -61,6 +73,11 @@ try {
   // 1. No config -> built-in defaults (runtime not in default), nothing applied.
   {
     const config = printConfig(baseEnv);
+    assert.deepStrictEqual(
+      readmeFormatKeys(),
+      Object.keys(config.config.format),
+      "README.md [format] example must cover every default format key",
+    );
     assert.deepStrictEqual(config.config.segments, DEFAULT_SEGMENTS);
     assert.strictEqual(config.config.space, false);
     assert.strictEqual(config.config.format.modelShort, true);

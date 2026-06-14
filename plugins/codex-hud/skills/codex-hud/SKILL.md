@@ -9,18 +9,20 @@ Use this skill to show the local Codex HUD.
 
 ## Steps
 
-1. Resolve `../../scripts/codex-hud.js` relative to this `SKILL.md`.
-2. Run it from the user's current workspace:
+1. Run the installed `codex-hud` command from the user's current workspace:
 
 ```bash
-node <plugin-root>/scripts/codex-hud.js
+codex-hud
 ```
 
-3. If the user asks for machine-readable output, run:
+2. If the user asks for machine-readable output, run:
 
 ```bash
-node <plugin-root>/scripts/codex-hud.js --json
+codex-hud --json
 ```
+
+3. If `codex-hud` is missing, tell the user to build/install the Rust renderer
+   from the repo with `npm run build:rust` and `npm run install:launcher`.
 
 4. Explain that live token and rate-limit values remain in Codex's native
    `[tui].status_line` until Codex exposes a custom status renderer surface.

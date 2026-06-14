@@ -3,10 +3,10 @@ use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
 pub const HUD_CONFIG_FILENAME: &str = "codex-hud.toml";
-// Oracle truncates labels via String(value).slice(0, 40).
+// Preserve historical String(value).slice(0, 40) label truncation.
 const MAX_LABEL_LEN: usize = 40;
-// Oracle truncates pace prefixes via String(value).slice(0, 8), measured in
-// UTF-16 code units. Keep Rust coercion aligned without splitting a scalar.
+// Preserve historical String(value).slice(0, 8) pace-prefix truncation,
+// measured in UTF-16 code units without splitting a scalar.
 const MAX_PACE_PREFIX_UTF16_UNITS: usize = 8;
 
 pub fn default_config() -> Value {
@@ -79,7 +79,7 @@ pub fn segment_alias(entry: &str) -> Vec<String> {
 
 /// Port of firstTomlString(): first line matching `^key\s*=\s*"..."`.
 /// This is intentionally a text probe, not a full TOML parser, to preserve the
-/// Node oracle's config precedence behavior.
+/// earlier renderer releases' config precedence behavior.
 pub fn first_toml_string(config: &str, key: &str) -> Option<String> {
     for line in config.split('\n') {
         if let Some(rest) = line.strip_prefix(key) {
@@ -404,7 +404,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                     );
                 }
                 Value::Number(n) => {
-                    let text = crate::js::num_to_string(n.as_f64().unwrap_or(f64::NAN));
+                    let text = crate::compat::num_to_string(n.as_f64().unwrap_or(f64::NAN));
                     coerced.insert(
                         key.clone(),
                         Value::String(text.chars().take(MAX_LABEL_LEN).collect()),
@@ -455,7 +455,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                             .as_f64()
                             .expect("guarded by is_finite above")
                             .clamp(0.0, 100.0);
-                        coerced.insert(key.into(), crate::js::number_value(clamped));
+                        coerced.insert(key.into(), crate::compat::number_value(clamped));
                     }
                     Some(_) => note(
                         warnings,

@@ -1,7 +1,7 @@
 mod collect;
 mod colors;
+mod compat;
 mod hudcfg;
-mod js;
 mod render;
 mod util;
 
@@ -172,7 +172,7 @@ fn render_json_batch() {
             }
         };
         let data = request.get("data").cloned().unwrap_or(Value::Null);
-        let color = js::truthy(request.get("color"));
+        let color = compat::truthy(request.get("color"));
         let output = match request.get("mode").and_then(|m| m.as_str()) {
             Some("text") => render::format_text(&data),
             _ => render::format_usage_line(&data, color),
@@ -221,7 +221,7 @@ fn main() {
             print_text();
             println!(
                 "\nRefreshing every {}s. Press Ctrl+C to stop.",
-                js::num_to_string(watch_seconds)
+                compat::num_to_string(watch_seconds)
             );
             std::thread::sleep(std::time::Duration::from_secs_f64(watch_seconds));
         }

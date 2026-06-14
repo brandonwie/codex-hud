@@ -1,5 +1,5 @@
+use crate::compat;
 use crate::hudcfg;
-use crate::js;
 use crate::util;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
@@ -102,12 +102,12 @@ pub fn nearest_package(cwd: &Path) -> Value {
         Some(parsed) => {
             let name = parsed
                 .get("name")
-                .filter(|v| js::truthy(Some(v)))
+                .filter(|v| compat::truthy(Some(v)))
                 .cloned()
                 .unwrap_or(Value::Null);
             let version = parsed
                 .get("version")
-                .filter(|v| js::truthy(Some(v)))
+                .filter(|v| compat::truthy(Some(v)))
                 .cloned()
                 .unwrap_or(Value::Null);
             json!({ "path": path_str, "name": name, "version": version })
@@ -235,7 +235,7 @@ pub fn parse_token_count(line: &str) -> Option<Value> {
     }
     let or_null = |v: Option<&Value>| -> Value {
         match v {
-            Some(value) if js::truthy(Some(value)) => value.clone(),
+            Some(value) if compat::truthy(Some(value)) => value.clone(),
             _ => Value::Null,
         }
     };
@@ -248,15 +248,15 @@ pub fn parse_token_count(line: &str) -> Option<Value> {
 
 /// Port of percentFromTokens().
 pub fn percent_from_tokens(usage: Option<&Value>, context_window: Option<&Value>) -> Value {
-    let total = js::js_number(js::get(
-        usage.filter(|u| js::truthy(Some(u))),
+    let total = compat::js_number(compat::get(
+        usage.filter(|u| compat::truthy(Some(u))),
         "total_tokens",
     ));
-    let window = js::js_number(context_window);
+    let window = compat::js_number(context_window);
     if !total.is_finite() || !window.is_finite() || window <= 0.0 {
         return Value::Null;
     }
-    js::number_value(js::js_round(total / window * 100.0).max(0.0))
+    compat::number_value(compat::js_round(total / window * 100.0).max(0.0))
 }
 
 /// Port of rateWindow().
@@ -268,18 +268,18 @@ pub fn rate_window(raw: Option<&Value>) -> Value {
         .get("used_percent")
         .filter(|v| !v.is_null())
         .or_else(|| raw.get("used_percentage"));
-    let used_percent = js::js_number(used_raw);
-    let window_minutes = js::js_number(raw.get("window_minutes"));
-    let resets_at = js::js_number(raw.get("resets_at"));
+    let used_percent = compat::js_number(used_raw);
+    let window_minutes = compat::js_number(raw.get("window_minutes"));
+    let resets_at = compat::js_number(raw.get("resets_at"));
     json!({
-        "usedPercent": if used_percent.is_finite() { js::number_value(js::js_round(used_percent)) } else { Value::Null },
-        "windowMinutes": if window_minutes.is_finite() { js::number_value(window_minutes) } else { Value::Null },
-        "resetsAt": if resets_at.is_finite() { js::number_value(resets_at) } else { Value::Null },
+        "usedPercent": if used_percent.is_finite() { compat::number_value(compat::js_round(used_percent)) } else { Value::Null },
+        "windowMinutes": if window_minutes.is_finite() { compat::number_value(window_minutes) } else { Value::Null },
+        "resetsAt": if resets_at.is_finite() { compat::number_value(resets_at) } else { Value::Null },
     })
 }
 
 fn token_number(value: Option<&Value>) -> Option<f64> {
-    let n = js::js_number(value);
+    let n = compat::js_number(value);
     if n.is_finite() && n >= 0.0 {
         Some(n)
     } else {
@@ -310,8 +310,8 @@ pub fn token_summary(raw: Option<&Value>) -> Value {
     let Some(total) = total else {
         return Value::Null;
     };
-    let opt = |v: Option<f64>| v.map(js::number_value).unwrap_or(Value::Null);
-    json!({ "total": js::number_value(total), "input": opt(input), "output": opt(output), "cache": opt(cache) })
+    let opt = |v: Option<f64>| v.map(compat::number_value).unwrap_or(Value::Null);
+    json!({ "total": compat::number_value(total), "input": opt(input), "output": opt(output), "cache": opt(cache) })
 }
 
 /// Port of latestUsage(): scan newest rollouts for context/tokens/rate-limits.
@@ -330,24 +330,24 @@ pub fn latest_usage(codex_home: &Path) -> Value {
             let Some(token_count) = parse_token_count(line) else {
                 continue;
             };
-            let info = token_count.get("info").filter(|i| js::truthy(Some(i)));
+            let info = token_count.get("info").filter(|i| compat::truthy(Some(i)));
 
             if latest_context.is_null() {
                 if let Some(info) = info {
                     let last_usage = info.get("last_token_usage");
-                    let used_tokens = if js::truthy(last_usage) {
-                        let n = js::js_number(js::get(last_usage, "total_tokens"));
+                    let used_tokens = if compat::truthy(last_usage) {
+                        let n = compat::js_number(compat::get(last_usage, "total_tokens"));
                         if n.is_nan() {
                             Value::Null
                         } else {
-                            js::number_value(n)
+                            compat::number_value(n)
                         }
                     } else {
                         Value::Null
                     };
-                    let window_n = js::js_number(info.get("model_context_window"));
+                    let window_n = compat::js_number(info.get("model_context_window"));
                     let window_tokens = if window_n.is_finite() && window_n != 0.0 {
-                        js::number_value(window_n)
+                        compat::number_value(window_n)
                     } else {
                         Value::Null
                     };
@@ -373,7 +373,7 @@ pub fn latest_usage(codex_home: &Path) -> Value {
                 if let Some(info) = info {
                     let raw = info
                         .get("total_token_usage")
-                        .filter(|v| js::truthy(Some(v)))
+                        .filter(|v| compat::truthy(Some(v)))
                         .or_else(|| info.get("last_token_usage"));
                     latest_tokens = token_summary(raw);
                 }
@@ -382,7 +382,7 @@ pub fn latest_usage(codex_home: &Path) -> Value {
             if latest_rate_limits.is_null() {
                 let rate_limits = token_count
                     .get("rateLimits")
-                    .filter(|r| js::truthy(Some(r)));
+                    .filter(|r| compat::truthy(Some(r)));
                 if let Some(rate_limits) = rate_limits {
                     let primary = rate_window(rate_limits.get("primary"));
                     let secondary = rate_window(rate_limits.get("secondary"));
@@ -390,7 +390,7 @@ pub fn latest_usage(codex_home: &Path) -> Value {
                         continue;
                     }
                     let or_null = |v: Option<&Value>| match v {
-                        Some(value) if js::truthy(Some(value)) => value.clone(),
+                        Some(value) if compat::truthy(Some(value)) => value.clone(),
                         _ => Value::Null,
                     };
                     latest_rate_limits = json!({
@@ -435,8 +435,8 @@ pub fn command_version(command: &str, args: &[&str]) -> Value {
     }
 }
 
-/// Port of runtimeInfo(). Divergence note: Node falls back to its own
-/// process.version; this binary reports null when `node -v` is unavailable.
+/// Runtime probe for Node-flavored projects. Reports null when `node -v` is
+/// unavailable.
 pub fn runtime_info(cwd: &Path) -> Value {
     let has_marker = util::find_up(cwd, "package.json").is_some()
         || util::find_up(cwd, ".nvmrc").is_some()

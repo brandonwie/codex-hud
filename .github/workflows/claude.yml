@@ -54,52 +54,48 @@ jobs:
 
             codex-hud renders a compact, colored Codex status-line/footer
             (model, project, git, context, 5h/7d usage, tokens). It ships
-            THREE renderers that must stay in parity for the same config and
-            inputs:
+            two rendering surfaces that must stay in parity for the same config
+            and inputs:
 
-            - `plugins/codex-hud/scripts/codex-hud.js` — the Node/CommonJS
-              plugin and canonical "oracle": DEFAULT_CONFIG, the SEGMENTS
-              registry, and the color/format helpers live here.
-            - `rust/src/*` — `codex-hud-rs`, the default status-line renderer,
-              a Rust port held to byte/golden-parity with the Node oracle.
+            - `rust/src/*` — `codex-hud`, the default status-line renderer and
+              source of truth for defaults, segment order, colors, and
+              formatting.
             - `site/app.js` — the website's config/runtime playground: a
               browser reimplementation that renders DOM spans, so it must match
-              the oracle's visible output, styling/control set, and config-TOML
-              generation (checked via textContent/control parity, not raw ANSI
-              bytes).
+              the Rust renderer's visible output, styling/control set, and
+              config-TOML generation (checked via textContent/control parity,
+              not raw ANSI bytes).
 
-            Around these: a vendored TOML parser, a Codex plugin manifest, the
-            patched-Codex installer/launcher, a deployed site (GitHub Pages), a
-            config schema (`spec/config-schema.md`), and README plus its
-            localized translations.
+            Around these: a Codex plugin manifest, the patched-Codex
+            installer/launcher, a deployed site (GitHub Pages), a config schema
+            (`spec/config-schema.md`), and README plus its localized
+            translations.
 
-            Because rendering logic is duplicated across three
-            languages/runtimes, the central risk is CROSS-RENDERER DRIFT: a
+            Because rendering logic is implemented in Rust and mirrored in the
+            browser playground, the central risk is CROSS-SURFACE DRIFT: a
             change to output, color resolution, segment order, thresholds,
-            labels, or token/percent formatting in one renderer that is not
-            mirrored in the others. Node and Rust hold byte/golden-parity; the
-            site holds visible-output and control parity. Byte-level changes to
-            ANSI colors, separators, labels, segment order, token/rate
-            formatting, or config merge semantics are product changes and must
-            be reviewed across all three renderers.
+            labels, or token/percent formatting in one surface that is not
+            mirrored in the other. Rust output is golden-tested; the site holds
+            visible-output and control parity. Byte-level changes to ANSI
+            colors, separators, labels, segment order, token/rate formatting,
+            or config merge semantics are product changes and must be reviewed
+            across both rendering surfaces.
 
             ## Review Categories
 
-            1. Cross-Renderer Parity (PRIMARY) - changes to rendering, config
+            1. Cross-Surface Parity (PRIMARY) - changes to rendering, config
                defaults, color resolution, segment registry/order, pace/percent
                thresholds, effort/token/percent formatting, or separators must
-               land in lockstep across `plugins/codex-hud/scripts/codex-hud.js`,
-               `rust/src/*`, and `site/app.js`. Flag a one-sided change as a
-               drift bug. Node↔Rust parity is byte/golden (`npm test`,
-               `npm run test:rust`); site parity is visible-output/control
-               (`scripts/check-site.js`). The color algorithms have diverged
-               historically (Node `nearestXterm256` vs site `ansi256`) -
-               scrutinize any hex→xterm color mapping change.
+               land in lockstep across `rust/src/*` and `site/app.js`. Flag a
+               one-sided change as a drift bug. Rust output is golden-tested
+               (`npm test`, `npm run test:rust`); site parity is
+               visible-output/control (`scripts/check-site.js`). Scrutinize any
+               hex→xterm color mapping change.
             2. Parity Safety / Coverage - golden fixtures and deterministic
-               clocks for both Node (`npm test`) and Rust (`npm run test:rust`),
-               plus the site smoke + control-parity check
-               (`scripts/check-site.js`). New rendering behavior needs matching
-               golden/fixture updates on every renderer it touches.
+               clocks for Rust (`npm test`, `npm run test:rust`), plus the site
+               smoke + control-parity check (`scripts/check-site.js`). New
+               rendering behavior needs matching golden/fixture updates on
+               every surface it touches.
             3. Correctness - HUD output, config precedence, TOML validation,
                null-safe rendering.
             4. Installer Safety - no writes to stock Codex paths, safe shims,
@@ -121,11 +117,10 @@ jobs:
 
             - CommonJS scripts are intentional; do not request ESM/TypeScript
               rewrites.
-            - The vendored TOML parser is intentional (dependency-light runtime).
-            - The Rust renderer and the site playground intentionally DUPLICATE
-              the Node oracle's logic - there is no shared module across
-              runtimes. Do not request deduplication or a shared package. DO
-              flag when the duplicated logic has DRIFTED out of parity.
+            - The Rust renderer and the site playground intentionally duplicate
+              rendering semantics - there is no shared module across runtimes.
+              Do not request deduplication or a shared package. DO flag when
+              the duplicated logic has drifted out of parity.
             - Golden fixtures may show escaped ANSI as `\x1b` text for readable
               diffs.
             - The patched Codex footer path is optional/advanced and
@@ -134,9 +129,10 @@ jobs:
               recognizes the process.
             - Do not suggest modifying `/opt/homebrew/bin/codex` or stock Codex
               install paths.
-            - Tests run via `npm test` (Node suite, golden, i18n, site check)
-              and `npm run test:rust` (Rust golden/parsing/CLI); CI also runs
-              `cargo fmt`/`clippy`. Prefer adding focused tests to the existing
+            - Tests run via `npm test` (Rust build, smoke/config, installer,
+              golden, i18n, site check) and `npm run test:rust` (Rust
+              golden/parsing/CLI); CI also runs `cargo fmt`/`clippy`. Prefer
+              adding focused tests to the existing
               `scripts/test-*.js` suites and golden fixtures over new frameworks.
 
             ## Output Instructions

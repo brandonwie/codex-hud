@@ -34,7 +34,7 @@ La línea de estado compacta, impresa con `--line` (renderizada como pie de pág
 
 > Los segmentos, las etiquetas, los colores y los umbrales de esa línea son todos configurables; consulta [Configuración](#configuración).
 
-El renderizador predeterminado de la línea de estado es `codex-hud-rs`, el pequeño binario en Rust de este repositorio; el script de Node (`plugins/codex-hud/scripts/codex-hud.js`) se mantiene como el respaldo documentado y el oráculo de paridad. En este README aparecen dos «Rust» distintos: la propia CLI de Codex upstream es un programa en Rust (el objetivo de compilación del parche experimental de más abajo), mientras que `codex-hud-rs` es el renderizador de la línea de estado incluido en este repositorio.
+The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
 
 ## Características
 
@@ -67,10 +67,10 @@ npm run install:launcher -- --make-default  # opcional: que `codex` resuelva al 
 rehash
 ```
 
-Opcionalmente, compila el renderizador en Rust de la línea de estado. Esto no cambia nada visible en una TUI lanzada con el Codex original — importa para el pie de página parcheado experimental y para el uso independiente de `codex-hud-rs` (`--watch`, o conectar a mano `status_line_command` en otras herramientas). Una vez compilado, el instalador lo detecta automáticamente (`--renderer auto`) para el modo parcheado y `--print-config`:
+Opcionalmente, compila el renderizador en Rust de la línea de estado. Esto no cambia nada visible en una TUI lanzada con el Codex original — importa para el pie de página parcheado experimental y para el uso independiente de `codex-hud` (`--watch`, o conectar a mano `status_line_command` en otras herramientas). Una vez compilado, el instalador lo detecta automáticamente (`--renderer auto`) para el modo parcheado y `--print-config`:
 
 ```bash
-npm run build:rust   # opcional: compila rust/target/release/codex-hud-rs
+npm run build:rust   # opcional: compila rust/target/release/codex-hud
 ```
 
 Consulta la sección «Lanzador HUD» más abajo para los detalles y `npm run doctor` para diagnósticos.
@@ -81,35 +81,36 @@ Inicia un nuevo hilo de Codex después de instalar o reinstalar para que la list
 
 ## Uso
 
-Ejecuta el renderizador de Node directamente durante el desarrollo:
+Run the Rust renderer directly during development:
 
 ```bash
-node plugins/codex-hud/scripts/codex-hud.js           # vista multilínea independiente
-node plugins/codex-hud/scripts/codex-hud.js --line     # una sola línea compacta
-node plugins/codex-hud/scripts/codex-hud.js --line --color
-node plugins/codex-hud/scripts/codex-hud.js --json      # legible por máquina
-node plugins/codex-hud/scripts/codex-hud.js --watch 5   # actualiza cada 5s
+npm run build:rust
+./rust/target/release/codex-hud           # vista multilínea independiente
+./rust/target/release/codex-hud --line     # una sola línea compacta
+./rust/target/release/codex-hud --line --color
+./rust/target/release/codex-hud --json      # legible por máquina
+./rust/target/release/codex-hud --watch 5   # actualiza cada 5s
 npm test
 ```
 
 Captura de terminal de la línea de estado compacta (`--line`):
 
 ```text
-$ node plugins/codex-hud/scripts/codex-hud.js --line
+$ ./rust/target/release/codex-hud --line
 5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
-Ejecuta `node plugins/codex-hud/scripts/codex-hud.js --line --color` localmente para ver la misma línea con estilos de color ANSI.
+The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
 
-`codex-hud-rs` (tras `npm run build:rust`) expone exactamente la misma superficie de flags — `--line` / `--status-line` / `--color` / `--json` / `--watch` / `--init-config` / `--print-config` / `--config-path`:
+`codex-hud` (tras `npm run build:rust`) expone exactamente la misma superficie de flags — `--line` / `--status-line` / `--color` / `--json` / `--watch` / `--init-config` / `--print-config` / `--config-path`:
 
 ```bash
-./rust/target/release/codex-hud-rs --line --color
+./rust/target/release/codex-hud --line --color
 ```
 
 ## Configuración
 
-Tanto la vista multilínea independiente como la línea de estado compacta son configurables mediante un `codex-hud.toml` opcional; los renderizadores de Node y de Rust leen los mismos niveles de `codex-hud.toml`. Sin un archivo de configuración obtienes los valores predeterminados mostrados arriba; cada clave es opcional y todo lo que omitas hereda el valor predeterminado integrado.
+Both the standalone workspace snapshot and the compact status line are configurable through an optional `codex-hud.toml`. With no config file you get the defaults shown above; every key is optional and anything you omit inherits the built-in default.
 
 ```bash
 codex-hud --init-config     # genera ~/.codex/codex-hud.toml (--force para sobrescribir)
@@ -209,14 +210,14 @@ codex shim: managed -> /Users/you/.local/bin/codex-hud-tui (/Users/you/.local/bi
 launcher: v2 mode=stock (/Users/you/.local/bin/codex-hud-tui)
 launcher metadata: stock_path=/opt/homebrew/bin/codex stock_realpath=/opt/homebrew/Cellar/codex/0.139.0/bin/codex stock_version=0.139.0 renderer=rust built_at=2026-06-10T12:00:00.000Z
 stock codex: /opt/homebrew/bin/codex (0.139.0, realpath /opt/homebrew/Cellar/codex/0.139.0/bin/codex)
-renderer: rust (/Users/you/.local/bin/codex-hud-rs, v0.2.0; used by --print-config/patched mode only — stock launcher does not invoke it)
+renderer: rust (/Users/you/.local/bin/codex-hud, v0.2.0; used by --print-config/patched mode only — stock launcher does not invoke it)
 patched payload dir: /Users/you/.local/bin/codex-hud-codex.d
 patched versions: (none)
 patched command: (none)
 status: healthy
 ```
 
-Solo devuelve un código distinto de cero cuando la cadena de entrada activa está rota — una degradación del renderizador nunca convierte en no sano un estado sano. La recomendación de recompilar el renderizador tiene granularidad de release: compara la versión de `codex-hud-rs` fijada en tiempo de compilación con la de `package.json`, de modo que se activa cuando una release cambia la versión, no en cada commit.
+Solo devuelve un código distinto de cero cuando la cadena de entrada activa está rota — una degradación del renderizador nunca convierte en no sano un estado sano. La recomendación de recompilar el renderizador tiene granularidad de release: compara la versión de `codex-hud` fijada en tiempo de compilación con la de `package.json`, de modo que se activa cuando una release cambia la versión, no en cada commit.
 
 ## Solución de problemas
 
@@ -237,7 +238,7 @@ npm run patch:codex:dry-run
 npm run patch:codex
 ```
 
-El instalador parchea la etiqueta de OpenAI Codex correspondiente, compila la CLI en Rust y deja el ejecutable preparado en `~/.local/bin/codex-hud-codex.d/<version>/codex`. El payload preparado debe superar una verificación `--version` **antes** de activarse; solo entonces `~/.local/bin/codex-hud-codex` se redirige atómicamente al nuevo payload, y la versión anterior se conserva en disco para reversión. Una compilación fallida se aparta como `<version>.failed` y el runtime activo queda intacto. También escribe `~/.local/bin/codex-hud-tui` en modo parcheado, un lanzador que pasa el comando HUD a color mediante el override `-c tui.status_line_command=...` de Codex sin tocar `~/.codex/config.toml`. Con el `--renderer auto` predeterminado, el comando inyectado es `'~/.local/bin/codex-hud-rs' --line --color` cuando el renderizador en Rust está instalado, y recurre a `node .../plugins/codex-hud/scripts/codex-hud.js --line --color` en caso contrario. Tanto la ruta del ejecutable como `argv[0]` conservan nombres visibles como Codex, de modo que integraciones como Herdr siguen reconociendo el panel como sesión de Codex.
+The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and stages the executable under `~/.local/bin/codex-hud-codex.d/<version>/codex`. The staged payload must pass a `--version` health check **before** anything is activated; only then is `~/.local/bin/codex-hud-codex` atomically retargeted to the new payload, and the previous version is kept on disk for rollback. A failed build is kept aside as `<version>.failed` and the active runtime is left untouched. It also writes `~/.local/bin/codex-hud-tui` in patched mode, a launcher that passes the colored status-line command through Codex's `-c tui.status_line_command=...` override without changing `~/.codex/config.toml`. With the default `--renderer auto`, the injected command is `'~/.local/bin/codex-hud' --line --color`; if that Rust renderer is missing or fails its health check, the patched install stops instead of falling back to another renderer. The executable path and `argv[0]` both keep Codex-visible names, so terminal integrations such as Herdr can still recognize the pane as a Codex session.
 
 El modo de lanzador seguro no toca tu comando `codex` habitual:
 
@@ -267,18 +268,14 @@ which codex
 Si prefieres una configuración persistente, añade la línea impresa bajo tu tabla `[tui]` existente, aunque ten en cuenta que las versiones originales de Codex pueden rechazar campos desconocidos. Genera la línea exacta para tu máquina desde la raíz del repositorio (`node scripts/install-patched-codex.js --print-config` resuelve el renderizador igual que el instalador):
 
 ```bash
-echo "status_line_command = \"$HOME/.local/bin/codex-hud-rs --line --color\""
-# Respaldo de Node (sin compilación de Rust):
-echo "status_line_command = \"node $(pwd)/plugins/codex-hud/scripts/codex-hud.js --line --color\""
+echo "status_line_command = \"$HOME/.local/bin/codex-hud --line --color\""
 ```
 
 Luego pégala bajo `[tui]` en `~/.codex/config.toml`:
 
 ```toml
 # Reemplaza /Users/you con tu directorio home.
-status_line_command = "/Users/you/.local/bin/codex-hud-rs --line --color"
-# Respaldo de Node — reemplaza /path/to/codex-hud con la ruta de tu clon local:
-# status_line_command = "node /path/to/codex-hud/plugins/codex-hud/scripts/codex-hud.js --line --color"
+status_line_command = "/Users/you/.local/bin/codex-hud --line --color"
 ```
 
 Ejecuta `codex-hud-tui` para ver el pie de página compacto. El binario parcheado no sigue las actualizaciones del Codex original: si el Codex original cambia tras una compilación, el lanzador parcheado imprime una advertencia de una línea al arrancar (y aun así ejecuta el binario parcheado que elegiste) — recompila con `npm run patch:codex` o vuelve a la delegación con `npm run install:launcher`. Cada recompilación se prepara, se verifica y se activa atómicamente; la versión anterior funcional queda bajo `~/.local/bin/codex-hud-codex.d/` para reversión, y `npm run doctor` informa de obsolescencia y payloads rotos. Con el shim `codex` gestionado activo, el instalador lo omite al detectar la versión base de Codex y usa el siguiente `codex` real del `PATH`; pasa `--version <version>` si necesitas fijar explícitamente el objetivo de recompilación.
@@ -289,10 +286,8 @@ codex-hud/
 ├─ plugins/
 │  └─ codex-hud/
 │     ├─ .codex-plugin/plugin.json
-│     ├─ scripts/codex-hud.js        # renderizador del HUD + cargador de configuración
-│     ├─ vendor/toml.js              # analizador TOML incluido (smol-toml)
 │     └─ skills/codex-hud/SKILL.md
-├─ rust/                             # fuente de codex-hud-rs (renderizador predeterminado de la línea de estado)
+├─ rust/                             # fuente de codex-hud (renderizador predeterminado de la línea de estado)
 └─ scripts/
    ├─ test-codex-hud.js
    ├─ test-codex-hud-config.js
@@ -300,14 +295,13 @@ codex-hud/
    ├─ test-rust-golden.js
    ├─ test-rust-parsing-golden.js
    ├─ test-rust-cli.js
-   ├─ vendor-toml.js                 # regenera vendor/toml.js
    └─ install-patched-codex.js
 ```
 
 ## Hoja de ruta
 
 - Agregar resúmenes de transcripción de sesión más completos si Codex expone una API local estable de estado de sesión para plugins.
-- Mantener `codex-hud-rs` en paridad golden con el renderizador de Node (`npm run test:rust` verifica ambos contra los mismos fixtures).
+- Keep `codex-hud` covered by the golden fixtures (`npm run test:rust` verifies the Rust renderer against them).
 - Dar seguimiento al issue upstream de OpenAI Codex [#17827](https://github.com/openai/codex/issues/17827). Al 2026-06-10, Codex estándar aún tiene elementos integrados de `[tui].status_line`, pero no un renderizador basado en comandos ni propiedad de plugins; retira el parche solo cuando se publique un renderizador personalizado compatible.
 
 ## Contribuir
@@ -316,7 +310,7 @@ Los issues y los pull requests son bienvenidos. Después de cambiar la salida de
 
 ### Scripts de mantenimiento
 
-Comandos habituales de mantenimiento: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version` y `npm run vendor:toml`.
+Comandos habituales de mantenimiento: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`.
 
 ## Licencia
 

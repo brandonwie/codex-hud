@@ -1,6 +1,6 @@
 use crate::colors::{self, colorize};
+use crate::compat;
 use crate::hudcfg;
-use crate::js;
 use crate::util;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 /// Port of formatCounts().
 pub fn format_counts(counts: Option<&Value>) -> String {
-    let Some(counts) = counts.filter(|c| js::truthy(Some(c))) else {
+    let Some(counts) = counts.filter(|c| compat::truthy(Some(c))) else {
         return "clean".to_string();
     };
     let mut parts = Vec::new();
@@ -21,9 +21,9 @@ pub fn format_counts(counts: Option<&Value>) -> String {
         "untracked",
         "other",
     ] {
-        if js::truthy(counts.get(key)) {
-            let n = js::js_number(counts.get(key));
-            parts.push(format!("{}:{}", &key[..1], js::num_to_string(n)));
+        if compat::truthy(counts.get(key)) {
+            let n = compat::js_number(counts.get(key));
+            parts.push(format!("{}:{}", &key[..1], compat::num_to_string(n)));
         }
     }
     if parts.is_empty() {
@@ -38,9 +38,9 @@ pub fn format_hook_events(events: Option<&Value>) -> String {
     let mut parts = Vec::new();
     if let Some(Value::Object(map)) = events {
         for (event, count) in map {
-            let n = js::js_number(Some(count));
+            let n = compat::js_number(Some(count));
             if n > 0.0 {
-                parts.push(format!("{}:{}", event, js::num_to_string(n)));
+                parts.push(format!("{}:{}", event, compat::num_to_string(n)));
             }
         }
     }
@@ -51,7 +51,7 @@ pub fn format_hook_events(events: Option<&Value>) -> String {
     }
 }
 
-/// Port of formatDurationUntil(). NOTE: no ".0" strip (oracle keeps "2.0h").
+/// Port of the original duration formatting. NOTE: no ".0" strip (keeps "2.0h").
 pub fn format_duration_until(epoch_seconds: f64) -> String {
     let seconds = epoch_seconds - util::now_ms() / 1000.0;
     if !seconds.is_finite() {
@@ -63,17 +63,17 @@ pub fn format_duration_until(epoch_seconds: f64) -> String {
     let hours = seconds / 3600.0;
     if hours < 24.0 {
         let text = if hours < 10.0 {
-            js::to_fixed1(hours)
+            compat::to_fixed1(hours)
         } else {
-            js::num_to_string(js::js_round(hours))
+            compat::num_to_string(compat::js_round(hours))
         };
         return format!("{}h", text);
     }
     let days = hours / 24.0;
     let text = if days < 10.0 {
-        js::to_fixed1(days)
+        compat::to_fixed1(days)
     } else {
-        js::num_to_string(js::js_round(days))
+        compat::num_to_string(compat::js_round(days))
     };
     format!("{}d", text)
 }
@@ -87,30 +87,30 @@ pub fn format_duration_window(minutes: f64) -> String {
     let hours = minutes / 60.0;
     if hours < 24.0 {
         let text = if hours < 10.0 {
-            strip(js::to_fixed1(hours))
+            strip(compat::to_fixed1(hours))
         } else {
-            js::num_to_string(js::js_round(hours))
+            compat::num_to_string(compat::js_round(hours))
         };
         return format!("{}h", text);
     }
     let days = hours / 24.0;
     let text = if days < 10.0 {
-        strip(js::to_fixed1(days))
+        strip(compat::to_fixed1(days))
     } else {
-        js::num_to_string(js::js_round(days))
+        compat::num_to_string(compat::js_round(days))
     };
     format!("{}d", text)
 }
 
 /// Port of formatReasoningEffort().
 pub fn format_reasoning_effort(value: Option<&Value>, effort_short: bool) -> Option<String> {
-    let value = value.filter(|v| js::truthy(Some(v)))?;
+    let value = value.filter(|v| compat::truthy(Some(v)))?;
     let raw = match value {
         Value::String(s) => s.clone(),
-        other => js::num_to_string(js::js_number(Some(other))),
+        other => compat::num_to_string(compat::js_number(Some(other))),
     };
     let normalized = raw.trim().to_string();
-    // Oracle regex /^x[-_ ]?high$/i expands to exactly these four forms.
+    // Compatibility regex /^x[-_ ]?high$/i expands to exactly these four forms.
     match normalized.to_lowercase().as_str() {
         "xhigh" | "x-high" | "x_high" | "x high" => {
             Some(if effort_short { "xh" } else { "xhigh" }.to_string())
@@ -124,19 +124,19 @@ pub fn format_reasoning_effort(value: Option<&Value>, effort_short: bool) -> Opt
 
 /// Port of ratePacePercent().
 pub fn rate_pace_percent(window: Option<&Value>) -> Option<f64> {
-    let window = window.filter(|w| js::truthy(Some(w)))?;
-    if !js::truthy(window.get("resetsAt")) || !js::truthy(window.get("windowMinutes")) {
+    let window = window.filter(|w| compat::truthy(Some(w)))?;
+    if !compat::truthy(window.get("resetsAt")) || !compat::truthy(window.get("windowMinutes")) {
         return None;
     }
-    let resets_at = js::js_number(window.get("resetsAt"));
-    let window_minutes = js::js_number(window.get("windowMinutes"));
+    let resets_at = compat::js_number(window.get("resetsAt"));
+    let window_minutes = compat::js_number(window.get("windowMinutes"));
     let remaining_ms = (resets_at * 1000.0 - util::now_ms()).max(0.0);
     let window_ms = window_minutes * 60000.0;
     let elapsed_ms = window_ms - remaining_ms;
     if elapsed_ms < 0.0 || elapsed_ms > window_ms {
         return None;
     }
-    Some(js::js_round(elapsed_ms / window_ms * 100.0))
+    Some(compat::js_round(elapsed_ms / window_ms * 100.0))
 }
 
 // ── Status helpers ───────────────────────────────────────────────────────────
@@ -150,15 +150,15 @@ fn basename(path: &str) -> String {
 
 /// Port of statusProjectName().
 pub fn status_project_name(data: &Value) -> String {
-    let package = js::get(data.get("project"), "package");
-    if let Some(name) = js::get(package, "name").filter(|n| js::truthy(Some(n))) {
+    let package = compat::get(data.get("project"), "package");
+    if let Some(name) = compat::get(package, "name").filter(|n| compat::truthy(Some(n))) {
         if let Some(s) = name.as_str() {
             return s.to_string();
         }
     }
     let git = data.get("git");
-    if js::truthy(js::get(git, "available")) {
-        if let Some(root) = js::get(git, "root")
+    if compat::truthy(compat::get(git, "available")) {
+        if let Some(root) = compat::get(git, "root")
             .and_then(|r| r.as_str())
             .filter(|r| !r.is_empty())
         {
@@ -171,14 +171,14 @@ pub fn status_project_name(data: &Value) -> String {
 /// Port of statusGitBranch().
 pub fn status_git_branch(data: &Value) -> Option<String> {
     let git = data.get("git");
-    if !js::truthy(js::get(git, "available")) {
+    if !compat::truthy(compat::get(git, "available")) {
         return None;
     }
-    let branch = js::get(git, "branch")
+    let branch = compat::get(git, "branch")
         .and_then(|b| b.as_str())
         .unwrap_or("")
         .to_string();
-    let dirty = js::js_number(js::get(git, "dirty"));
+    let dirty = compat::js_number(compat::get(git, "dirty"));
     Some(if dirty > 0.0 {
         format!("{}*", branch)
     } else {
@@ -194,11 +194,11 @@ pub fn status_model(data: &Value) -> Option<String> {
 }
 
 fn format_model_name(raw: String, format: Option<&Value>) -> String {
-    if !js::truthy(js::get(format, "modelShort")) {
+    if !compat::truthy(compat::get(format, "modelShort")) {
         return raw;
     }
     // SECURITY: get(..4) avoids a char-boundary panic when an untrusted
-    // model string has a multibyte char at byte 4 (oracle regex never crashes).
+    // model string has a multibyte char at byte 4 (legacy regex never crashed).
     match raw.get(..4) {
         Some(prefix) if prefix.eq_ignore_ascii_case("gpt-") => raw[4..].to_string(),
         _ => raw,
@@ -211,8 +211,8 @@ fn status_model_with_format(
     model_effort_separator: &str,
 ) -> Option<String> {
     let config = data.get("config");
-    let raw_model = js::get(config, "model")
-        .filter(|m| js::truthy(Some(m)))
+    let raw_model = compat::get(config, "model")
+        .filter(|m| compat::truthy(Some(m)))
         .and_then(|m| m.as_str())
         .map(|m| m.to_string())
         .or_else(|| {
@@ -228,8 +228,8 @@ fn status_model_with_format(
         });
     let model = raw_model.map(|m| format_model_name(m, format));
     let reasoning = format_reasoning_effort(
-        js::get(config, "reasoning"),
-        js::truthy(js::get(format, "effortShort")),
+        compat::get(config, "reasoning"),
+        compat::truthy(compat::get(format, "effortShort")),
     );
     let joined: String = [model, reasoning]
         .into_iter()
@@ -267,26 +267,29 @@ impl<'a> RenderCtx<'a> {
     fn color_of(&self, key: &str) -> Option<&str> {
         self.colors.get(key).map(|s| s.as_str())
     }
-    /// JS `ctx.color || c.label`
+    /// JavaScript-compatible `ctx.color || c.label` fallback.
     fn label_color(&self) -> Option<&str> {
         self.color.as_deref().or_else(|| self.color_of("label"))
     }
     fn threshold(&self, group: &str, key: &str) -> f64 {
-        js::js_number(js::get(js::get(self.config.get("thresholds"), group), key))
+        compat::js_number(compat::get(
+            compat::get(self.config.get("thresholds"), group),
+            key,
+        ))
     }
     fn format_flag(&self, key: &str) -> bool {
-        js::truthy(js::get(self.config.get("format"), key))
+        compat::truthy(compat::get(self.config.get("format"), key))
     }
     fn format_text(&self, key: &str) -> String {
-        js::get(self.config.get("format"), key)
+        compat::get(self.config.get("format"), key)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string()
     }
     fn label_text(&self, key: &str) -> String {
-        match js::get(self.config.get("labels"), key) {
+        match compat::get(self.config.get("labels"), key) {
             Some(Value::String(s)) => s.clone(),
-            Some(Value::Number(n)) => js::num_to_string(n.as_f64().unwrap_or(f64::NAN)),
+            Some(Value::Number(n)) => compat::num_to_string(n.as_f64().unwrap_or(f64::NAN)),
             _ => String::new(),
         }
     }
@@ -298,11 +301,11 @@ fn format_percent_cfg(value: Option<f64>, percent_round: bool) -> String {
         return "?".to_string();
     };
     let shown = if percent_round {
-        js::js_round(value)
+        compat::js_round(value)
     } else {
-        js::js_round(value * 10.0) / 10.0
+        compat::js_round(value * 10.0) / 10.0
     };
-    format!("{}%", js::num_to_string(shown))
+    format!("{}%", compat::num_to_string(shown))
 }
 
 /// Port of formatTokenCountCfg().
@@ -311,10 +314,10 @@ fn format_token_count_cfg(value: Option<f64>, token_units: bool) -> String {
         return "?".to_string();
     };
     if !token_units {
-        return js::num_to_string(js::js_round(value));
+        return compat::num_to_string(compat::js_round(value));
     }
     if value >= 1_000_000.0 {
-        let text = js::to_fixed1(value / 1_000_000.0);
+        let text = compat::to_fixed1(value / 1_000_000.0);
         let text = text
             .strip_suffix(".0")
             .map(|t| t.to_string())
@@ -322,9 +325,12 @@ fn format_token_count_cfg(value: Option<f64>, token_units: bool) -> String {
         return format!("{}M", text);
     }
     if value >= 1000.0 {
-        return format!("{}k", js::num_to_string(js::js_round(value / 1000.0)));
+        return format!(
+            "{}k",
+            compat::num_to_string(compat::js_round(value / 1000.0))
+        );
     }
-    js::num_to_string(js::js_round(value))
+    compat::num_to_string(compat::js_round(value))
 }
 
 /// Port of colorByPercentCfg().
@@ -413,7 +419,7 @@ fn render_metric(label: &str, percent: Option<f64>, detail: &str, ctx: &RenderCt
 fn render_rate(label: &str, window: Option<&Value>, ctx: &RenderCtx) -> String {
     let e = ctx.color_enabled;
     let s = ctx.separators;
-    let window = window.filter(|w| js::truthy(Some(w)));
+    let window = window.filter(|w| compat::truthy(Some(w)));
     let Some(window) = window else {
         return format!(
             "{}{}",
@@ -421,13 +427,13 @@ fn render_rate(label: &str, window: Option<&Value>, ctx: &RenderCtx) -> String {
             colorize(&format!("{}?", s.label_value), ctx.color_of("label"), e)
         );
     };
-    let remaining_raw = if js::truthy(window.get("resetsAt")) {
-        format_duration_until(js::js_number(window.get("resetsAt")))
+    let remaining_raw = if compat::truthy(window.get("resetsAt")) {
+        format_duration_until(compat::js_number(window.get("resetsAt")))
     } else {
         String::new()
     };
     let remaining = if remaining_raw == "now" {
-        let from_window = format_duration_window(js::js_number(window.get("windowMinutes")));
+        let from_window = format_duration_window(compat::js_number(window.get("windowMinutes")));
         if from_window.is_empty() {
             remaining_raw
         } else {
@@ -437,7 +443,7 @@ fn render_rate(label: &str, window: Option<&Value>, ctx: &RenderCtx) -> String {
         remaining_raw
     };
     let pace = rate_pace_percent(Some(window));
-    let used_percent = js::as_finite_number(window.get("usedPercent"));
+    let used_percent = compat::as_finite_number(window.get("usedPercent"));
 
     let mut detail_parts: Vec<String> = Vec::new();
     if !remaining.is_empty() {
@@ -486,7 +492,7 @@ fn render_token_usage(label: &str, tokens: Option<&Value>, ctx: &RenderCtx) -> S
     let e = ctx.color_enabled;
     let s = ctx.separators;
     let label_text = colorize(label, ctx.label_color(), e);
-    let tokens = tokens.filter(|t| js::truthy(Some(t)));
+    let tokens = tokens.filter(|t| compat::truthy(Some(t)));
     let Some(tokens) = tokens else {
         return format!(
             "{}{}",
@@ -495,7 +501,7 @@ fn render_token_usage(label: &str, tokens: Option<&Value>, ctx: &RenderCtx) -> S
         );
     };
     let token_units = ctx.format_flag("tokenUnits");
-    let count = |key: &str| -> Option<f64> { js::as_finite_number(tokens.get(key)) };
+    let count = |key: &str| -> Option<f64> { compat::as_finite_number(tokens.get(key)) };
 
     let total = colorize(
         &format_token_count_cfg(count("total"), token_units),
@@ -569,7 +575,7 @@ fn render_segment(id: &str, data: &Value, ctx: &RenderCtx) -> Option<String> {
         "branch" => {
             let branch = status_git_branch(data)?;
             if branch.is_empty() {
-                // Oracle: empty branch string is falsy in JS -> segment skipped.
+                // Keep empty branch strings falsy so the segment is skipped.
                 return None;
             }
             let is_dirty = branch.ends_with('*');
@@ -592,7 +598,7 @@ fn render_segment(id: &str, data: &Value, ctx: &RenderCtx) -> Option<String> {
             ))
         }
         "runtime" => {
-            let runtime = data.get("runtime").filter(|r| js::truthy(Some(r)))?;
+            let runtime = data.get("runtime").filter(|r| compat::truthy(Some(r)))?;
             let label = runtime
                 .get("label")
                 .and_then(|l| l.as_str())
@@ -608,26 +614,32 @@ fn render_segment(id: &str, data: &Value, ctx: &RenderCtx) -> Option<String> {
             ))
         }
         "ctx" => {
-            let context = js::get(data.get("usage").filter(|u| js::truthy(Some(u))), "context");
-            let used = js::as_finite_number(js::get(context, "usedPercent"));
+            let context = compat::get(
+                data.get("usage").filter(|u| compat::truthy(Some(u))),
+                "context",
+            );
+            let used = compat::as_finite_number(compat::get(context, "usedPercent"));
             Some(render_metric(&ctx.label, used, "", ctx))
         }
         "5h" => {
-            let rl = js::get(
-                data.get("usage").filter(|u| js::truthy(Some(u))),
+            let rl = compat::get(
+                data.get("usage").filter(|u| compat::truthy(Some(u))),
                 "rateLimits",
             );
-            Some(render_rate(&ctx.label, js::get(rl, "primary"), ctx))
+            Some(render_rate(&ctx.label, compat::get(rl, "primary"), ctx))
         }
         "7d" => {
-            let rl = js::get(
-                data.get("usage").filter(|u| js::truthy(Some(u))),
+            let rl = compat::get(
+                data.get("usage").filter(|u| compat::truthy(Some(u))),
                 "rateLimits",
             );
-            Some(render_rate(&ctx.label, js::get(rl, "secondary"), ctx))
+            Some(render_rate(&ctx.label, compat::get(rl, "secondary"), ctx))
         }
         "tkn" => {
-            let tokens = js::get(data.get("usage").filter(|u| js::truthy(Some(u))), "tokens");
+            let tokens = compat::get(
+                data.get("usage").filter(|u| compat::truthy(Some(u))),
+                "tokens",
+            );
             Some(render_token_usage(&ctx.label, tokens, ctx))
         }
         _ => None,
@@ -646,8 +658,8 @@ fn default_label(id: &str) -> &'static str {
 
 /// Port of getRenderConfig().
 pub fn get_render_config(data: &Value) -> Value {
-    js::get(data.get("hud"), "config")
-        .filter(|c| js::truthy(Some(c)))
+    compat::get(data.get("hud"), "config")
+        .filter(|c| compat::truthy(Some(c)))
         .cloned()
         .unwrap_or_else(hudcfg::default_config)
 }
@@ -655,7 +667,7 @@ pub fn get_render_config(data: &Value) -> Value {
 /// Port of effectiveSeparators().
 pub fn effective_separators(config: &Value) -> Separators {
     let get = |key: &str, default: &str| -> String {
-        js::get(config.get("separators"), key)
+        compat::get(config.get("separators"), key)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| default.to_string())
@@ -666,7 +678,7 @@ pub fn effective_separators(config: &Value) -> Separators {
     let open = get("open", "(");
     let close = get("close", ")");
     let model_effort;
-    if js::truthy(config.get("space")) {
+    if compat::truthy(config.get("space")) {
         segment = format!(" {} ", segment.trim());
         label_value = format!("{} ", label_value.trim_end());
         model_effort = " ".to_string();
@@ -711,10 +723,10 @@ pub fn render_footer(data: &Value, config: &Value, color: bool) -> String {
         if !hudcfg::KNOWN_SEGMENTS.contains(&id) {
             continue;
         }
-        let label = match js::get(config.get("labels"), id) {
+        let label = match compat::get(config.get("labels"), id) {
             Some(Value::Null) | None => default_label(id).to_string(),
             Some(Value::String(s)) => s.clone(),
-            Some(Value::Number(n)) => js::num_to_string(n.as_f64().unwrap_or(f64::NAN)),
+            Some(Value::Number(n)) => compat::num_to_string(n.as_f64().unwrap_or(f64::NAN)),
             Some(other) => other.to_string(),
         };
         let ctx = RenderCtx {
@@ -756,7 +768,7 @@ pub fn format_usage_line(data: &Value, color: bool) -> String {
 pub fn format_text(data: &Value) -> String {
     let config = data.get("config");
     let empty_items = Vec::new();
-    let items = js::get(config, "nativeStatusItems")
+    let items = compat::get(config, "nativeStatusItems")
         .and_then(|v| v.as_array())
         .unwrap_or(&empty_items);
     let item_strings: Vec<String> = items
@@ -774,12 +786,12 @@ pub fn format_text(data: &Value) -> String {
     } else {
         String::new()
     };
-    let pkg = js::get(data.get("project"), "package");
+    let pkg = compat::get(data.get("project"), "package");
 
     let str_of =
         |v: Option<&Value>| -> String { v.and_then(|x| x.as_str()).unwrap_or("").to_string() };
     let or_q = |v: Option<&Value>| -> String {
-        match v.filter(|x| js::truthy(Some(x))) {
+        match v.filter(|x| compat::truthy(Some(x))) {
             Some(Value::String(s)) => s.clone(),
             Some(other) => other.to_string(),
             None => "?".to_string(),
@@ -787,21 +799,21 @@ pub fn format_text(data: &Value) -> String {
     };
 
     let git = data.get("git");
-    let git_line = if js::truthy(js::get(git, "available")) {
+    let git_line = if compat::truthy(compat::get(git, "available")) {
         format!(
             "  git: {} | dirty {} ({})",
-            str_of(js::get(git, "header")),
-            js::num_to_string(js::js_number(js::get(git, "dirty"))),
-            format_counts(js::get(git, "counts"))
+            str_of(compat::get(git, "header")),
+            compat::num_to_string(compat::js_number(compat::get(git, "dirty"))),
+            format_counts(compat::get(git, "counts"))
         )
     } else {
         "  git: unavailable".to_string()
     };
 
-    let pkg_line = match js::get(pkg, "name").filter(|n| js::truthy(Some(n))) {
+    let pkg_line = match compat::get(pkg, "name").filter(|n| compat::truthy(Some(n))) {
         Some(name) => {
             let name = name.as_str().unwrap_or("").to_string();
-            match js::get(pkg, "version").filter(|v| js::truthy(Some(v))) {
+            match compat::get(pkg, "version").filter(|v| compat::truthy(Some(v))) {
                 Some(version) => format!("{}@{}", name, version.as_str().unwrap_or("")),
                 None => name,
             }
@@ -809,13 +821,13 @@ pub fn format_text(data: &Value) -> String {
         None => "none detected".to_string(),
     };
 
-    let status_colors = match js::get(config, "nativeStatusColors") {
+    let status_colors = match compat::get(config, "nativeStatusColors") {
         Some(Value::Null) | None => "?",
-        Some(v) if js::truthy(Some(v)) => "on",
+        Some(v) if compat::truthy(Some(v)) => "on",
         Some(_) => "off",
     };
 
-    let codex_version = match data.get("codexVersion").filter(|v| js::truthy(Some(v))) {
+    let codex_version = match data.get("codexVersion").filter(|v| compat::truthy(Some(v))) {
         Some(v) => v.as_str().unwrap_or("").to_string(),
         None => "codex unavailable".to_string(),
     };
@@ -831,17 +843,20 @@ pub fn format_text(data: &Value) -> String {
         "Codex".to_string(),
         format!(
             "  model: {} / reasoning {}",
-            or_q(js::get(config, "model")),
-            or_q(js::get(config, "reasoning"))
+            or_q(compat::get(config, "model")),
+            or_q(compat::get(config, "reasoning"))
         ),
         format!(
             "  sandbox: {} / approval {}",
-            or_q(js::get(config, "sandbox")),
-            or_q(js::get(config, "approval"))
+            or_q(compat::get(config, "sandbox")),
+            or_q(compat::get(config, "approval"))
         ),
         format!(
             "  status line: {} items, colors {}",
-            js::num_to_string(js::js_number(js::get(config, "nativeStatusItemCount"))),
+            compat::num_to_string(compat::js_number(compat::get(
+                config,
+                "nativeStatusItemCount"
+            ))),
             status_colors
         ),
         format!(
@@ -858,11 +873,12 @@ pub fn format_text(data: &Value) -> String {
         "Workspace".to_string(),
         format!("  cwd: {}", str_of(data.get("cwd"))),
         git_line,
-        format!("  repo: {}", or_q(js::get(git, "root"))),
+        format!("  repo: {}", or_q(compat::get(git, "root"))),
         format!("  package: {}", pkg_line),
         format!(
             "  AGENTS.md: {}",
-            match js::get(data.get("project"), "agentsPath").filter(|p| js::truthy(Some(p))) {
+            match compat::get(data.get("project"), "agentsPath").filter(|p| compat::truthy(Some(p)))
+            {
                 Some(p) => p.as_str().unwrap_or("").to_string(),
                 None => "none detected".to_string(),
             }
@@ -871,28 +887,30 @@ pub fn format_text(data: &Value) -> String {
         "Hooks".to_string(),
         format!(
             "  events: {}",
-            format_hook_events(js::get(data.get("hooks"), "events"))
+            format_hook_events(compat::get(data.get("hooks"), "events"))
         ),
-        format!("  file: {}", str_of(js::get(data.get("hooks"), "path"))),
+        format!("  file: {}", str_of(compat::get(data.get("hooks"), "path"))),
         String::new(),
         "Project Priority".to_string(),
         format!(
             "  {}",
-            match js::get(data.get("project"), "activePriority").filter(|p| js::truthy(Some(p))) {
+            match compat::get(data.get("project"), "activePriority")
+                .filter(|p| compat::truthy(Some(p)))
+            {
                 Some(p) => p.as_str().unwrap_or("").to_string(),
                 None => "none detected".to_string(),
             }
         ),
         String::new(),
         "Limitations".to_string(),
-        format!("  {}", str_of(js::get(data.get("limits"), "note"))),
+        format!("  {}", str_of(compat::get(data.get("limits"), "note"))),
     ]
     .join("\n")
 }
 
 /// Port of emitHudWarnings(): first warning (collapsed) to stderr.
 pub fn emit_hud_warnings(data: &Value) {
-    let warnings = js::get(data.get("hud"), "warnings").and_then(|w| w.as_array());
+    let warnings = compat::get(data.get("hud"), "warnings").and_then(|w| w.as_array());
     let Some(warnings) = warnings.filter(|w| !w.is_empty()) else {
         return;
     };
