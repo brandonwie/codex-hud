@@ -57,7 +57,7 @@
     copyStatus: byId("copy-status"),
   };
 
-  // Mirror plugins/codex-hud/scripts/codex-hud.js formatReasoningEffort():
+  // Mirror rust/src/render.rs format_reasoning_effort():
   // effortShort abbreviates only xhigh; high/medium/low always render High/Med/Low.
   const formatEffort = (value, short) => {
     if (!value) return null;
@@ -93,8 +93,8 @@
   const defaultSegments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
   const orderedSegments = ["model", "project", "branch", "runtime", "ctx", "5h", "7d", "tkn"];
 
-  // Mirror of DEFAULT_CONFIG.thresholds.pace.crit in
-  // plugins/codex-hud/scripts/codex-hud.js (read at runtime there by paceStatePrefix).
+  // Mirror of default_config().thresholds.pace.crit in rust/src/hudcfg.rs
+  // (read at runtime by pace_state_prefix).
   // The static playground can't load the plugin config, so keep this value in sync by hand.
   const PACE_CRIT = 15;
 
