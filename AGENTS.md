@@ -1,1 +1,0 @@
-/Users/brandonwie/dev/personal/3b/.agents/project-codex/codex-hud.md
