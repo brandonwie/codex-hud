@@ -52,37 +52,92 @@ jobs:
 
             ## Project Context
 
-            codex-hud is an open-source Codex plugin plus patched TUI launcher.
-            It is intentionally small and script-heavy: CommonJS Node scripts,
-            a vendored TOML parser, a Codex plugin manifest, README/i18n docs,
-            and installer tooling for an optional patched Codex footer.
+            codex-hud renders a compact, colored Codex status-line/footer
+            (model, project, git, context, 5h/7d usage, tokens). It ships
+            THREE renderers that must stay in parity for the same config and
+            inputs:
 
-            The key user-visible surface is exact terminal output for the HUD
-            footer/status line. Byte-level changes to ANSI colors, separators,
-            labels, segment order, token/rate formatting, or config merge
-            semantics are product changes and must be reviewed carefully.
+            - `plugins/codex-hud/scripts/codex-hud.js` — the Node/CommonJS
+              plugin and canonical "oracle": DEFAULT_CONFIG, the SEGMENTS
+              registry, and the color/format helpers live here.
+            - `rust/src/*` — `codex-hud-rs`, the default status-line renderer,
+              a Rust port held to byte/golden-parity with the Node oracle.
+            - `site/app.js` — the website's config/runtime playground: a
+              browser reimplementation that renders DOM spans, so it must match
+              the oracle's visible output, styling/control set, and config-TOML
+              generation (checked via textContent/control parity, not raw ANSI
+              bytes).
+
+            Around these: a vendored TOML parser, a Codex plugin manifest, the
+            patched-Codex installer/launcher, a deployed site (GitHub Pages), a
+            config schema (`spec/config-schema.md`), and README plus its
+            localized translations.
+
+            Because rendering logic is duplicated across three
+            languages/runtimes, the central risk is CROSS-RENDERER DRIFT: a
+            change to output, color resolution, segment order, thresholds,
+            labels, or token/percent formatting in one renderer that is not
+            mirrored in the others. Node and Rust hold byte/golden-parity; the
+            site holds visible-output and control parity. Byte-level changes to
+            ANSI colors, separators, labels, segment order, token/rate
+            formatting, or config merge semantics are product changes and must
+            be reviewed across all three renderers.
 
             ## Review Categories
 
-            1. Correctness - HUD output, config precedence, TOML validation, null-safe rendering
-            2. Parity Safety - golden fixtures, deterministic clocks, exact ANSI/text output
-            3. Installer Safety - no writes to stock Codex paths, safe shims, rollback behavior
-            4. Plugin Packaging - manifest validity, marketplace paths, zero unnecessary runtime deps
-            5. Security - workflow permissions, shell injection, unsafe path handling, secret exposure
-            6. Maintainability - small CommonJS style, focused helpers, low abstraction overhead
-            7. Documentation - README/i18n accuracy for install, rollback, updates, and limitations
+            1. Cross-Renderer Parity (PRIMARY) - changes to rendering, config
+               defaults, color resolution, segment registry/order, pace/percent
+               thresholds, effort/token/percent formatting, or separators must
+               land in lockstep across `plugins/codex-hud/scripts/codex-hud.js`,
+               `rust/src/*`, and `site/app.js`. Flag a one-sided change as a
+               drift bug. Node↔Rust parity is byte/golden (`npm test`,
+               `npm run test:rust`); site parity is visible-output/control
+               (`scripts/check-site.js`). The color algorithms have diverged
+               historically (Node `nearestXterm256` vs site `ansi256`) -
+               scrutinize any hex→xterm color mapping change.
+            2. Parity Safety / Coverage - golden fixtures and deterministic
+               clocks for both Node (`npm test`) and Rust (`npm run test:rust`),
+               plus the site smoke + control-parity check
+               (`scripts/check-site.js`). New rendering behavior needs matching
+               golden/fixture updates on every renderer it touches.
+            3. Correctness - HUD output, config precedence, TOML validation,
+               null-safe rendering.
+            4. Installer Safety - no writes to stock Codex paths, safe shims,
+               rollback, `exec -a codex`, `npm run doctor` accuracy.
+            5. Plugin Packaging & Site - manifest validity, marketplace paths,
+               zero unnecessary runtime deps; the site stays dependency-free
+               static assets with no external scripts; version stays synced
+               (`scripts/sync-release-version.js`).
+            6. Security - workflow permissions, shell injection, unsafe path
+               handling, secret exposure, no external/CDN scripts in the site,
+               playground runtime input stays sandboxed.
+            7. Maintainability - small CommonJS style, focused helpers, low
+               abstraction overhead.
+            8. Documentation - README/i18n accuracy (localized READMEs,
+               skeleton-checked) for install, rollback, updates, and
+               limitations; `spec/config-schema.md`.
 
             ## Project Conventions (Do NOT Flag)
 
-            - CommonJS scripts are intentional; do not request ESM/TypeScript rewrites.
-            - The vendored TOML parser is intentional to keep runtime installs dependency-light.
-            - Golden fixtures may show escaped ANSI as `\x1b` text for readable diffs.
-            - The patched Codex footer path is optional/advanced and upstream-coupled.
-            - Preserve `exec -a codex` in generated launchers so Herdr recognizes the process.
-            - Do not suggest modifying `/opt/homebrew/bin/codex` or stock Codex install paths.
-            - Prefer focused tests in `scripts/test-codex-hud.js`,
-              `scripts/test-codex-hud-config.js`, `scripts/test-golden.js`, or
-              `scripts/test-patched-codex-installer.js`.
+            - CommonJS scripts are intentional; do not request ESM/TypeScript
+              rewrites.
+            - The vendored TOML parser is intentional (dependency-light runtime).
+            - The Rust renderer and the site playground intentionally DUPLICATE
+              the Node oracle's logic - there is no shared module across
+              runtimes. Do not request deduplication or a shared package. DO
+              flag when the duplicated logic has DRIFTED out of parity.
+            - Golden fixtures may show escaped ANSI as `\x1b` text for readable
+              diffs.
+            - The patched Codex footer path is optional/advanced and
+              upstream-coupled.
+            - Preserve `exec -a codex` in generated launchers so Herdr
+              recognizes the process.
+            - Do not suggest modifying `/opt/homebrew/bin/codex` or stock Codex
+              install paths.
+            - Tests run via `npm test` (Node suite, golden, i18n, site check)
+              and `npm run test:rust` (Rust golden/parsing/CLI); CI also runs
+              `cargo fmt`/`clippy`. Prefer adding focused tests to the existing
+              `scripts/test-*.js` suites and golden fixtures over new frameworks.
 
             ## Output Instructions
 
