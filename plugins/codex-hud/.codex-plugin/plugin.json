@@ -1,6 +1,6 @@
 {
   "name": "brandonwie",
-  "version": "0.7.3",
+  "version": "0.0.1",
   "description": "Local context HUD and compact footer line for Codex CLI sessions.",
   "author": {
     "name": "Brandon Wie",
