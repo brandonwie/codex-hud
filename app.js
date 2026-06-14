@@ -30,12 +30,17 @@
     context: byId("context"),
     fiveHour: byId("five-hour"),
     sevenDay: byId("seven-day"),
+    fiveHourPace: byId("five-hour-pace"),
+    sevenDayPace: byId("seven-day-pace"),
   };
 
   const output = {
+    form: byId("hud-form"),
     context: byId("context-out"),
     fiveHour: byId("five-hour-out"),
     sevenDay: byId("seven-day-out"),
+    fiveHourPace: byId("five-hour-pace-out"),
+    sevenDayPace: byId("seven-day-pace-out"),
     line: byId("hud-line"),
     heroLine: byId("hero-hud-line"),
     config: byId("config-code"),
@@ -166,12 +171,13 @@
   };
 
   const paceDetail = (value, state) => {
-    const prefix = value >= 70
+    const pace = clamp(value, 0, 100, 0);
+    const prefix = pace >= 70
       ? state.paceFastPrefix
-      : value >= 30
+      : pace >= 30
         ? state.paceNormalPrefix
         : state.paceSlowPrefix;
-    return `${prefix}${Math.max(1, Math.round((value / 30) * 100))}%`;
+    return `${prefix}${Math.round(pace)}%`;
   };
 
   const setColor = (span, state, colorKey) => {
@@ -258,14 +264,14 @@
     if (segment === "5h") {
       appendMetric(line, "5h", state.fiveHour, {
         remaining: remaining(state.fiveHour, 5),
-        pace: paceDetail(state.fiveHour, state),
+        pace: paceDetail(state.fiveHourPace, state),
       }, state);
       return true;
     }
     if (segment === "7d") {
       appendMetric(line, "7d", state.sevenDay, {
         remaining: remaining(state.sevenDay, 7 * 24),
-        pace: paceDetail(state.sevenDay, state),
+        pace: paceDetail(state.sevenDayPace, state),
       }, state);
       return true;
     }
@@ -379,6 +385,8 @@
       context: clamp(field.context && field.context.value, 0, 100, 32),
       fiveHour: clamp(field.fiveHour && field.fiveHour.value, 0, 100, 6),
       sevenDay: clamp(field.sevenDay && field.sevenDay.value, 0, 100, 4),
+      fiveHourPace: clamp(field.fiveHourPace && field.fiveHourPace.value, 0, 100, 20),
+      sevenDayPace: clamp(field.sevenDayPace && field.sevenDayPace.value, 0, 100, 13),
     };
   };
 
@@ -387,10 +395,12 @@
     if (output.context) output.context.textContent = formatPercent(state.context, state);
     if (output.fiveHour) output.fiveHour.textContent = formatPercent(state.fiveHour, state);
     if (output.sevenDay) output.sevenDay.textContent = formatPercent(state.sevenDay, state);
+    if (output.fiveHourPace) output.fiveHourPace.textContent = `${Math.round(state.fiveHourPace)}%`;
+    if (output.sevenDayPace) output.sevenDayPace.textContent = `${Math.round(state.sevenDayPace)}%`;
     if (output.paceState) {
       const pace = !state.pace
         ? "pace hidden"
-        : state.fiveHour >= state.thresholdWarn || state.sevenDay >= state.thresholdWarn
+        : state.fiveHourPace >= state.thresholdWarn || state.sevenDayPace >= state.thresholdWarn
           ? "fast pace"
           : "normal pace";
       output.paceState.textContent = pace;
@@ -427,10 +437,20 @@
     element.addEventListener("input", render);
     element.addEventListener("change", render);
   });
+  if (output.form) {
+    output.form.addEventListener("input", render);
+    output.form.addEventListener("change", render);
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("pageshow", render);
+  }
 
   if (output.copy) {
     output.copy.addEventListener("click", copyConfig);
   }
 
   render();
+  if (typeof window !== "undefined" && window.requestAnimationFrame) {
+    window.requestAnimationFrame(render);
+  }
 })();

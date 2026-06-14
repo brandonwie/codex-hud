@@ -259,28 +259,40 @@
           </fieldset>
 
           <fieldset>
-            <legend>Thresholds</legend>
+            <legend>Usage</legend>
             <div class="compact-grid two">
               <label>
-                Warn
+                Warn threshold
                 <input id="threshold-warn" data-setting type="number" min="0" max="100" value="70" inputmode="numeric">
               </label>
               <label>
-                Crit
+                Crit threshold
                 <input id="threshold-crit" data-setting type="number" min="0" max="100" value="90" inputmode="numeric">
               </label>
             </div>
             <label>
               Context <output id="context-out" for="context">32%</output>
-              <input id="context" data-setting type="range" min="1" max="99" value="32">
+              <input id="context" data-setting type="range" min="0" max="100" value="32">
             </label>
             <label>
               5 hour <output id="five-hour-out" for="five-hour">6%</output>
-              <input id="five-hour" data-setting type="range" min="1" max="99" value="6">
+              <input id="five-hour" data-setting type="range" min="0" max="100" value="6">
             </label>
             <label>
               7 day <output id="seven-day-out" for="seven-day">4%</output>
-              <input id="seven-day" data-setting type="range" min="1" max="99" value="4">
+              <input id="seven-day" data-setting type="range" min="0" max="100" value="4">
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Pace</legend>
+            <label>
+              5 hour pace <output id="five-hour-pace-out" for="five-hour-pace">20%</output>
+              <input id="five-hour-pace" data-setting type="range" min="0" max="100" value="20">
+            </label>
+            <label>
+              7 day pace <output id="seven-day-pace-out" for="seven-day-pace">13%</output>
+              <input id="seven-day-pace" data-setting type="range" min="0" max="100" value="13">
             </label>
           </fieldset>
 
