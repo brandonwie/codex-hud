@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Codex HUD">
+  <rect width="64" height="64" rx="8" fill="#080d18"/>
+  <path d="M12 18h40v28H12z" fill="#111827" stroke="#8db7ff" stroke-width="3"/>
+  <path d="M18 27l7 5-7 5" fill="none" stroke="#7ed6a8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M31 38h16" stroke="#e7ebf7" stroke-width="4" stroke-linecap="round"/>
+</svg>

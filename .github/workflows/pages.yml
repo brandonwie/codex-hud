@@ -1,0 +1,59 @@
+name: Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - site/**
+      - scripts/check-site.js
+      - package.json
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Publish gh-pages
+    if: github.repository == 'brandonwie/codex-hud' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # Pinned from refs/tags/v6 on 2026-06-14.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Check site
+        run: node scripts/check-site.js
+
+      - name: Publish site directory
+        env:
+          PAGES_BRANCH: gh-pages
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          publish_dir="$(mktemp -d)"
+          if git ls-remote --exit-code --heads origin "$PAGES_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$PAGES_BRANCH:$PAGES_BRANCH"
+            git worktree add "$publish_dir" "$PAGES_BRANCH"
+          else
+            git worktree add -b "$PAGES_BRANCH" "$publish_dir"
+          fi
+          git -C "$publish_dir" rm -r -q . || true
+          rsync -a --exclude CNAME site/ "$publish_dir"/
+          touch "$publish_dir/.nojekyll"
+          git -C "$publish_dir" add -A
+          if git -C "$publish_dir" diff --cached --quiet; then
+            echo "No site changes to publish."
+            exit 0
+          fi
+          git -C "$publish_dir" commit -m "docs: publish site"
+          git -C "$publish_dir" push origin "$PAGES_BRANCH"

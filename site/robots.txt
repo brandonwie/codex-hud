@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://brandonwie.github.io/codex-hud/sitemap.xml
