@@ -74,7 +74,14 @@ for (const [content, needle, label] of mustContain) {
 const readmeConfigControls = [
   ["space", "space"],
   ["separator", "separator"],
-  ["segments", "segments"],
+  ["segments.model", "segment-model"],
+  ["segments.project", "segment-project"],
+  ["segments.branch", "segment-branch"],
+  ["segments.runtime", "segment-runtime"],
+  ["segments.ctx", "segment-ctx"],
+  ["segments.5h", "segment-5h"],
+  ["segments.7d", "segment-7d"],
+  ["segments.tkn", "segment-tkn"],
   ["labels.ctx", "label-ctx"],
   ["colors.model", "color-model"],
   ["colors.branch", "color-branch"],
@@ -101,6 +108,10 @@ for (const [setting, id] of readmeConfigControls) {
 
 for (const id of ["five-hour-pace", "seven-day-pace", "five-hour-pace-out", "seven-day-pace-out"]) {
   if (!html.includes(`id="${id}"`)) fail.push(`missing pace control ${id}`);
+}
+
+if (html.includes('id="runtime"') || js.includes('byId("runtime")')) {
+  fail.push("website must not expose runtime as a text input");
 }
 
 if (exists("site/CNAME")) {
@@ -232,11 +243,17 @@ const runInteractiveSmoke = () => {
     effort: createElement("effort", { value: "xhigh" }),
     project: createElement("project", { value: "codex-hud" }),
     branch: createElement("branch", { value: "main*" }),
-    runtime: createElement("runtime", { value: "node v24" }),
     "show-color": createElement("show-color", { checked: true }),
     space: createElement("space"),
     separator: createElement("separator", { value: "|" }),
-    segments: createElement("segments", { value: "model, project, branch, ctx, 5h, 7d, tkn" }),
+    "segment-model": createElement("segment-model", { checked: true }),
+    "segment-project": createElement("segment-project", { checked: true }),
+    "segment-branch": createElement("segment-branch", { checked: true }),
+    "segment-runtime": createElement("segment-runtime"),
+    "segment-ctx": createElement("segment-ctx", { checked: true }),
+    "segment-5h": createElement("segment-5h", { checked: true }),
+    "segment-7d": createElement("segment-7d", { checked: true }),
+    "segment-tkn": createElement("segment-tkn", { checked: true }),
     "label-ctx": createElement("label-ctx", { value: "Ctx" }),
     "color-model": createElement("color-model", { value: "neonViolet" }),
     "color-branch": createElement("color-branch", { value: "#5fafff" }),
@@ -276,11 +293,17 @@ const runInteractiveSmoke = () => {
     "effort",
     "project",
     "branch",
-    "runtime",
     "show-color",
     "space",
     "separator",
-    "segments",
+    "segment-model",
+    "segment-project",
+    "segment-branch",
+    "segment-runtime",
+    "segment-ctx",
+    "segment-5h",
+    "segment-7d",
+    "segment-tkn",
     "label-ctx",
     "color-model",
     "color-branch",
@@ -382,9 +405,18 @@ const runInteractiveSmoke = () => {
     fail.push("5h pace control must update pace independently from usage");
   }
 
+  elements["segment-runtime"].checked = true;
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("|node v24|")) {
+    fail.push("runtime segment toggle must add auto-detected runtime text to the preview");
+  }
+  if (!elements["config-code"].textContent.includes('"runtime"')) {
+    fail.push("runtime segment toggle must add runtime to generated config");
+  }
+
   elements.space.checked = true;
   elements.separator.value = "·";
-  elements.segments.value = "model, runtime, ctx, 5h, 7d, tkn";
+  elements["segment-runtime"].checked = false;
   elements["label-ctx"].value = "CTX";
   elements["threshold-warn"].value = "50";
   elements["threshold-crit"].value = "80";
@@ -405,10 +437,13 @@ const runInteractiveSmoke = () => {
   elements["hud-form"].dispatchEvent({ type: "input" });
 
   const customLine = elements["hud-line"].textContent;
-  if (!customLine.includes("gpt-5.5xh · node v24 · CTX: 88.0%")) {
+  if (customLine.includes("node v24")) {
+    fail.push("runtime segment must be removable with its checkbox");
+  }
+  if (!customLine.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88.0%")) {
     fail.push("interactive preview must apply spacing, separator, labels, percent precision, and short effort controls");
   }
-  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · node v24 · CTX: 88.0%")) {
+  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88.0%")) {
     fail.push("hero preview must apply the same panel settings as the result preview");
   }
   if (!customLine.includes("5h: 6.0%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
@@ -422,7 +457,7 @@ const runInteractiveSmoke = () => {
   const expectedConfigSnippets = [
     "space = true",
     'separator = "·"',
-    'segments = ["model", "runtime", "ctx", "5h", "7d", "tkn"]',
+    'segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]',
     'ctx = "CTX"',
     "warn = 50",
     "crit = 80",

@@ -5,11 +5,19 @@
     effort: byId("effort"),
     project: byId("project"),
     branch: byId("branch"),
-    runtime: byId("runtime"),
     color: byId("show-color"),
     space: byId("space"),
     separator: byId("separator"),
-    segments: byId("segments"),
+    segments: {
+      model: byId("segment-model"),
+      project: byId("segment-project"),
+      branch: byId("segment-branch"),
+      runtime: byId("segment-runtime"),
+      ctx: byId("segment-ctx"),
+      "5h": byId("segment-5h"),
+      "7d": byId("segment-7d"),
+      tkn: byId("segment-tkn"),
+    },
     labelCtx: byId("label-ctx"),
     colorModel: byId("color-model"),
     colorBranch: byId("color-branch"),
@@ -62,6 +70,10 @@
     output: 1000,
     cache: 17000,
   };
+  const runtimePreview = {
+    label: "node",
+    version: "v24",
+  };
 
   const palette = {
     dim: "#8f9abc",
@@ -74,12 +86,7 @@
   };
 
   const defaultSegments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
-  const segmentAliases = {
-    workspace: ["project", "branch", "runtime"],
-    context: ["ctx"],
-    tokens: ["tkn"],
-  };
-  const validSegments = new Set(["model", "project", "branch", "runtime", "ctx", "5h", "7d", "tkn"]);
+  const orderedSegments = ["model", "project", "branch", "runtime", "ctx", "5h", "7d", "tkn"];
 
   const clamp = (value, min, max, fallback) => {
     const number = Number(value);
@@ -101,20 +108,9 @@
     return next || fallback;
   };
 
-  const parseSegments = (value) => {
-    const raw = String(value || "")
-      .split(/[, ]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-    const next = [];
-    for (const item of raw) {
-      const key = item.toLowerCase();
-      const expanded = segmentAliases[key] || [key];
-      for (const segment of expanded) {
-        if (validSegments.has(segment) && !next.includes(segment)) next.push(segment);
-      }
-    }
-    return next.length > 0 ? next : defaultSegments.slice();
+  const readSegments = () => {
+    const selected = orderedSegments.filter((segment) => readBool(field.segments[segment], defaultSegments.includes(segment)));
+    return selected.length > 0 ? selected : defaultSegments.slice();
   };
 
   const ansi256 = (code) => {
@@ -254,7 +250,7 @@
       return true;
     }
     if (segment === "runtime") {
-      append(line, state.runtime, "runtime", state, "runtime");
+      append(line, `${runtimePreview.label} ${runtimePreview.version}`, "runtime", state, "runtime");
       return true;
     }
     if (segment === "ctx") {
@@ -347,11 +343,10 @@
       effortText: shortEffortEnabled ? shortEffort[effort] || effort : effort,
       project: clean(field.project && field.project.value, "codex-hud"),
       branch: clean(field.branch && field.branch.value, "main"),
-      runtime: clean(field.runtime && field.runtime.value, "node-v24").replace(/-/g, " "),
       color: readBool(field.color, true),
       space: readBool(field.space, false),
       separator: readText(field.separator, "|"),
-      segments: parseSegments(field.segments && field.segments.value),
+      segments: readSegments(),
       labelCtx: readText(field.labelCtx, "Ctx"),
       configColors,
       previewColors: {
