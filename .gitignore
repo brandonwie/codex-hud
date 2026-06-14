@@ -1,5 +1,6 @@
 node_modules/
 .serena/
+.playwright-mcp/
 .agents/*
 !.agents/plugins/
 .agents/plugins/*
