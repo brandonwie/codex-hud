@@ -195,34 +195,81 @@
               Branch
               <input id="branch" data-setting type="text" value="main*" maxlength="28" autocomplete="off">
             </label>
+            <label>
+              Runtime
+              <input id="runtime" data-setting type="text" value="node v24" maxlength="24" autocomplete="off">
+            </label>
           </fieldset>
 
           <fieldset>
-            <legend>Segments</legend>
+            <legend>Layout</legend>
+            <label class="toggle">
+              <input id="space" data-setting type="checkbox">
+              <span>Spaced separators</span>
+            </label>
+            <label>
+              Separator
+              <input id="separator" data-setting type="text" value="|" maxlength="6" autocomplete="off">
+            </label>
+            <label>
+              Segments
+              <input
+                id="segments"
+                data-setting
+                type="text"
+                value="model, project, branch, ctx, 5h, 7d, tkn"
+                maxlength="96"
+                autocomplete="off"
+              >
+            </label>
+            <label>
+              Context label
+              <input id="label-ctx" data-setting type="text" value="Ctx" maxlength="10" autocomplete="off">
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Colors</legend>
             <label class="toggle">
               <input id="show-color" data-setting type="checkbox" checked>
               <span>ANSI color</span>
             </label>
-            <label class="toggle">
-              <input id="show-git" data-setting type="checkbox" checked>
-              <span>Git state</span>
-            </label>
-            <label class="toggle">
-              <input id="show-token-usage" data-setting type="checkbox" checked>
-              <span>Token detail</span>
-            </label>
-            <label class="toggle">
-              <input id="short-model" data-setting type="checkbox" checked>
-              <span>Short model</span>
-            </label>
-            <label class="toggle">
-              <input id="short-effort" data-setting type="checkbox" checked>
-              <span>Short effort</span>
-            </label>
+            <div class="compact-grid">
+              <label>
+                Model
+                <input id="color-model" data-setting type="text" value="neonViolet" maxlength="16" autocomplete="off">
+              </label>
+              <label>
+                Branch
+                <input id="color-branch" data-setting type="text" value="#5fafff" maxlength="16" autocomplete="off">
+              </label>
+              <label>
+                OK
+                <input id="color-ok" data-setting type="text" value="mint" maxlength="16" autocomplete="off">
+              </label>
+              <label>
+                Warn
+                <input id="color-warn" data-setting type="text" value="amber" maxlength="16" autocomplete="off">
+              </label>
+              <label>
+                Crit
+                <input id="color-crit" data-setting type="text" value="coral" maxlength="16" autocomplete="off">
+              </label>
+            </div>
           </fieldset>
 
           <fieldset>
-            <legend>Usage</legend>
+            <legend>Thresholds</legend>
+            <div class="compact-grid two">
+              <label>
+                Warn
+                <input id="threshold-warn" data-setting type="number" min="0" max="100" value="70" inputmode="numeric">
+              </label>
+              <label>
+                Crit
+                <input id="threshold-crit" data-setting type="number" min="0" max="100" value="90" inputmode="numeric">
+              </label>
+            </div>
             <label>
               Context <output id="context-out" for="context">32%</output>
               <input id="context" data-setting type="range" min="1" max="99" value="32">
@@ -235,6 +282,48 @@
               7 day <output id="seven-day-out" for="seven-day">4%</output>
               <input id="seven-day" data-setting type="range" min="1" max="99" value="4">
             </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Format</legend>
+            <label class="toggle">
+              <input id="percent-round" data-setting type="checkbox" checked>
+              <span>Round percent</span>
+            </label>
+            <label class="toggle">
+              <input id="token-units" data-setting type="checkbox" checked>
+              <span>Token units</span>
+            </label>
+            <label class="toggle">
+              <input id="show-token-usage" data-setting type="checkbox" checked>
+              <span>Token detail</span>
+            </label>
+            <label class="toggle">
+              <input id="show-pace" data-setting type="checkbox" checked>
+              <span>Pace marker</span>
+            </label>
+            <label class="toggle">
+              <input id="short-model" data-setting type="checkbox" checked>
+              <span>Short model</span>
+            </label>
+            <label class="toggle">
+              <input id="short-effort" data-setting type="checkbox">
+              <span>Short effort</span>
+            </label>
+            <div class="compact-grid three">
+              <label>
+                Slow
+                <input id="pace-slow-prefix" data-setting type="text" value="🐢" maxlength="4" autocomplete="off">
+              </label>
+              <label>
+                Normal
+                <input id="pace-normal-prefix" data-setting type="text" value="👾" maxlength="4" autocomplete="off">
+              </label>
+              <label>
+                Fast
+                <input id="pace-fast-prefix" data-setting type="text" value="🔥" maxlength="4" autocomplete="off">
+              </label>
+            </div>
           </fieldset>
         </form>
 
