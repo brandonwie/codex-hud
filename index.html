@@ -195,10 +195,6 @@
               Branch
               <input id="branch" data-setting type="text" value="main*" maxlength="28" autocomplete="off">
             </label>
-            <label>
-              Runtime
-              <input id="runtime" data-setting type="text" value="node v24" maxlength="24" autocomplete="off">
-            </label>
           </fieldset>
 
           <fieldset>
@@ -211,17 +207,40 @@
               Separator
               <input id="separator" data-setting type="text" value="|" maxlength="6" autocomplete="off">
             </label>
-            <label>
-              Segments
-              <input
-                id="segments"
-                data-setting
-                type="text"
-                value="model, project, branch, ctx, 5h, 7d, tkn"
-                maxlength="96"
-                autocomplete="off"
-              >
-            </label>
+            <div class="segment-options" aria-label="Segments">
+              <label class="toggle">
+                <input id="segment-model" data-setting type="checkbox" checked>
+                <span>Model</span>
+              </label>
+              <label class="toggle">
+                <input id="segment-project" data-setting type="checkbox" checked>
+                <span>Project</span>
+              </label>
+              <label class="toggle">
+                <input id="segment-branch" data-setting type="checkbox" checked>
+                <span>Branch</span>
+              </label>
+              <label class="toggle">
+                <input id="segment-runtime" data-setting type="checkbox">
+                <span>Runtime</span>
+              </label>
+              <label class="toggle">
+                <input id="segment-ctx" data-setting type="checkbox" checked>
+                <span>Context</span>
+              </label>
+              <label class="toggle">
+                <input id="segment-5h" data-setting type="checkbox" checked>
+                <span>5 hour</span>
+              </label>
+              <label class="toggle">
+                <input id="segment-7d" data-setting type="checkbox" checked>
+                <span>7 day</span>
+              </label>
+              <label class="toggle">
+                <input id="segment-tkn" data-setting type="checkbox" checked>
+                <span>Tokens</span>
+              </label>
+            </div>
             <label>
               Context label
               <input id="label-ctx" data-setting type="text" value="Ctx" maxlength="10" autocomplete="off">
