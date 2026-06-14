@@ -420,6 +420,16 @@ const runInteractiveSmoke = () => {
     fail.push("effortShort must abbreviate only xhigh, leaving Med unchanged");
   }
   elements["short-effort"].checked = false;
+  elements.effort.value = "high";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5High") || elements["hud-line"].textContent.includes("5.5hi")) {
+    fail.push("effort preview must render high as High, not lowercase or abbreviated");
+  }
+  elements.effort.value = "low";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5Low") || elements["hud-line"].textContent.includes("5.5lo")) {
+    fail.push("effort preview must render low as Low, not lowercase or abbreviated");
+  }
   elements.effort.value = "xhigh";
   elements.effort.dispatchEvent({ type: "input" });
 
@@ -439,6 +449,25 @@ const runInteractiveSmoke = () => {
   elements["five-hour-pace"].dispatchEvent({ type: "input" });
   if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,🐢87%)")) {
     fail.push("5h pace control must update pace independently from usage");
+  }
+
+  // F-R-4: lock the +/-PACE_CRIT (15) pace-marker boundary (inclusive normal band).
+  elements["five-hour"].value = "20";
+  elements["five-hour-pace"].value = "35";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5h:20%(4h,👾35%)")) {
+    fail.push("pace diff of -15 must stay in the normal band (👾)");
+  }
+  elements["five-hour-pace"].value = "36";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5h:20%(4h,🐢36%)")) {
+    fail.push("pace diff of -16 must cross into slow (🐢)");
+  }
+  elements["five-hour"].value = "36";
+  elements["five-hour-pace"].value = "20";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5h:36%(3.2h,🔥20%)")) {
+    fail.push("pace diff of +16 must cross into fast (🔥)");
   }
 
   elements["segment-runtime"].checked = true;

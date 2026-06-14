@@ -51,6 +51,13 @@ assert.match(readFile("rust/Cargo.toml"), /^version = "0\.3\.0"$/m);
 assert.match(readFile("rust/Cargo.lock"), /\[\[package\]\]\r\nname = "codex-hud"\r\nversion = "0\.3\.0"/);
 assert.match(readFile("site/index.html"), /"softwareVersion": "0\.3\.0"/);
 
+const goodSite = readFile("site/index.html");
+writeFile("site/index.html", '<script type="application/ld+json">{"name": "no version"}</script>\n');
+result = run(["--check"]);
+assert.notStrictEqual(result.status, 0, "missing site softwareVersion must fail --check");
+assert.match(result.stderr, /softwareVersion/, "error must name the missing site softwareVersion");
+writeFile("site/index.html", goodSite);
+
 writeFile(
   "rust/Cargo.lock",
   `${readFile("rust/Cargo.lock")}\r\n[[package]]\r\nname = "codex-hud"\r\nversion = "0.1.0"\r\n`,
@@ -58,5 +65,24 @@ writeFile(
 result = run(["--check"]);
 assert.notStrictEqual(result.status, 0, "duplicate codex-hud package entries must fail --check");
 assert.match(result.stderr, /Expected exactly one Cargo\.lock codex-hud package entry, found 2/);
+
+// Parity (F-T-2): the sync script's version surfaces must equal the
+// @semantic-release/git assets, so a release commits every file the prepare
+// step rewrites. Checked against the real repo, not the temp fixture.
+const syncSource = fs.readFileSync(path.join(repoRoot, "scripts", "sync-release-version.js"), "utf8");
+const filesBlock = syncSource.match(/const files = \{([\s\S]*?)\n\};/);
+assert(filesBlock, "could not locate the files block in sync-release-version.js");
+const syncSurfaces = [...filesBlock[1].matchAll(/path\.join\(repoRoot,\s*([^)]+)\)/g)]
+  .map((m) => m[1].split(",").map((part) => part.trim().replace(/^["']|["']$/g, "")).join("/"))
+  .sort();
+const releaserc = JSON.parse(fs.readFileSync(path.join(repoRoot, ".releaserc.json"), "utf8"));
+const gitPlugin = releaserc.plugins.find((p) => Array.isArray(p) && p[0] === "@semantic-release/git");
+assert(gitPlugin, "could not find @semantic-release/git plugin in .releaserc.json");
+const assets = [...gitPlugin[1].assets].sort();
+assert.deepStrictEqual(
+  syncSurfaces,
+  assets,
+  `sync-release-version.js surfaces must match @semantic-release/git assets\n  sync:   ${JSON.stringify(syncSurfaces)}\n  assets: ${JSON.stringify(assets)}`,
+);
 
 console.log("sync release version tests passed");

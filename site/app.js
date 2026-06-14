@@ -92,7 +92,9 @@
   const defaultSegments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
   const orderedSegments = ["model", "project", "branch", "runtime", "ctx", "5h", "7d", "tkn"];
 
-  // thresholds.pace.crit default from DEFAULT_CONFIG (plugins/codex-hud/scripts/codex-hud.js).
+  // Mirror of DEFAULT_CONFIG.thresholds.pace.crit in
+  // plugins/codex-hud/scripts/codex-hud.js (read at runtime there by paceStatePrefix).
+  // The static playground can't load the plugin config, so keep this value in sync by hand.
   const PACE_CRIT = 15;
 
   const clamp = (value, min, max, fallback) => {
