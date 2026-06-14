@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Codex HUD - Compact Status Footer for OpenAI Codex CLI</title>
+    <meta
+      name="description"
+      content="Codex HUD adds a compact, configurable status footer to OpenAI Codex CLI with context usage, git state, model, effort, and pace in one line."
+    >
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="theme-color" content="#080d18">
+    <link rel="canonical" href="https://codex-hud.brandonwie.dev/">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preload" href="assets/codex-hud-screenshot.png" as="image">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Codex HUD">
+    <meta property="og:title" content="Codex HUD - Compact Status Footer for OpenAI Codex CLI">
+    <meta
+      property="og:description"
+      content="A local Codex plugin and patched TUI footer that keeps model, effort, git branch, context, and usage budgets visible while you work."
+    >
+    <meta property="og:url" content="https://codex-hud.brandonwie.dev/">
+    <meta property="og:image" content="https://codex-hud.brandonwie.dev/assets/codex-hud-screenshot.png">
+    <meta property="og:image:width" content="1742">
+    <meta property="og:image:height" content="258">
+    <meta property="og:image:alt" content="Codex HUD compact status line in a terminal">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Codex HUD - Compact Status Footer for OpenAI Codex CLI">
+    <meta
+      name="twitter:description"
+      content="Preview a configurable Codex CLI footer with model, effort, git, context, and usage budget segments."
+    >
+    <meta name="twitter:image" content="https://codex-hud.brandonwie.dev/assets/codex-hud-screenshot.png">
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://codex-hud.brandonwie.dev/#website",
+            "url": "https://codex-hud.brandonwie.dev/",
+            "name": "Codex HUD",
+            "description": "Compact configurable status footer for OpenAI Codex CLI sessions.",
+            "inLanguage": "en-US"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://codex-hud.brandonwie.dev/#software",
+            "name": "Codex HUD",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "macOS, Linux",
+            "softwareVersion": "0.5.0",
+            "description": "A local Codex plugin and patched TUI footer that renders model, effort, git branch, context usage, and rolling usage budgets in one line.",
+            "url": "https://codex-hud.brandonwie.dev/",
+            "codeRepository": "https://github.com/brandonwie/codex-hud",
+            "license": "https://github.com/brandonwie/codex-hud/blob/main/LICENSE",
+            "author": {
+              "@type": "Person",
+              "name": "Brandon Wie",
+              "url": "https://brandonwie.dev/"
+            },
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://codex-hud.brandonwie.dev/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is Codex HUD?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Codex HUD is a local OpenAI Codex CLI plugin that renders a compact status footer and standalone workspace snapshot for terminal-based coding sessions."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does Codex HUD replace the stock Codex install?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. The patched launcher is staged under the user local bin path and the project avoids modifying stock Codex install paths."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can the status line be configured?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Codex HUD reads codex-hud.toml from user, project, or explicit config paths and supports segment, color, threshold, and formatting options."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./" aria-label="Codex HUD home">
+        <span class="brand-mark" aria-hidden="true">ch</span>
+        <span>codex-hud</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#try">Try settings</a>
+        <a href="#install">Install</a>
+        <a href="#seo">SEO</a>
+        <a href="https://github.com/brandonwie/codex-hud">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">OpenAI Codex CLI status line</p>
+          <h1 id="hero-title">Codex HUD</h1>
+          <p class="hero-lede">
+            A compact footer for terminal Codex sessions: model, effort, git state,
+            context budget, rolling usage, and pace without leaving the prompt.
+          </p>
+          <div class="hero-actions" aria-label="Primary actions">
+            <a class="button primary" href="#try">Try settings</a>
+            <a class="button" href="https://github.com/brandonwie/codex-hud">View source</a>
+          </div>
+          <div class="install-strip" aria-label="Quick install command">
+            <code>codex plugin add codex-hud@codex-hud</code>
+          </div>
+        </div>
+
+        <aside class="terminal-hero" aria-label="Codex HUD terminal preview">
+          <div class="terminal-bar">
+            <span>~/Projects/codex-hud</span>
+            <span>main*</span>
+          </div>
+          <div class="terminal-body">
+            <p><span class="prompt">$</span> codex</p>
+            <p class="terminal-muted">Loaded workspace instructions and local plugin.</p>
+            <p><span class="prompt">&gt;</span> tighten the installer docs and run checks</p>
+            <p class="terminal-muted">Working... tests queued</p>
+          </div>
+          <div class="hud-preview-line colorized" id="hero-hud-line" aria-live="polite"></div>
+        </aside>
+      </section>
+
+      <section class="proof-band" aria-label="Product screenshot">
+        <img
+          src="assets/codex-hud-screenshot.png"
+          width="1742"
+          height="258"
+          alt="Codex HUD compact single-line footer shown in a terminal"
+          loading="eager"
+        >
+      </section>
+
+      <section class="try-section" id="try" aria-labelledby="try-title">
+        <div class="section-heading">
+          <p class="eyebrow">Config playground</p>
+          <h2 id="try-title">Tune the footer before install.</h2>
+        </div>
+
+        <form class="settings-panel" id="hud-form">
+          <fieldset>
+            <legend>Session</legend>
+            <label>
+              Model
+              <select id="model" data-setting>
+                <option value="gpt-5.5">gpt-5.5</option>
+                <option value="gpt-5">gpt-5</option>
+                <option value="gpt-4.1">gpt-4.1</option>
+                <option value="o4-mini">o4-mini</option>
+              </select>
+            </label>
+            <label>
+              Effort
+              <select id="effort" data-setting>
+                <option value="xhigh">xhigh</option>
+                <option value="high">high</option>
+                <option value="medium">medium</option>
+                <option value="low">low</option>
+              </select>
+            </label>
+            <label>
+              Project
+              <input id="project" data-setting type="text" value="codex-hud" maxlength="24" autocomplete="off">
+            </label>
+            <label>
+              Branch
+              <input id="branch" data-setting type="text" value="main*" maxlength="28" autocomplete="off">
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Segments</legend>
+            <label class="toggle">
+              <input id="show-color" data-setting type="checkbox" checked>
+              <span>ANSI color</span>
+            </label>
+            <label class="toggle">
+              <input id="show-git" data-setting type="checkbox" checked>
+              <span>Git state</span>
+            </label>
+            <label class="toggle">
+              <input id="show-token-usage" data-setting type="checkbox" checked>
+              <span>Token detail</span>
+            </label>
+            <label class="toggle">
+              <input id="short-model" data-setting type="checkbox">
+              <span>Short model</span>
+            </label>
+            <label class="toggle">
+              <input id="short-effort" data-setting type="checkbox">
+              <span>Short effort</span>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Usage</legend>
+            <label>
+              Context <output id="context-out" for="context">32%</output>
+              <input id="context" data-setting type="range" min="1" max="99" value="32">
+            </label>
+            <label>
+              5 hour <output id="five-hour-out" for="five-hour">6%</output>
+              <input id="five-hour" data-setting type="range" min="1" max="99" value="6">
+            </label>
+            <label>
+              7 day <output id="seven-day-out" for="seven-day">4%</output>
+              <input id="seven-day" data-setting type="range" min="1" max="99" value="4">
+            </label>
+          </fieldset>
+        </form>
+
+        <div class="result-panel" aria-label="Generated Codex HUD result">
+          <div class="terminal-surface">
+            <div class="terminal-bar">
+              <span>status line</span>
+              <span id="pace-state">normal pace</span>
+            </div>
+            <div class="hud-preview-line colorized" id="hud-line" aria-live="polite"></div>
+          </div>
+          <div class="config-output">
+            <div class="config-heading">
+              <h3>codex-hud.toml</h3>
+              <button class="copy-button" type="button" id="copy-config">Copy config</button>
+            </div>
+            <pre><code id="config-code"></code></pre>
+            <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="split-section" id="install" aria-labelledby="install-title">
+        <div>
+          <p class="eyebrow">Install path</p>
+          <h2 id="install-title">Plugin first. Patched footer when you want it.</h2>
+        </div>
+        <div class="steps">
+          <article>
+            <h3>1. Add the plugin</h3>
+            <code>codex plugin add codex-hud@codex-hud</code>
+          </article>
+          <article>
+            <h3>2. Preview the line</h3>
+            <code>codex-hud --line --color</code>
+          </article>
+          <article>
+            <h3>3. Scaffold config</h3>
+            <code>codex-hud --init-config</code>
+          </article>
+        </div>
+      </section>
+
+      <section class="seo-section" id="seo" aria-labelledby="seo-title">
+        <div class="section-heading">
+          <p class="eyebrow">Search-ready by default</p>
+          <h2 id="seo-title">Built for the exact query surface developers use.</h2>
+        </div>
+        <div class="seo-grid">
+          <article>
+            <h3>Codex CLI footer</h3>
+            <p>Targets the practical phrase set around OpenAI Codex CLI, status line, context usage, and terminal HUD workflows.</p>
+          </article>
+          <article>
+            <h3>Structured data</h3>
+            <p>Ships SoftwareApplication, WebSite, and FAQPage schema with canonical metadata for codex-hud.brandonwie.dev.</p>
+          </article>
+          <article>
+            <h3>Fast static page</h3>
+            <p>No framework payload, no remote fonts, no client dependency chain, and only one small local script for the live preview.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="faq-section" aria-labelledby="faq-title">
+        <div class="section-heading">
+          <p class="eyebrow">FAQ</p>
+          <h2 id="faq-title">What developers usually need to know.</h2>
+        </div>
+        <details>
+          <summary>Does Codex HUD modify the stock Codex install?</summary>
+          <p>No. The project stages its patched launcher under user-local paths and keeps stock Codex install paths untouched.</p>
+        </details>
+        <details>
+          <summary>Where does configuration live?</summary>
+          <p>Codex HUD reads optional codex-hud.toml files from user, project, and explicit config paths, then falls back to defaults.</p>
+        </details>
+        <details>
+          <summary>What does the footer show?</summary>
+          <p>Model, reasoning effort, project, branch, context usage, rolling usage windows, token totals, and pace formatting.</p>
+        </details>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>Codex HUD</span>
+      <a href="https://github.com/brandonwie/codex-hud">GitHub</a>
+      <a href="https://brandonwie.dev/">brandonwie.dev</a>
+    </footer>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

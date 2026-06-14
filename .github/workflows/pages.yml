@@ -1,0 +1,55 @@
+name: Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - site/**
+      - scripts/check-site.js
+      - package.json
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy
+    if: github.repository == 'brandonwie/codex-hud' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        # Pinned from refs/tags/v6 on 2026-06-14.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Check site
+        run: node scripts/check-site.js
+
+      - name: Configure Pages
+        # Pinned from refs/tags/v5 on 2026-06-14.
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+
+      - name: Upload artifact
+        # Pinned from refs/tags/v4 on 2026-06-14.
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          path: site
+
+      - name: Deploy Pages
+        id: deployment
+        # Pinned from refs/tags/v4 on 2026-06-14.
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
