@@ -71,6 +71,34 @@ for (const [content, needle, label] of mustContain) {
   if (!content.includes(needle)) fail.push(`missing ${label}`);
 }
 
+const readmeConfigControls = [
+  ["space", "space"],
+  ["separator", "separator"],
+  ["segments", "segments"],
+  ["labels.ctx", "label-ctx"],
+  ["colors.model", "color-model"],
+  ["colors.branch", "color-branch"],
+  ["colors.ok", "color-ok"],
+  ["colors.warn", "color-warn"],
+  ["colors.crit", "color-crit"],
+  ["thresholds.percent.warn", "threshold-warn"],
+  ["thresholds.percent.crit", "threshold-crit"],
+  ["format.percentRound", "percent-round"],
+  ["format.tokenUnits", "token-units"],
+  ["format.tokenUsage", "show-token-usage"],
+  ["format.pace", "show-pace"],
+  ["format.modelShort", "short-model"],
+  ["format.effortShort", "short-effort"],
+  ["format.paceSlowPrefix", "pace-slow-prefix"],
+  ["format.paceNormalPrefix", "pace-normal-prefix"],
+  ["format.paceFastPrefix", "pace-fast-prefix"],
+];
+
+for (const [setting, id] of readmeConfigControls) {
+  if (!html.includes(`id="${id}"`)) fail.push(`missing site control for ${setting}`);
+  if (!js.includes(`byId("${id}")`)) fail.push(`site app does not read ${setting}`);
+}
+
 if (exists("site/CNAME")) {
   fail.push("site/CNAME must stay absent until custom-domain DNS resolves");
 }
@@ -155,13 +183,13 @@ if (
 
 const createElement = (id, options = {}) => {
   const listeners = {};
+  let text = options.textContent || "";
   const element = {
     id,
     value: options.value || "",
     checked: Boolean(options.checked),
     className: options.className || "",
     children: [],
-    textContent: options.textContent || "",
     style: {},
     classList: {
       toggle() {},
@@ -181,6 +209,15 @@ const createElement = (id, options = {}) => {
     select() {},
     remove() {},
   };
+  Object.defineProperty(element, "textContent", {
+    get() {
+      return text;
+    },
+    set(value) {
+      text = String(value);
+      if (text === "") this.children = [];
+    },
+  });
   return element;
 };
 
@@ -190,11 +227,28 @@ const runInteractiveSmoke = () => {
     effort: createElement("effort", { value: "xhigh" }),
     project: createElement("project", { value: "codex-hud" }),
     branch: createElement("branch", { value: "main*" }),
+    runtime: createElement("runtime", { value: "node v24" }),
     "show-color": createElement("show-color", { checked: true }),
-    "show-git": createElement("show-git", { checked: true }),
+    space: createElement("space"),
+    separator: createElement("separator", { value: "|" }),
+    segments: createElement("segments", { value: "model, project, branch, ctx, 5h, 7d, tkn" }),
+    "label-ctx": createElement("label-ctx", { value: "Ctx" }),
+    "color-model": createElement("color-model", { value: "neonViolet" }),
+    "color-branch": createElement("color-branch", { value: "#5fafff" }),
+    "color-ok": createElement("color-ok", { value: "mint" }),
+    "color-warn": createElement("color-warn", { value: "amber" }),
+    "color-crit": createElement("color-crit", { value: "coral" }),
+    "threshold-warn": createElement("threshold-warn", { value: "70" }),
+    "threshold-crit": createElement("threshold-crit", { value: "90" }),
     "show-token-usage": createElement("show-token-usage", { checked: true }),
     "short-model": createElement("short-model", { checked: true }),
-    "short-effort": createElement("short-effort", { checked: true }),
+    "short-effort": createElement("short-effort"),
+    "percent-round": createElement("percent-round", { checked: true }),
+    "token-units": createElement("token-units", { checked: true }),
+    "show-pace": createElement("show-pace", { checked: true }),
+    "pace-slow-prefix": createElement("pace-slow-prefix", { value: "🐢" }),
+    "pace-normal-prefix": createElement("pace-normal-prefix", { value: "👾" }),
+    "pace-fast-prefix": createElement("pace-fast-prefix", { value: "🔥" }),
     context: createElement("context", { value: "32" }),
     "five-hour": createElement("five-hour", { value: "6" }),
     "seven-day": createElement("seven-day", { value: "4" }),
@@ -213,11 +267,28 @@ const runInteractiveSmoke = () => {
     "effort",
     "project",
     "branch",
+    "runtime",
     "show-color",
-    "show-git",
+    "space",
+    "separator",
+    "segments",
+    "label-ctx",
+    "color-model",
+    "color-branch",
+    "color-ok",
+    "color-warn",
+    "color-crit",
+    "threshold-warn",
+    "threshold-crit",
     "show-token-usage",
     "short-model",
     "short-effort",
+    "percent-round",
+    "token-units",
+    "show-pace",
+    "pace-slow-prefix",
+    "pace-normal-prefix",
+    "pace-fast-prefix",
     "context",
     "five-hour",
     "seven-day",
@@ -247,7 +318,7 @@ const runInteractiveSmoke = () => {
   vm.runInNewContext(js, context, { filename: "site/app.js" });
 
   const initialLine = elements["hud-line"].textContent;
-  if (!/^5\.5xh\|codex-hud\|git\(main\*\)\|Ctx:32%\|5h:6%\(4\.7h,🐢\d+%\)\|7d:4%\(6\.7d,🐢\d+%\)\|Tkn:42k\(I:24k,O:1k,C:17k\)$/.test(initialLine)) {
+  if (!/^5\.5xhigh\|codex-hud\|git\(main\*\)\|Ctx:32%\|5h:6%\(4\.7h,🐢\d+%\)\|7d:4%\(6\.7d,🐢\d+%\)\|Tkn:42k\(I:24k,O:1k,C:17k\)$/.test(initialLine)) {
     fail.push("interactive preview must match dense live HUD grammar");
   }
   if (/\b(?:CTX|5H|7D|TKN):/.test(initialLine)) {
@@ -269,8 +340,8 @@ const runInteractiveSmoke = () => {
   elements.context.value = "88";
   elements.context.dispatchEvent({ type: "input" });
 
-  if (!elements["hud-line"].textContent.includes("5.5xh|")) {
-    fail.push("interactive preview must keep short model and short effort defaults in HUD line");
+  if (!elements["hud-line"].textContent.includes("5.5xhigh|")) {
+    fail.push("interactive preview must keep README model and effort defaults in HUD line");
   }
   if (!elements["hud-line"].textContent.includes("Ctx:88%")) {
     fail.push("interactive preview must update context percentage");
@@ -278,8 +349,59 @@ const runInteractiveSmoke = () => {
   if (elements["hud-line"].textContent.includes("CTX:88%")) {
     fail.push("interactive preview must not regress to uppercase context label");
   }
-  if (!elements["config-code"].textContent.includes("effortShort = true")) {
-    fail.push("interactive preview must update generated config");
+  if (!elements["config-code"].textContent.includes("effortShort = false")) {
+    fail.push("interactive preview must emit README effortShort default");
+  }
+
+  elements.space.checked = true;
+  elements.separator.value = "·";
+  elements.segments.value = "model, runtime, ctx, 5h, 7d, tkn";
+  elements["label-ctx"].value = "CTX";
+  elements["threshold-warn"].value = "50";
+  elements["threshold-crit"].value = "80";
+  elements["percent-round"].checked = false;
+  elements["token-units"].checked = false;
+  elements["show-token-usage"].checked = false;
+  elements["show-pace"].checked = false;
+  elements["short-model"].checked = false;
+  elements["short-effort"].checked = true;
+  elements["pace-slow-prefix"].value = "S";
+  elements["pace-normal-prefix"].value = "N";
+  elements["pace-fast-prefix"].value = "F";
+  elements.context.value = "88";
+  elements.context.dispatchEvent({ type: "input" });
+
+  const customLine = elements["hud-line"].textContent;
+  if (!customLine.includes("gpt-5.5xh · node v24 · CTX: 88.0%")) {
+    fail.push("interactive preview must apply spacing, separator, labels, percent precision, and short effort controls");
+  }
+  if (!customLine.includes("5h: 6.0%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
+    fail.push("interactive preview must hide pace detail when format.pace is false");
+  }
+  if (!customLine.endsWith("Tkn: 42000")) {
+    fail.push("interactive preview must show raw token total when tokenUnits/tokenUsage are false");
+  }
+
+  const customConfig = elements["config-code"].textContent;
+  const expectedConfigSnippets = [
+    "space = true",
+    'separator = "·"',
+    'segments = ["model", "runtime", "ctx", "5h", "7d", "tkn"]',
+    'ctx = "CTX"',
+    "warn = 50",
+    "crit = 80",
+    "percentRound = false",
+    "tokenUnits = false",
+    "tokenUsage = false",
+    "pace = false",
+    "modelShort = false",
+    "effortShort = true",
+    'paceSlowPrefix = "S"',
+    'paceNormalPrefix = "N"',
+    'paceFastPrefix = "F"',
+  ];
+  for (const snippet of expectedConfigSnippets) {
+    if (!customConfig.includes(snippet)) fail.push(`generated config missing ${snippet}`);
   }
 };
 

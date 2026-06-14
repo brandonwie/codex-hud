@@ -5,11 +5,28 @@
     effort: byId("effort"),
     project: byId("project"),
     branch: byId("branch"),
+    runtime: byId("runtime"),
     color: byId("show-color"),
-    git: byId("show-git"),
+    space: byId("space"),
+    separator: byId("separator"),
+    segments: byId("segments"),
+    labelCtx: byId("label-ctx"),
+    colorModel: byId("color-model"),
+    colorBranch: byId("color-branch"),
+    colorOk: byId("color-ok"),
+    colorWarn: byId("color-warn"),
+    colorCrit: byId("color-crit"),
+    thresholdWarn: byId("threshold-warn"),
+    thresholdCrit: byId("threshold-crit"),
     tokenUsage: byId("show-token-usage"),
     shortModel: byId("short-model"),
     shortEffort: byId("short-effort"),
+    percentRound: byId("percent-round"),
+    tokenUnits: byId("token-units"),
+    pace: byId("show-pace"),
+    paceSlowPrefix: byId("pace-slow-prefix"),
+    paceNormalPrefix: byId("pace-normal-prefix"),
+    paceFastPrefix: byId("pace-fast-prefix"),
     context: byId("context"),
     fiveHour: byId("five-hour"),
     sevenDay: byId("seven-day"),
@@ -34,23 +51,111 @@
     low: "lo",
   };
 
-  const shortModel = (value) => value.replace(/^gpt-/, "");
   const tokenPreview = {
-    total: "42k",
-    input: "24k",
-    output: "1k",
-    cache: "17k",
+    total: 42000,
+    input: 24000,
+    output: 1000,
+    cache: 17000,
   };
+
+  const palette = {
+    dim: "#8f9abc",
+    coral: "#ff7f86",
+    mint: "#7ed6a8",
+    amber: "#f2bc66",
+    cyan: "#00d7ff",
+    violet: "#b79aff",
+    neonViolet: "#b79aff",
+  };
+
+  const defaultSegments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
+  const segmentAliases = {
+    workspace: ["project", "branch", "runtime"],
+    context: ["ctx"],
+    tokens: ["tkn"],
+  };
+  const validSegments = new Set(["model", "project", "branch", "runtime", "ctx", "5h", "7d", "tkn"]);
+
+  const clamp = (value, min, max, fallback) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.min(max, Math.max(min, number));
+  };
+
+  const readText = (element, fallback) => {
+    const value = String(element && element.value ? element.value : "").trim();
+    return value || fallback;
+  };
+
+  const readBool = (element, fallback) => (element ? Boolean(element.checked) : fallback);
+
+  const shortModel = (value) => value.replace(/^gpt-/, "");
 
   const clean = (value, fallback) => {
     const next = String(value || "").trim().replace(/\s+/g, "-");
     return next || fallback;
   };
 
-  const percentClass = (value) => {
-    if (value >= 90) return "crit";
-    if (value >= 70) return "warn";
+  const parseSegments = (value) => {
+    const raw = String(value || "")
+      .split(/[, ]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const next = [];
+    for (const item of raw) {
+      const key = item.toLowerCase();
+      const expanded = segmentAliases[key] || [key];
+      for (const segment of expanded) {
+        if (validSegments.has(segment) && !next.includes(segment)) next.push(segment);
+      }
+    }
+    return next.length > 0 ? next : defaultSegments.slice();
+  };
+
+  const ansi256 = (code) => {
+    const value = Number(code);
+    if (!Number.isInteger(value) || value < 0 || value > 255) return null;
+    const base = [
+      "#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0",
+      "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff",
+    ];
+    if (value < 16) return base[value];
+    if (value >= 232) {
+      const level = 8 + ((value - 232) * 10);
+      const hex = level.toString(16).padStart(2, "0");
+      return `#${hex}${hex}${hex}`;
+    }
+    const index = value - 16;
+    const scale = [0, 95, 135, 175, 215, 255];
+    const red = scale[Math.floor(index / 36) % 6];
+    const green = scale[Math.floor(index / 6) % 6];
+    const blue = scale[index % 6];
+    return `#${[red, green, blue].map((part) => part.toString(16).padStart(2, "0")).join("")}`;
+  };
+
+  const resolveColor = (value, fallback) => {
+    const text = String(value || "").trim();
+    if (palette[text]) return palette[text];
+    if (/^#[0-9a-f]{6}$/i.test(text)) return text;
+    const ansi = ansi256(text);
+    return ansi || palette[fallback] || fallback;
+  };
+
+  const percentClass = (value, state) => {
+    if (value >= state.thresholdCrit) return "crit";
+    if (value >= state.thresholdWarn) return "warn";
     return "ok";
+  };
+
+  const formatPercent = (value, state) => (
+    state.percentRound ? `${Math.round(value)}%` : `${Number(value).toFixed(1)}%`
+  );
+
+  const formatToken = (value, state) => {
+    if (!state.tokenUnits) return String(value);
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
+    if (value >= 1000) return `${Math.round(value / 1000)}k`;
+    return String(value);
   };
 
   const remaining = (value, hours) => {
@@ -60,44 +165,115 @@
     return `${amount.toFixed(1).replace(/\.0$/, "")}${unit}`;
   };
 
-  const paceDetail = (value) => {
-    const prefix = value >= 70 ? "🔥" : value >= 30 ? "👾" : "🐢";
+  const paceDetail = (value, state) => {
+    const prefix = value >= 70
+      ? state.paceFastPrefix
+      : value >= 30
+        ? state.paceNormalPrefix
+        : state.paceSlowPrefix;
     return `${prefix}${Math.max(1, Math.round((value / 30) * 100))}%`;
   };
 
-  const append = (line, text, className) => {
+  const setColor = (span, state, colorKey) => {
+    if (!state.color || !colorKey) return;
+    const value = state.previewColors[colorKey];
+    if (value) span.style.color = value;
+  };
+
+  const append = (line, text, className, state, colorKey) => {
     const span = document.createElement("span");
     span.textContent = text;
     if (className) span.className = className;
+    setColor(span, state, colorKey || className);
     line.append(span);
   };
 
-  const appendSeparator = (line) => append(line, "|", "separator");
-
-  const appendMetric = (line, label, percent, detail) => {
-    append(line, label, "label");
-    append(line, ":", "label");
-    append(line, `${percent}%`, percentClass(percent));
-    if (!detail) return;
-    append(line, "(", "label");
-    append(line, detail.remaining, "detail");
-    append(line, ",", "label");
-    append(line, detail.pace, "pace");
-    append(line, ")", "label");
+  const appendSeparator = (line, state) => {
+    const text = state.space ? ` ${state.separator} ` : state.separator;
+    append(line, text, "separator", state, "label");
   };
 
-  const appendTokenUsage = (line) => {
-    append(line, "Tkn", "label");
-    append(line, ":", "label");
-    append(line, tokenPreview.total, "token-total");
-    append(line, "(", "label");
-    append(line, "I:", "label");
-    append(line, tokenPreview.input, "token-value");
-    append(line, ",O:", "label");
-    append(line, tokenPreview.output, "token-value");
-    append(line, ",C:", "label");
-    append(line, tokenPreview.cache, "token-value");
-    append(line, ")", "label");
+  const appendMetric = (line, label, percent, detail, state) => {
+    const labelSeparator = state.space ? ": " : ":";
+    const colorKey = percentClass(percent, state);
+    append(line, label, "label", state, "label");
+    append(line, labelSeparator, "label", state, "label");
+    append(line, formatPercent(percent, state), colorKey, state, colorKey);
+    if (!detail) return;
+    append(line, "(", "label", state, "label");
+    append(line, detail.remaining, "detail", state, "label");
+    if (state.pace) {
+      append(line, ",", "label", state, "label");
+      append(line, detail.pace, "pace", state, "pace");
+    }
+    append(line, ")", "label", state, "label");
+  };
+
+  const appendBranch = (line, state) => {
+    const dirty = state.branch.endsWith("*");
+    const branch = dirty ? state.branch.slice(0, -1) : state.branch;
+    append(line, "git(", "label", state, "label");
+    append(line, branch, "branch", state, "branch");
+    if (dirty) append(line, "*", "dirty", state, "dirty");
+    append(line, ")", "label", state, "label");
+  };
+
+  const appendTokenUsage = (line, state) => {
+    const labelSeparator = state.space ? ": " : ":";
+    append(line, "Tkn", "label", state, "label");
+    append(line, labelSeparator, "label", state, "label");
+    append(line, formatToken(tokenPreview.total, state), "token-total", state, "tokenTotal");
+    if (!state.tokenUsage) return;
+    append(line, "(", "label", state, "label");
+    append(line, "I:", "label", state, "label");
+    append(line, formatToken(tokenPreview.input, state), "token-value", state, "tokenInput");
+    append(line, ",O:", "label", state, "label");
+    append(line, formatToken(tokenPreview.output, state), "token-value", state, "tokenOutput");
+    append(line, ",C:", "label", state, "label");
+    append(line, formatToken(tokenPreview.cache, state), "token-value", state, "tokenCache");
+    append(line, ")", "label", state, "label");
+  };
+
+  const renderSegment = (line, segment, state) => {
+    if (segment === "model") {
+      append(line, `${state.modelText}${state.effortText}`, "model", state, "model");
+      return true;
+    }
+    if (segment === "project") {
+      append(line, state.project, "project", state, "project");
+      return true;
+    }
+    if (segment === "branch") {
+      appendBranch(line, state);
+      return true;
+    }
+    if (segment === "runtime") {
+      append(line, state.runtime, "runtime", state, "runtime");
+      return true;
+    }
+    if (segment === "ctx") {
+      appendMetric(line, state.labelCtx, state.context, null, state);
+      return true;
+    }
+    if (segment === "5h") {
+      appendMetric(line, "5h", state.fiveHour, {
+        remaining: remaining(state.fiveHour, 5),
+        pace: paceDetail(state.fiveHour, state),
+      }, state);
+      return true;
+    }
+    if (segment === "7d") {
+      appendMetric(line, "7d", state.sevenDay, {
+        remaining: remaining(state.sevenDay, 7 * 24),
+        pace: paceDetail(state.sevenDay, state),
+      }, state);
+      return true;
+    }
+    if (segment === "tkn") {
+      appendTokenUsage(line, state);
+      return true;
+    }
+    return false;
   };
 
   const renderLine = (target, state) => {
@@ -105,85 +281,59 @@
     target.textContent = "";
     target.classList.toggle("no-color", !state.color);
 
-    append(target, `${state.modelText}${state.effortText}`, "model");
-
-    if (state.git) {
-      appendSeparator(target);
-      append(target, state.project, "project");
-      appendSeparator(target);
-      const dirty = state.branch.endsWith("*");
-      const branch = dirty ? state.branch.slice(0, -1) : state.branch;
-      append(target, "git(", "label");
-      append(target, branch, "branch");
-      if (dirty) append(target, "*", "dirty");
-      append(target, ")", "label");
-    }
-
-    appendSeparator(target);
-    appendMetric(target, "Ctx", state.context);
-    appendSeparator(target);
-    appendMetric(target, "5h", state.fiveHour, {
-      remaining: remaining(state.fiveHour, 5),
-      pace: paceDetail(state.fiveHour),
-    });
-    appendSeparator(target);
-    appendMetric(target, "7d", state.sevenDay, {
-      remaining: remaining(state.sevenDay, 7 * 24),
-      pace: paceDetail(state.sevenDay),
-    });
-
-    if (state.tokenUsage) {
-      appendSeparator(target);
-      appendTokenUsage(target);
+    let rendered = 0;
+    for (const segment of state.segments) {
+      if (rendered > 0) appendSeparator(target, state);
+      if (renderSegment(target, segment, state)) rendered += 1;
     }
   };
 
-  const configFor = (state) => {
-    const segments = ["model"];
-    if (state.git) segments.push("project", "branch");
-    segments.push("ctx", "5h", "7d");
-    if (state.tokenUsage) segments.push("tkn");
+  const tomlString = (value) => JSON.stringify(String(value));
 
-    return [
-      "# ~/.codex/codex-hud.toml",
-      "space = false",
-      'separator = "|"',
-      `segments = [${segments.map((item) => `"${item}"`).join(", ")}]`,
-      "",
-      "[colors]",
-      'model = "neonViolet"',
-      'project = "cyan"',
-      'branch = "neonViolet"',
-      'label = "dim"',
-      'separator = "dim"',
-      'tokenTotal = "amber"',
-      'tokenInput = "cyan"',
-      'tokenOutput = "cyan"',
-      'tokenCache = "cyan"',
-      'pace = "mint"',
-      'ok = "mint"',
-      'warn = "amber"',
-      'crit = "coral"',
-      "",
-      "[thresholds.percent]",
-      "warn = 70",
-      "crit = 90",
-      "",
-      "[format]",
-      "percentRound = true",
-      "tokenUnits = true",
-      `tokenUsage = ${state.tokenUsage}`,
-      "pace = true",
-      `modelShort = ${state.shortModel}`,
-      `effortShort = ${state.shortEffort}`,
-    ].join("\n");
-  };
+  const configFor = (state) => [
+    "# ~/.codex/codex-hud.toml",
+    `space = ${state.space}`,
+    `separator = ${tomlString(state.separator)}`,
+    `segments = [${state.segments.map(tomlString).join(", ")}]`,
+    "",
+    "[labels]",
+    `ctx = ${tomlString(state.labelCtx)}`,
+    "",
+    "[colors]",
+    `model = ${tomlString(state.configColors.model)}`,
+    `branch = ${tomlString(state.configColors.branch)}`,
+    `ok = ${tomlString(state.configColors.ok)}`,
+    `warn = ${tomlString(state.configColors.warn)}`,
+    `crit = ${tomlString(state.configColors.crit)}`,
+    "",
+    "[thresholds.percent]",
+    `warn = ${state.thresholdWarn}`,
+    `crit = ${state.thresholdCrit}`,
+    "",
+    "[format]",
+    `percentRound = ${state.percentRound}`,
+    `tokenUnits = ${state.tokenUnits}`,
+    `tokenUsage = ${state.tokenUsage}`,
+    `pace = ${state.pace}`,
+    `modelShort = ${state.shortModel}`,
+    `effortShort = ${state.shortEffort}`,
+    `paceSlowPrefix = ${tomlString(state.paceSlowPrefix)}`,
+    `paceNormalPrefix = ${tomlString(state.paceNormalPrefix)}`,
+    `paceFastPrefix = ${tomlString(state.paceFastPrefix)}`,
+  ].join("\n");
 
   const readState = () => {
-    const model = field.model ? field.model.value : "gpt-5.5";
-    const effort = field.effort ? field.effort.value : "xhigh";
-    const shortModelEnabled = Boolean(field.shortModel && field.shortModel.checked);
-    const shortEffortEnabled = Boolean(field.shortEffort && field.shortEffort.checked);
+    const model = readText(field.model, "gpt-5.5");
+    const effort = readText(field.effort, "xhigh");
+    const shortModelEnabled = readBool(field.shortModel, true);
+    const shortEffortEnabled = readBool(field.shortEffort, false);
+    const configColors = {
+      model: readText(field.colorModel, "neonViolet"),
+      branch: readText(field.colorBranch, "#5fafff"),
+      ok: readText(field.colorOk, "mint"),
+      warn: readText(field.colorWarn, "amber"),
+      crit: readText(field.colorCrit, "coral"),
+    };
     return {
       model,
       effort,
@@ -191,24 +341,58 @@
       effortText: shortEffortEnabled ? shortEffort[effort] || effort : effort,
       project: clean(field.project && field.project.value, "codex-hud"),
       branch: clean(field.branch && field.branch.value, "main"),
-      color: Boolean(field.color && field.color.checked),
-      git: Boolean(field.git && field.git.checked),
-      tokenUsage: Boolean(field.tokenUsage && field.tokenUsage.checked),
+      runtime: clean(field.runtime && field.runtime.value, "node-v24").replace(/-/g, " "),
+      color: readBool(field.color, true),
+      space: readBool(field.space, false),
+      separator: readText(field.separator, "|"),
+      segments: parseSegments(field.segments && field.segments.value),
+      labelCtx: readText(field.labelCtx, "Ctx"),
+      configColors,
+      previewColors: {
+        model: resolveColor(configColors.model, "neonViolet"),
+        project: palette.cyan,
+        branch: resolveColor(configColors.branch, "neonViolet"),
+        runtime: palette.dim,
+        dirty: palette.amber,
+        label: palette.dim,
+        tokenTotal: palette.amber,
+        tokenInput: palette.cyan,
+        tokenOutput: palette.cyan,
+        tokenCache: palette.cyan,
+        tokenValue: palette.cyan,
+        pace: palette.mint,
+        ok: resolveColor(configColors.ok, "mint"),
+        warn: resolveColor(configColors.warn, "amber"),
+        crit: resolveColor(configColors.crit, "coral"),
+      },
+      thresholdWarn: clamp(field.thresholdWarn && field.thresholdWarn.value, 0, 100, 70),
+      thresholdCrit: clamp(field.thresholdCrit && field.thresholdCrit.value, 0, 100, 90),
+      percentRound: readBool(field.percentRound, true),
+      tokenUnits: readBool(field.tokenUnits, true),
+      tokenUsage: readBool(field.tokenUsage, true),
+      pace: readBool(field.pace, true),
       shortModel: shortModelEnabled,
       shortEffort: shortEffortEnabled,
-      context: Number(field.context && field.context.value) || 32,
-      fiveHour: Number(field.fiveHour && field.fiveHour.value) || 6,
-      sevenDay: Number(field.sevenDay && field.sevenDay.value) || 4,
+      paceSlowPrefix: readText(field.paceSlowPrefix, "🐢"),
+      paceNormalPrefix: readText(field.paceNormalPrefix, "👾"),
+      paceFastPrefix: readText(field.paceFastPrefix, "🔥"),
+      context: clamp(field.context && field.context.value, 0, 100, 32),
+      fiveHour: clamp(field.fiveHour && field.fiveHour.value, 0, 100, 6),
+      sevenDay: clamp(field.sevenDay && field.sevenDay.value, 0, 100, 4),
     };
   };
 
   const render = () => {
     const state = readState();
-    if (output.context) output.context.textContent = `${state.context}%`;
-    if (output.fiveHour) output.fiveHour.textContent = `${state.fiveHour}%`;
-    if (output.sevenDay) output.sevenDay.textContent = `${state.sevenDay}%`;
+    if (output.context) output.context.textContent = formatPercent(state.context, state);
+    if (output.fiveHour) output.fiveHour.textContent = formatPercent(state.fiveHour, state);
+    if (output.sevenDay) output.sevenDay.textContent = formatPercent(state.sevenDay, state);
     if (output.paceState) {
-      const pace = state.fiveHour > 70 || state.sevenDay > 70 ? "fast pace" : "normal pace";
+      const pace = !state.pace
+        ? "pace hidden"
+        : state.fiveHour >= state.thresholdWarn || state.sevenDay >= state.thresholdWarn
+          ? "fast pace"
+          : "normal pace";
       output.paceState.textContent = pace;
     }
     renderLine(output.line, state);

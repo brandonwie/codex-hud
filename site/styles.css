@@ -343,7 +343,7 @@ h3 {
 
 .settings-panel {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 16px;
   margin-bottom: 18px;
 }
@@ -380,7 +380,8 @@ label {
 }
 
 select,
-input[type="text"] {
+input[type="text"],
+input[type="number"] {
   width: 100%;
   min-height: 38px;
   padding: 8px 10px;
@@ -389,6 +390,16 @@ input[type="text"] {
   border: 1px solid var(--line);
   border-radius: 4px;
   font-size: 14px;
+}
+
+input[type="number"] {
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 input[type="range"] {
@@ -411,6 +422,20 @@ output {
   width: 18px;
   height: 18px;
   accent-color: var(--accent);
+}
+
+.compact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+}
+
+.compact-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .result-panel {
