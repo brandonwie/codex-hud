@@ -14,6 +14,7 @@ const files = {
   hudScript: path.join(repoRoot, "plugins", "codex-hud", "scripts", "codex-hud.js"),
   cargoToml: path.join(repoRoot, "rust", "Cargo.toml"),
   cargoLock: path.join(repoRoot, "rust", "Cargo.lock"),
+  siteIndex: path.join(repoRoot, "site", "index.html"),
 };
 const cargoLockCodexHudPackageRe = /((?:^|\r?\n)\[\[package\]\]\r?\nname = "codex-hud"\r?\nversion = ")([^"]+)(")/g;
 
@@ -77,6 +78,22 @@ function writeCargoLockVersion(version) {
   fs.writeFileSync(files.cargoLock, updated, "utf8");
 }
 
+function readSiteVersion() {
+  const source = fs.readFileSync(files.siteIndex, "utf8");
+  const match = source.match(/"softwareVersion":\s*"([^"]+)"/);
+  if (!match) throw new Error("Could not find site softwareVersion");
+  return match[1];
+}
+
+function writeSiteVersion(version) {
+  const source = fs.readFileSync(files.siteIndex, "utf8");
+  const match = source.match(/"softwareVersion":\s*"([^"]+)"/);
+  if (!match) throw new Error("Could not find site softwareVersion");
+  if (match[1] === version) return;
+  const updated = source.replace(/"softwareVersion":\s*"[^"]+"/, `"softwareVersion": "${version}"`);
+  fs.writeFileSync(files.siteIndex, updated, "utf8");
+}
+
 function getVersions() {
   const packageJson = readJson(files.packageJson);
   const packageLock = readJson(files.packageLock);
@@ -89,6 +106,7 @@ function getVersions() {
     hudScript: readHudVersion(),
     cargoToml: readCargoTomlVersion(),
     cargoLock: readCargoLockVersion(),
+    siteIndex: readSiteVersion(),
   };
 }
 
@@ -119,6 +137,7 @@ function updateVersion(version) {
   writeHudVersion(version);
   writeCargoTomlVersion(version);
   writeCargoLockVersion(version);
+  writeSiteVersion(version);
   console.log(`synced release version ${version}`);
 }
 

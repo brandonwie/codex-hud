@@ -37,6 +37,7 @@ writeFile("plugins/codex-hud/.codex-plugin/plugin.json", JSON.stringify({ versio
 writeFile("plugins/codex-hud/scripts/codex-hud.js", 'const VERSION = "0.2.0";\n');
 writeFile("rust/Cargo.toml", '[package]\nname = "codex-hud"\nversion = "0.2.0"\n');
 writeFile("rust/Cargo.lock", '[[package]]\r\nname = "codex-hud"\r\nversion = "0.2.0"\r\n\r\n[[package]]\r\nname = "other"\r\nversion = "1.0.0"\r\n');
+writeFile("site/index.html", '<script type="application/ld+json">{"softwareVersion": "0.2.0"}</script>\n');
 
 let result = run(["--check"]);
 assert.strictEqual(result.status, 0, result.stderr || result.stdout);
@@ -48,6 +49,7 @@ assert.strictEqual(JSON.parse(readFile("package-lock.json")).packages[""].versio
 assert.match(readFile("plugins/codex-hud/scripts/codex-hud.js"), /const VERSION = "0\.3\.0";/);
 assert.match(readFile("rust/Cargo.toml"), /^version = "0\.3\.0"$/m);
 assert.match(readFile("rust/Cargo.lock"), /\[\[package\]\]\r\nname = "codex-hud"\r\nversion = "0\.3\.0"/);
+assert.match(readFile("site/index.html"), /"softwareVersion": "0\.3\.0"/);
 
 writeFile(
   "rust/Cargo.lock",
