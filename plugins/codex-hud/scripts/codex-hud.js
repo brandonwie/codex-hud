@@ -15,7 +15,7 @@ try {
   parseToml = null;
 }
 
-const VERSION = "0.7.1";
+const VERSION = "0.7.2";
 const DEFAULT_TIMEOUT_MS = 1200;
 const RESET = "\x1b[0m";
 const COLORS = {
