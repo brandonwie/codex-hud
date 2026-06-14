@@ -16,7 +16,7 @@
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#configuration)
 [![Platform](https://img.shields.io/badge/Platform-macOS_%7C_Linux-0db7ed?style=for-the-badge&logo=linux&logoColor=white)](#quick-start)
 
-<a href="https://codex-hud.brandonwie.dev/">Website</a> · <a href="https://codex-hud.brandonwie.dev/#try">Try settings</a>
+<a href="https://brandonwie.github.io/codex-hud/">Website</a> · <a href="https://brandonwie.github.io/codex-hud/#try">Try settings</a>
 
 <img src="assets/codex-hud-screenshot.png" alt="Codex HUD compact status line terminal screenshot" width="760">
 

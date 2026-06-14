@@ -7,14 +7,14 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
-const canonical = "https://codex-hud.brandonwie.dev/";
+const canonical = "https://brandonwie.github.io/codex-hud/";
+const unresolvedCustomHost = ["codex-hud", "brandonwie", "dev"].join(".");
 const requiredFiles = [
   "site/index.html",
   "site/styles.css",
   "site/app.js",
   "site/robots.txt",
   "site/sitemap.xml",
-  "site/CNAME",
   "site/.nojekyll",
   "site/favicon.svg",
   "assets/codex-hud-screenshot.png",
@@ -35,7 +35,6 @@ const css = exists("site/styles.css") ? read("site/styles.css") : "";
 const js = exists("site/app.js") ? read("site/app.js") : "";
 const robots = exists("site/robots.txt") ? read("site/robots.txt") : "";
 const sitemap = exists("site/sitemap.xml") ? read("site/sitemap.xml") : "";
-const cname = exists("site/CNAME") ? read("site/CNAME").trim() : "";
 const workflow = exists(".github/workflows/pages.yml") ? read(".github/workflows/pages.yml") : "";
 const readme = exists("README.md") ? read("README.md") : "";
 
@@ -58,20 +57,31 @@ const mustContain = [
   [js, "navigator.clipboard", "copy behavior"],
   [robots, `Sitemap: ${canonical}sitemap.xml`, "robots sitemap"],
   [sitemap, `<loc>${canonical}</loc>`, "sitemap canonical URL"],
-  [workflow, "pages: write", "Pages permission"],
-  [workflow, "id-token: write", "OIDC permission"],
+  [workflow, "contents: write", "gh-pages publish permission"],
   [workflow, "github.ref == 'refs/heads/main'", "main-only Pages deploy guard"],
-  [workflow, "site", "site artifact path"],
+  [workflow, "PAGES_BRANCH: gh-pages", "gh-pages publish branch"],
+  [workflow, "rsync -a --exclude CNAME site/", "site branch publish command"],
   [readme, canonical, "README canonical site link"],
   [readme, "assets/codex-hud-screenshot.png", "README screenshot"],
+  [html, "https://herdr.dev/", "Herdr credit link"],
+  [html, "I'm a huge fan", "Herdr fan note"],
 ];
 
 for (const [content, needle, label] of mustContain) {
   if (!content.includes(needle)) fail.push(`missing ${label}`);
 }
 
-if (cname !== "codex-hud.brandonwie.dev") {
-  fail.push("CNAME must be codex-hud.brandonwie.dev");
+if (exists("site/CNAME")) {
+  fail.push("site/CNAME must stay absent until custom-domain DNS resolves");
+}
+
+if (
+  html.includes(unresolvedCustomHost) ||
+  robots.includes(unresolvedCustomHost) ||
+  sitemap.includes(unresolvedCustomHost) ||
+  readme.includes(unresolvedCustomHost)
+) {
+  fail.push("SEO metadata must not point at unresolved custom domain");
 }
 
 const title = html.match(/<title>([^<]+)<\/title>/i);
@@ -119,14 +129,16 @@ if (/letter-spacing:\s*-[0-9.]/.test(css)) {
   fail.push("CSS must not use negative letter spacing");
 }
 
-const pinnedActions = [
-  "df4cb1c069e1874edd31b4311f1884172cec0e10",
-  "983d7736d9b0ae728b81ab479565c72886d7745b",
-  "7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
-  "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
-];
-for (const sha of pinnedActions) {
-  if (!workflow.includes(sha)) fail.push(`workflow action is not pinned: ${sha}`);
+const actionRefs = [...workflow.matchAll(/uses:\s*[^@\s]+@([^\s#]+)/g)].map((match) => match[1]);
+if (actionRefs.length === 0) {
+  fail.push("workflow must use at least one pinned action");
+}
+for (const ref of actionRefs) {
+  if (!/^[a-f0-9]{40}$/.test(ref)) fail.push(`workflow action is not pinned to a SHA: ${ref}`);
+}
+
+if (/deploy-pages|upload-pages-artifact|configure-pages/.test(workflow)) {
+  fail.push("workflow must publish gh-pages branch, not switch Pages to Actions deploy");
 }
 
 const hashFile = (relativePath) => crypto
