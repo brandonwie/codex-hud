@@ -57,11 +57,16 @@
     copyStatus: byId("copy-status"),
   };
 
-  const shortEffort = {
-    xhigh: "xh",
-    high: "hi",
-    medium: "md",
-    low: "lo",
+  // Mirror plugins/codex-hud/scripts/codex-hud.js formatReasoningEffort():
+  // effortShort abbreviates only xhigh; high/medium/low always render High/Med/Low.
+  const formatEffort = (value, short) => {
+    if (!value) return null;
+    const normalized = String(value).trim();
+    if (/^x[-_ ]?high$/i.test(normalized)) return short ? "xh" : "xhigh";
+    if (/^high$/i.test(normalized)) return "High";
+    if (/^medium$/i.test(normalized)) return "Med";
+    if (/^low$/i.test(normalized)) return "Low";
+    return normalized;
   };
 
   const tokenPreview = {
@@ -87,6 +92,11 @@
 
   const defaultSegments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
   const orderedSegments = ["model", "project", "branch", "runtime", "ctx", "5h", "7d", "tkn"];
+
+  // Mirror of DEFAULT_CONFIG.thresholds.pace.crit in
+  // plugins/codex-hud/scripts/codex-hud.js (read at runtime there by paceStatePrefix).
+  // The static playground can't load the plugin config, so keep this value in sync by hand.
+  const PACE_CRIT = 15;
 
   const clamp = (value, min, max, fallback) => {
     const number = Number(value);
@@ -149,7 +159,7 @@
   };
 
   const formatPercent = (value, state) => (
-    state.percentRound ? `${Math.round(value)}%` : `${Number(value).toFixed(1)}%`
+    `${state.percentRound ? Math.round(value) : Math.round(value * 10) / 10}%`
   );
 
   const formatToken = (value, state) => {
@@ -166,14 +176,17 @@
     return `${amount.toFixed(1).replace(/\.0$/, "")}${unit}`;
   };
 
-  const paceDetail = (value, state) => {
+  const paceDetail = (value, used, state) => {
     const pace = clamp(value, 0, 100, 0);
-    const prefix = pace >= 70
-      ? state.paceFastPrefix
-      : pace >= 30
-        ? state.paceNormalPrefix
-        : state.paceSlowPrefix;
-    return `${prefix}${Math.round(pace)}%`;
+    // Port of paceStatePrefix(): the marker keys off (usedPercent - pacePercent),
+    // not the pace value alone. Number respects format.percentRound like the plugin.
+    const diff = used - pace;
+    const prefix = diff < -PACE_CRIT
+      ? state.paceSlowPrefix
+      : diff > PACE_CRIT
+        ? state.paceFastPrefix
+        : state.paceNormalPrefix;
+    return `${prefix}${formatPercent(pace, state)}`;
   };
 
   const setColor = (span, state, colorKey) => {
@@ -260,14 +273,14 @@
     if (segment === "5h") {
       appendMetric(line, "5h", state.fiveHour, {
         remaining: remaining(state.fiveHour, 5),
-        pace: paceDetail(state.fiveHourPace, state),
+        pace: paceDetail(state.fiveHourPace, state.fiveHour, state),
       }, state);
       return true;
     }
     if (segment === "7d") {
       appendMetric(line, "7d", state.sevenDay, {
         remaining: remaining(state.sevenDay, 7 * 24),
-        pace: paceDetail(state.sevenDayPace, state),
+        pace: paceDetail(state.sevenDayPace, state.sevenDay, state),
       }, state);
       return true;
     }
@@ -331,7 +344,7 @@
     const shortEffortEnabled = readBool(field.shortEffort, false);
     const configColors = {
       model: readText(field.colorModel, "neonViolet"),
-      branch: readText(field.colorBranch, "#5fafff"),
+      branch: readText(field.colorBranch, "neonViolet"),
       ok: readText(field.colorOk, "mint"),
       warn: readText(field.colorWarn, "amber"),
       crit: readText(field.colorCrit, "coral"),
@@ -340,7 +353,7 @@
       model,
       effort,
       modelText: shortModelEnabled ? shortModel(model) : model,
-      effortText: shortEffortEnabled ? shortEffort[effort] || effort : effort,
+      effortText: formatEffort(effort, shortEffortEnabled),
       project: clean(field.project && field.project.value, "codex-hud"),
       branch: clean(field.branch && field.branch.value, "main"),
       color: readBool(field.color, true),
@@ -393,11 +406,15 @@
     if (output.fiveHourPace) output.fiveHourPace.textContent = `${Math.round(state.fiveHourPace)}%`;
     if (output.sevenDayPace) output.sevenDayPace.textContent = `${Math.round(state.sevenDayPace)}%`;
     if (output.paceState) {
+      const fiveDiff = state.fiveHour - state.fiveHourPace;
+      const sevenDiff = state.sevenDay - state.sevenDayPace;
       const pace = !state.pace
         ? "pace hidden"
-        : state.fiveHourPace >= state.thresholdWarn || state.sevenDayPace >= state.thresholdWarn
+        : fiveDiff > PACE_CRIT || sevenDiff > PACE_CRIT
           ? "fast pace"
-          : "normal pace";
+          : fiveDiff < -PACE_CRIT || sevenDiff < -PACE_CRIT
+            ? "slow pace"
+            : "normal pace";
       output.paceState.textContent = pace;
     }
     renderLine(output.line, state);

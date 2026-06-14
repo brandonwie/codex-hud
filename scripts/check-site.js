@@ -71,6 +71,21 @@ for (const [content, needle, label] of mustContain) {
   if (!content.includes(needle)) fail.push(`missing ${label}`);
 }
 
+const pkgVersion = JSON.parse(read("package.json")).version;
+const siteVersion = html.match(/"softwareVersion":\s*"([^"]+)"/);
+if (!siteVersion) {
+  fail.push("site JSON-LD must declare softwareVersion");
+} else if (siteVersion[1] !== pkgVersion) {
+  fail.push(`site softwareVersion ${siteVersion[1]} must match package.json ${pkgVersion}`);
+}
+
+if (!js.includes('readText(field.colorBranch, "neonViolet")')) {
+  fail.push("playground branch color must default to neonViolet (plugin DEFAULT_CONFIG)");
+}
+if (html.includes('id="color-branch"') && html.includes('value="#5fafff"')) {
+  fail.push("site branch color must default to neonViolet, not a hex demo");
+}
+
 const readmeConfigControls = [
   ["space", "space"],
   ["separator", "separator"],
@@ -352,7 +367,7 @@ const runInteractiveSmoke = () => {
   vm.runInNewContext(js, context, { filename: "site/app.js" });
 
   const initialLine = elements["hud-line"].textContent;
-  if (!/^5\.5xhigh\|codex-hud\|git\(main\*\)\|Ctx:32%\|5h:6%\(4\.7h,🐢\d+%\)\|7d:4%\(6\.7d,🐢\d+%\)\|Tkn:42k\(I:24k,O:1k,C:17k\)$/.test(initialLine)) {
+  if (!/^5\.5xhigh\|codex-hud\|git\(main\*\)\|Ctx:32%\|5h:6%\(4\.7h,👾\d+%\)\|7d:4%\(6\.7d,👾\d+%\)\|Tkn:42k\(I:24k,O:1k,C:17k\)$/.test(initialLine)) {
     fail.push("interactive preview must match dense live HUD grammar");
   }
   if (/\b(?:CTX|5H|7D|TKN):/.test(initialLine)) {
@@ -387,9 +402,50 @@ const runInteractiveSmoke = () => {
     fail.push("interactive preview must emit README effortShort default");
   }
 
+  // M2: effort preview must mirror formatReasoningEffort (High/Med/Low; xh only for xhigh).
+  elements.effort.value = "medium";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5Med")) {
+    fail.push("effort preview must render medium as Med like the plugin");
+  }
+  if (
+    elements["hud-line"].textContent.includes("5.5medium") ||
+    elements["hud-line"].textContent.includes("5.5md")
+  ) {
+    fail.push("effort preview must not lowercase or fake-abbreviate non-xhigh efforts");
+  }
+  elements["short-effort"].checked = true;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5Med")) {
+    fail.push("effortShort must abbreviate only xhigh, leaving Med unchanged");
+  }
+  elements["short-effort"].checked = false;
+  elements.effort.value = "high";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5High") || elements["hud-line"].textContent.includes("5.5hi")) {
+    fail.push("effort preview must render high as High, not lowercase or abbreviated");
+  }
+  elements.effort.value = "low";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5Low") || elements["hud-line"].textContent.includes("5.5lo")) {
+    fail.push("effort preview must render low as Low, not lowercase or abbreviated");
+  }
+  elements.effort.value = "xhigh";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5xhigh")) {
+    fail.push("xhigh effort must render as xhigh when effortShort is false");
+  }
+  elements["short-effort"].checked = true;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5xh")) {
+    fail.push("xhigh effort must abbreviate to xh when effortShort is true");
+  }
+  elements["short-effort"].checked = false;
+  elements.effort.dispatchEvent({ type: "input" });
+
   elements["five-hour"].value = "35";
   elements["five-hour"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,🐢20%)")) {
+  if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,👾20%)")) {
     fail.push("5h usage must not change the separate 5h pace percentage");
   }
   if (elements["hud-line"].textContent.includes("117%")) {
@@ -401,8 +457,27 @@ const runInteractiveSmoke = () => {
 
   elements["five-hour-pace"].value = "87";
   elements["five-hour-pace"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,🔥87%)")) {
+  if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,🐢87%)")) {
     fail.push("5h pace control must update pace independently from usage");
+  }
+
+  // F-R-4: lock the +/-PACE_CRIT (15) pace-marker boundary (inclusive normal band).
+  elements["five-hour"].value = "20";
+  elements["five-hour-pace"].value = "35";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5h:20%(4h,👾35%)")) {
+    fail.push("pace diff of -15 must stay in the normal band (👾)");
+  }
+  elements["five-hour-pace"].value = "36";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5h:20%(4h,🐢36%)")) {
+    fail.push("pace diff of -16 must cross into slow (🐢)");
+  }
+  elements["five-hour"].value = "36";
+  elements["five-hour-pace"].value = "20";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5h:36%(3.2h,🔥20%)")) {
+    fail.push("pace diff of +16 must cross into fast (🔥)");
   }
 
   elements["segment-runtime"].checked = true;
@@ -440,13 +515,13 @@ const runInteractiveSmoke = () => {
   if (customLine.includes("node v24")) {
     fail.push("runtime segment must be removable with its checkbox");
   }
-  if (!customLine.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88.0%")) {
+  if (!customLine.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88%")) {
     fail.push("interactive preview must apply spacing, separator, labels, percent precision, and short effort controls");
   }
-  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88.0%")) {
+  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88%")) {
     fail.push("hero preview must apply the same panel settings as the result preview");
   }
-  if (!customLine.includes("5h: 6.0%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
+  if (!customLine.includes("5h: 6%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
     fail.push("interactive preview must hide pace detail when format.pace is false");
   }
   if (!customLine.endsWith("Tkn: 42000")) {
@@ -479,7 +554,7 @@ const runInteractiveSmoke = () => {
   elements["seven-day"].value = "34";
   elements["seven-day-pace"].value = "100";
   elements["hud-form"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("7d: 34.0%(4.6d,F100%)")) {
+  if (!elements["hud-line"].textContent.includes("7d: 34%(4.6d,S100%)")) {
     fail.push("7d pace control must stay separate from usage and cap at 100%");
   }
   if (elements["hud-line"].textContent.includes("113%")) {
