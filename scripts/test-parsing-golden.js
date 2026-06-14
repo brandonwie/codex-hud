@@ -33,6 +33,15 @@ const NOW_MS = Date.parse("2026-06-08T00:00:00.000Z");
 // Deliberately tiny so context percentage math is readable in the golden.
 const TEST_CONTEXT_WINDOW = 1000;
 
+// Strip inherited GIT_* vars (GIT_DIR / GIT_INDEX_FILE / GIT_WORK_TREE / ...) so
+// fixture git operations discover the throwaway repo from `cwd` alone. When this
+// suite runs inside a pre-commit hook, git exports those vars pointing at the
+// real repo; without stripping them the fixture would bind to the parent index
+// and report a bogus porcelain state (clean fixture reads as dirty).
+const GIT_CLEAN_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))
+);
+
 function git(cwd, args) {
   const r = spawnSync(
     "git",
@@ -43,7 +52,7 @@ function git(cwd, args) {
       "-c", "init.defaultBranch=trunk",
       ...args,
     ],
-    { cwd, encoding: "utf8" }
+    { cwd, encoding: "utf8", env: GIT_CLEAN_ENV }
   );
   if (r.status !== 0) throw new Error("git " + args.join(" ") + " failed: " + (r.stderr || ""));
   return r.stdout;
