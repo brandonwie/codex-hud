@@ -56,7 +56,7 @@ cd codex-hud
 
 # 이 저장소를 로컬 플러그인 마켓플레이스로 등록한 다음, 플러그인을 추가합니다:
 codex plugin marketplace add "$(pwd)"
-codex plugin add codex-hud@codex-hud
+codex plugin add brandonwie@codex-hud
 ```
 
 다음으로 HUD 런처를 설치하세요(권장). 기본 모드는 **실제 Codex 설치에 위임**하므로 Homebrew/npm Codex 업데이트가 자동으로 반영됩니다 — 재빌드도, 패치된 바이너리도 필요 없습니다. 한 가지 분명히 하자면, 스톡 위임 런처는 TUI 내부 푸터를 렌더링하지 **않습니다** — 안전한 위임과 관리형 `codex` 심을 제공할 뿐이며, TUI 내부 푸터는 아래의 실험적인 패치 모드에서만 존재합니다.
@@ -312,7 +312,7 @@ codex-hud/
 
 ## 기여하기
 
-이슈와 풀 리퀘스트를 환영합니다. HUD 출력을 변경한 후에는 `npm test`와 Codex 플러그인 검증기를 실행하세요. 매니페스트 버전을 변경하거나 릴리스한 후에는 수동 테스트를 위해 `codex plugin add codex-hud@codex-hud`로 로컬 플러그인 캐시를 새로고침하고, 업데이트된 스킬 메타데이터를 불러오도록 새 Codex 스레드를 시작하세요.
+이슈와 풀 리퀘스트를 환영합니다. HUD 출력을 변경한 후에는 `npm test`와 Codex 플러그인 검증기를 실행하세요. 매니페스트 버전을 변경하거나 릴리스한 후에는 수동 테스트를 위해 `codex plugin add brandonwie@codex-hud`로 로컬 플러그인 캐시를 새로고침하고, 업데이트된 스킬 메타데이터를 불러오도록 새 Codex 스레드를 시작하세요.
 
 ### 메인테이너 스크립트
 

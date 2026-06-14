@@ -56,7 +56,7 @@ cd codex-hud
 
 # 将本仓库注册为本地插件市场，然后添加插件：
 codex plugin marketplace add "$(pwd)"
-codex plugin add codex-hud@codex-hud
+codex plugin add brandonwie@codex-hud
 ```
 
 接下来安装 HUD 启动器(推荐)。默认模式**委派给你真实安装的 Codex**,因此 Homebrew/npm 的 Codex 更新会被自动拾取 — 无需重新构建,也没有补丁二进制。需要明确的是:委派原生模式的启动器**不会**渲染 TUI 内嵌页脚 — 它提供的是安全委派加受管的 `codex` 垫片;TUI 内嵌页脚只存在于下文的实验性补丁模式中。
@@ -312,7 +312,7 @@ codex-hud/
 
 ## 贡献
 
-欢迎提交 issue 和 pull request。更改 HUD 输出后，请运行 `npm test` 以及 Codex 插件验证器。更改清单版本或发布 release 后，请用 `codex plugin add codex-hud@codex-hud` 刷新本地插件缓存以进行手动测试，然后启动新的 Codex 线程以加载更新后的技能元数据。
+欢迎提交 issue 和 pull request。更改 HUD 输出后，请运行 `npm test` 以及 Codex 插件验证器。更改清单版本或发布 release 后，请用 `codex plugin add brandonwie@codex-hud` 刷新本地插件缓存以进行手动测试，然后启动新的 Codex 线程以加载更新后的技能元数据。
 
 ### 维护者脚本
 

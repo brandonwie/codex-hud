@@ -60,7 +60,7 @@ cd codex-hud
 
 # Register this repo as a local plugin marketplace, then add the plugin:
 codex plugin marketplace add "$(pwd)"
-codex plugin add codex-hud@codex-hud
+codex plugin add brandonwie@codex-hud
 ```
 
 Start a new Codex thread after installing or reinstalling so the skill list is refreshed.
@@ -327,7 +327,7 @@ codex-hud/
 
 ## Contributing
 
-Issues and pull requests are welcome. After changing HUD output, run `npm test` and the Codex plugin validator. After changing the manifest version or cutting a release, refresh the local plugin cache for manual testing with `codex plugin add codex-hud@codex-hud`, then start a new Codex thread so the refreshed skill metadata is loaded.
+Issues and pull requests are welcome. After changing HUD output, run `npm test` and the Codex plugin validator. After changing the manifest version or cutting a release, refresh the local plugin cache for manual testing with `codex plugin add brandonwie@codex-hud`, then start a new Codex thread so the refreshed skill metadata is loaded.
 
 ### Maintainer Scripts
 

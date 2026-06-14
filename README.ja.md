@@ -56,7 +56,7 @@ cd codex-hud
 
 # このリポジトリをローカルのプラグインマーケットプレイスとして登録し、プラグインを追加します:
 codex plugin marketplace add "$(pwd)"
-codex plugin add codex-hud@codex-hud
+codex plugin add brandonwie@codex-hud
 ```
 
 次に HUD ランチャーをインストールします(推奨)。デフォルトモードは**実際の Codex インストールに委譲**するため、Homebrew/npm の Codex 更新が自動的に反映されます — 再ビルドもパッチ済みバイナリも不要です。明確にしておくと、ストック委譲ランチャーは TUI 内フッターを描画**しません** — 提供するのは安全な委譲と管理対象の `codex` シムであり、TUI 内フッターは後述の実験的なパッチモードにのみ存在します:
@@ -312,7 +312,7 @@ codex-hud/
 
 ## 貢献
 
-Issue とプルリクエストを歓迎します。HUD 出力を変更した後は `npm test` と Codex プラグインバリデーターを実行してください。マニフェストのバージョン変更またはリリース後は、手動テスト用に `codex plugin add codex-hud@codex-hud` でローカルプラグインキャッシュを更新し、新しい Codex スレッドを開始して更新済みのスキルメタデータを読み込んでください。
+Issue とプルリクエストを歓迎します。HUD 出力を変更した後は `npm test` と Codex プラグインバリデーターを実行してください。マニフェストのバージョン変更またはリリース後は、手動テスト用に `codex plugin add brandonwie@codex-hud` でローカルプラグインキャッシュを更新し、新しい Codex スレッドを開始して更新済みのスキルメタデータを読み込んでください。
 
 ### メンテナースクリプト
 

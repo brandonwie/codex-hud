@@ -56,7 +56,7 @@ cd codex-hud
 
 # 將此儲存庫註冊為本機外掛市集，然後加入該外掛：
 codex plugin marketplace add "$(pwd)"
-codex plugin add codex-hud@codex-hud
+codex plugin add brandonwie@codex-hud
 ```
 
 接著安裝 HUD 啟動器(建議)。預設模式**委派給你實際安裝的 Codex**,因此 Homebrew/npm 的 Codex 更新會自動套用 — 不需重新建置,也沒有修補二進位檔。要說明清楚的是:委派原生模式的啟動器**不會**渲染 TUI 內嵌頁尾 — 它提供安全的委派以及受管理的 `codex` 墊片;TUI 內嵌頁尾只存在於下方的實驗性修補模式。
@@ -312,7 +312,7 @@ codex-hud/
 
 ## 貢獻
 
-歡迎提出 issue 與 pull request。變更 HUD 輸出後，請執行 `npm test` 與 Codex 外掛驗證器。變更 manifest 版本或發布 release 後，請以 `codex plugin add codex-hud@codex-hud` 重新整理本機外掛快取以進行手動測試，然後啟動新的 Codex thread 載入更新後的 skill metadata。
+歡迎提出 issue 與 pull request。變更 HUD 輸出後，請執行 `npm test` 與 Codex 外掛驗證器。變更 manifest 版本或發布 release 後，請以 `codex plugin add brandonwie@codex-hud` 重新整理本機外掛快取以進行手動測試，然後啟動新的 Codex thread 載入更新後的 skill metadata。
 
 ### 維護者腳本
 

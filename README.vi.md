@@ -56,7 +56,7 @@ cd codex-hud
 
 # Đăng ký repo này như một marketplace plugin cục bộ, rồi thêm plugin:
 codex plugin marketplace add "$(pwd)"
-codex plugin add codex-hud@codex-hud
+codex plugin add brandonwie@codex-hud
 ```
 
 Tiếp theo, cài launcher HUD (khuyến nghị). Chế độ mặc định **ủy quyền cho bản cài Codex thật của bạn**, nên các bản cập nhật Codex qua Homebrew/npm được áp dụng tự động — không cần build lại, không có nhị phân vá. Nói rõ hơn: launcher ủy quyền gốc **không** render footer trong TUI — nó cung cấp cơ chế ủy quyền an toàn cùng shim `codex` được quản lý; footer trong TUI chỉ có ở chế độ vá thử nghiệm bên dưới.
@@ -312,7 +312,7 @@ codex-hud/
 
 ## Đóng góp
 
-Hoan nghênh các issue và pull request. Sau khi thay đổi đầu ra HUD, hãy chạy `npm test` và trình kiểm tra plugin Codex. Sau khi thay đổi phiên bản manifest hoặc phát hành release, hãy làm mới cache plugin cục bộ để kiểm thử thủ công bằng `codex plugin add codex-hud@codex-hud`, rồi mở một thread Codex mới để tải metadata skill đã cập nhật.
+Hoan nghênh các issue và pull request. Sau khi thay đổi đầu ra HUD, hãy chạy `npm test` và trình kiểm tra plugin Codex. Sau khi thay đổi phiên bản manifest hoặc phát hành release, hãy làm mới cache plugin cục bộ để kiểm thử thủ công bằng `codex plugin add brandonwie@codex-hud`, rồi mở một thread Codex mới để tải metadata skill đã cập nhật.
 
 ### Script bảo trì
 

@@ -159,12 +159,15 @@ const createElement = (id, options = {}) => {
     id,
     value: options.value || "",
     checked: Boolean(options.checked),
+    className: options.className || "",
+    children: [],
     textContent: options.textContent || "",
     style: {},
     classList: {
       toggle() {},
     },
     append(child) {
+      if (child) this.children.push(child);
       this.textContent += child && child.textContent ? child.textContent : "";
     },
     addEventListener(type, listener) {
@@ -190,8 +193,8 @@ const runInteractiveSmoke = () => {
     "show-color": createElement("show-color", { checked: true }),
     "show-git": createElement("show-git", { checked: true }),
     "show-token-usage": createElement("show-token-usage", { checked: true }),
-    "short-model": createElement("short-model"),
-    "short-effort": createElement("short-effort"),
+    "short-model": createElement("short-model", { checked: true }),
+    "short-effort": createElement("short-effort", { checked: true }),
     context: createElement("context", { value: "32" }),
     "five-hour": createElement("five-hour", { value: "6" }),
     "seven-day": createElement("seven-day", { value: "4" }),
@@ -243,16 +246,37 @@ const runInteractiveSmoke = () => {
   };
   vm.runInNewContext(js, context, { filename: "site/app.js" });
 
-  elements["short-effort"].checked = true;
-  elements["short-effort"].dispatchEvent({ type: "change" });
+  const initialLine = elements["hud-line"].textContent;
+  if (!/^5\.5xh\|codex-hud\|git\(main\*\)\|Ctx:32%\|5h:6%\(4\.7h,🐢\d+%\)\|7d:4%\(6\.7d,🐢\d+%\)\|Tkn:42k\(I:24k,O:1k,C:17k\)$/.test(initialLine)) {
+    fail.push("interactive preview must match dense live HUD grammar");
+  }
+  if (/\b(?:CTX|5H|7D|TKN):/.test(initialLine)) {
+    fail.push("interactive preview must preserve live label casing");
+  }
+  if (/ \| |: /.test(initialLine)) {
+    fail.push("interactive preview must not show space=true separators by default");
+  }
+
+  const initialAtoms = elements["hud-line"].children.map((child) => [child.textContent, child.className]);
+  const hasAtom = (text, className) => initialAtoms.some((atom) => atom[0] === text && atom[1] === className);
+  if (!hasAtom("Ctx", "label") || !hasAtom("32%", "ok") || !hasAtom("|", "separator")) {
+    fail.push("interactive preview must split labels, values, and separators into separate styled atoms");
+  }
+  if (initialAtoms.some((atom) => /^Ctx:\d+%$/.test(atom[0]))) {
+    fail.push("interactive preview must not color an entire metric as one span");
+  }
+
   elements.context.value = "88";
   elements.context.dispatchEvent({ type: "input" });
 
-  if (!elements["hud-line"].textContent.includes("gpt-5.5 xh")) {
-    fail.push("interactive preview must update effortShort in HUD line");
+  if (!elements["hud-line"].textContent.includes("5.5xh|")) {
+    fail.push("interactive preview must keep short model and short effort defaults in HUD line");
   }
-  if (!elements["hud-line"].textContent.includes("CTX:88%")) {
+  if (!elements["hud-line"].textContent.includes("Ctx:88%")) {
     fail.push("interactive preview must update context percentage");
+  }
+  if (elements["hud-line"].textContent.includes("CTX:88%")) {
+    fail.push("interactive preview must not regress to uppercase context label");
   }
   if (!elements["config-code"].textContent.includes("effortShort = true")) {
     fail.push("interactive preview must update generated config");

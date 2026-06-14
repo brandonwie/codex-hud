@@ -273,11 +273,21 @@ h3 {
   color: #b79aff;
 }
 
-.hud-preview-line .effort {
-  color: #7db4ff;
+.hud-preview-line .project,
+.hud-preview-line .token-value {
+  color: #00d7ff;
 }
 
-.hud-preview-line .git {
+.hud-preview-line .branch {
+  color: #b79aff;
+}
+
+.hud-preview-line .dirty,
+.hud-preview-line .token-total {
+  color: #ffaf5f;
+}
+
+.hud-preview-line .pace {
   color: #7ed6a8;
 }
 
@@ -293,6 +303,9 @@ h3 {
   color: #ff7f86;
 }
 
+.hud-preview-line .label,
+.hud-preview-line .separator,
+.hud-preview-line .detail,
 .hud-preview-line .muted {
   color: #8f9abc;
 }

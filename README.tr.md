@@ -56,7 +56,7 @@ cd codex-hud
 
 # Bu depoyu yerel bir eklenti pazarı olarak kaydedin, ardından eklentiyi ekleyin:
 codex plugin marketplace add "$(pwd)"
-codex plugin add codex-hud@codex-hud
+codex plugin add brandonwie@codex-hud
 ```
 
 Ardından HUD başlatıcısını kurun (önerilir). Varsayılan mod **gerçek Codex kurulumunuza delege eder**; böylece Homebrew/npm üzerinden gelen Codex güncellemeleri otomatik olarak devreye girer — yeniden derleme yok, yamalı ikili dosya yok. Açık olmak gerekirse: stok delegasyon başlatıcısı TUI içi bir altbilgi **oluşturmaz** — güvenli delegasyon ile yönetilen `codex` şimini sağlar; TUI içi altbilgi yalnızca aşağıdaki deneysel yamalı modda vardır:
@@ -312,7 +312,7 @@ codex-hud/
 
 ## Katkıda Bulunma
 
-Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. HUD çıktısını değiştirdikten sonra `npm test` ve Codex eklenti doğrulayıcısını çalıştırın. Manifest sürümünü değiştirdikten veya release aldıktan sonra manuel test için yerel eklenti önbelleğini `codex plugin add codex-hud@codex-hud` ile yenileyin, ardından güncellenmiş skill metadatasının yüklenmesi için yeni bir Codex thread başlatın.
+Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. HUD çıktısını değiştirdikten sonra `npm test` ve Codex eklenti doğrulayıcısını çalıştırın. Manifest sürümünü değiştirdikten veya release aldıktan sonra manuel test için yerel eklenti önbelleğini `codex plugin add brandonwie@codex-hud` ile yenileyin, ardından güncellenmiş skill metadatasının yüklenmesi için yeni bir Codex thread başlatın.
 
 ### Bakımcı betikleri
 

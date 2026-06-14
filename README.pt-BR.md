@@ -56,7 +56,7 @@ cd codex-hud
 
 # Registre este repositório como um marketplace de plugins local e, em seguida, adicione o plugin:
 codex plugin marketplace add "$(pwd)"
-codex plugin add codex-hud@codex-hud
+codex plugin add brandonwie@codex-hud
 ```
 
 Em seguida, instale o launcher do HUD (recomendado). O modo padrão **delega para a sua instalação real do Codex**, então as atualizações do Codex via Homebrew/npm são aplicadas automaticamente — sem recompilações, sem binários com patch. Para deixar claro: o launcher com delegação ao Codex original **não** renderiza um rodapé dentro da TUI — ele oferece delegação segura mais o shim gerenciado `codex`; um rodapé dentro da TUI existe apenas no modo experimental com patch abaixo.
@@ -312,7 +312,7 @@ codex-hud/
 
 ## Contribuindo
 
-Issues e pull requests são bem-vindos. Após alterar a saída do HUD, execute `npm test` e o validador de plugins do Codex. Após alterar a versão do manifesto ou publicar uma release, atualize o cache do plugin local para teste manual com `codex plugin add codex-hud@codex-hud` e inicie uma nova thread do Codex para carregar os metadados atualizados da skill.
+Issues e pull requests são bem-vindos. Após alterar a saída do HUD, execute `npm test` e o validador de plugins do Codex. Após alterar a versão do manifesto ou publicar uma release, atualize o cache do plugin local para teste manual com `codex plugin add brandonwie@codex-hud` e inicie uma nova thread do Codex para carregar os metadados atualizados da skill.
 
 ### Scripts de mantenedor
 

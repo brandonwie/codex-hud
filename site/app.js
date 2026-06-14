@@ -35,6 +35,12 @@
   };
 
   const shortModel = (value) => value.replace(/^gpt-/, "");
+  const tokenPreview = {
+    total: "42k",
+    input: "24k",
+    output: "1k",
+    cache: "17k",
+  };
 
   const clean = (value, fallback) => {
     const next = String(value || "").trim().replace(/\s+/g, "-");
@@ -49,7 +55,14 @@
 
   const remaining = (value, hours) => {
     const left = ((100 - value) / 100) * hours;
-    return `${left.toFixed(1)}${hours > 24 ? "D" : "H"}`;
+    const amount = hours > 24 ? left / 24 : left;
+    const unit = hours > 24 ? "d" : "h";
+    return `${amount.toFixed(1).replace(/\.0$/, "")}${unit}`;
+  };
+
+  const paceDetail = (value) => {
+    const prefix = value >= 70 ? "🔥" : value >= 30 ? "👾" : "🐢";
+    return `${prefix}${Math.max(1, Math.round((value / 30) * 100))}%`;
   };
 
   const append = (line, text, className) => {
@@ -59,29 +72,69 @@
     line.append(span);
   };
 
+  const appendSeparator = (line) => append(line, "|", "separator");
+
+  const appendMetric = (line, label, percent, detail) => {
+    append(line, label, "label");
+    append(line, ":", "label");
+    append(line, `${percent}%`, percentClass(percent));
+    if (!detail) return;
+    append(line, "(", "label");
+    append(line, detail.remaining, "detail");
+    append(line, ",", "label");
+    append(line, detail.pace, "pace");
+    append(line, ")", "label");
+  };
+
+  const appendTokenUsage = (line) => {
+    append(line, "Tkn", "label");
+    append(line, ":", "label");
+    append(line, tokenPreview.total, "token-total");
+    append(line, "(", "label");
+    append(line, "I:", "label");
+    append(line, tokenPreview.input, "token-value");
+    append(line, ",O:", "label");
+    append(line, tokenPreview.output, "token-value");
+    append(line, ",C:", "label");
+    append(line, tokenPreview.cache, "token-value");
+    append(line, ")", "label");
+  };
+
   const renderLine = (target, state) => {
     if (!target) return;
     target.textContent = "";
     target.classList.toggle("no-color", !state.color);
 
-    append(target, state.modelText, "model");
-    append(target, ` ${state.effortText}`, "effort");
+    append(target, `${state.modelText}${state.effortText}`, "model");
 
     if (state.git) {
-      append(target, " | ", "muted");
-      append(target, `${state.project} git:(${state.branch})`, "git");
+      appendSeparator(target);
+      append(target, state.project, "project");
+      appendSeparator(target);
+      const dirty = state.branch.endsWith("*");
+      const branch = dirty ? state.branch.slice(0, -1) : state.branch;
+      append(target, "git(", "label");
+      append(target, branch, "branch");
+      if (dirty) append(target, "*", "dirty");
+      append(target, ")", "label");
     }
 
-    append(target, " | ", "muted");
-    append(target, `CTX:${state.context}%`, percentClass(state.context));
-    append(target, " | ", "muted");
-    append(target, `5H:${state.fiveHour}%(${remaining(state.fiveHour, 5)})`, percentClass(state.fiveHour));
-    append(target, " | ", "muted");
-    append(target, `7D:${state.sevenDay}%(${remaining(state.sevenDay, 7 * 24)})`, percentClass(state.sevenDay));
+    appendSeparator(target);
+    appendMetric(target, "Ctx", state.context);
+    appendSeparator(target);
+    appendMetric(target, "5h", state.fiveHour, {
+      remaining: remaining(state.fiveHour, 5),
+      pace: paceDetail(state.fiveHour),
+    });
+    appendSeparator(target);
+    appendMetric(target, "7d", state.sevenDay, {
+      remaining: remaining(state.sevenDay, 7 * 24),
+      pace: paceDetail(state.sevenDay),
+    });
 
     if (state.tokenUsage) {
-      append(target, " | ", "muted");
-      append(target, "TKN:42k", "ok");
+      appendSeparator(target);
+      appendTokenUsage(target);
     }
   };
 
@@ -99,7 +152,15 @@
       "",
       "[colors]",
       'model = "neonViolet"',
-      'branch = "#5fafff"',
+      'project = "cyan"',
+      'branch = "neonViolet"',
+      'label = "dim"',
+      'separator = "dim"',
+      'tokenTotal = "amber"',
+      'tokenInput = "cyan"',
+      'tokenOutput = "cyan"',
+      'tokenCache = "cyan"',
+      'pace = "mint"',
       'ok = "mint"',
       'warn = "amber"',
       'crit = "coral"',
