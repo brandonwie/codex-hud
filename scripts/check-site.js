@@ -99,6 +99,10 @@ for (const [setting, id] of readmeConfigControls) {
   if (!js.includes(`byId("${id}")`)) fail.push(`site app does not read ${setting}`);
 }
 
+for (const id of ["five-hour-pace", "seven-day-pace", "five-hour-pace-out", "seven-day-pace-out"]) {
+  if (!html.includes(`id="${id}"`)) fail.push(`missing pace control ${id}`);
+}
+
 if (exists("site/CNAME")) {
   fail.push("site/CNAME must stay absent until custom-domain DNS resolves");
 }
@@ -223,6 +227,7 @@ const createElement = (id, options = {}) => {
 
 const runInteractiveSmoke = () => {
   const elements = {
+    "hud-form": createElement("hud-form"),
     model: createElement("model", { value: "gpt-5.5" }),
     effort: createElement("effort", { value: "xhigh" }),
     project: createElement("project", { value: "codex-hud" }),
@@ -252,9 +257,13 @@ const runInteractiveSmoke = () => {
     context: createElement("context", { value: "32" }),
     "five-hour": createElement("five-hour", { value: "6" }),
     "seven-day": createElement("seven-day", { value: "4" }),
+    "five-hour-pace": createElement("five-hour-pace", { value: "20" }),
+    "seven-day-pace": createElement("seven-day-pace", { value: "13" }),
     "context-out": createElement("context-out"),
     "five-hour-out": createElement("five-hour-out"),
     "seven-day-out": createElement("seven-day-out"),
+    "five-hour-pace-out": createElement("five-hour-pace-out"),
+    "seven-day-pace-out": createElement("seven-day-pace-out"),
     "hud-line": createElement("hud-line"),
     "hero-hud-line": createElement("hero-hud-line"),
     "config-code": createElement("config-code"),
@@ -292,6 +301,8 @@ const runInteractiveSmoke = () => {
     "context",
     "five-hour",
     "seven-day",
+    "five-hour-pace",
+    "seven-day-pace",
   ];
   const document = {
     body: createElement("body"),
@@ -353,6 +364,24 @@ const runInteractiveSmoke = () => {
     fail.push("interactive preview must emit README effortShort default");
   }
 
+  elements["five-hour"].value = "35";
+  elements["five-hour"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,🐢20%)")) {
+    fail.push("5h usage must not change the separate 5h pace percentage");
+  }
+  if (elements["hud-line"].textContent.includes("117%")) {
+    fail.push("5h pace percentage must never be derived above 100 from usage");
+  }
+  if (elements["five-hour-pace-out"].textContent !== "20%") {
+    fail.push("5h pace output must stay independent when only usage changes");
+  }
+
+  elements["five-hour-pace"].value = "87";
+  elements["five-hour-pace"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,🔥87%)")) {
+    fail.push("5h pace control must update pace independently from usage");
+  }
+
   elements.space.checked = true;
   elements.separator.value = "·";
   elements.segments.value = "model, runtime, ctx, 5h, 7d, tkn";
@@ -369,11 +398,18 @@ const runInteractiveSmoke = () => {
   elements["pace-normal-prefix"].value = "N";
   elements["pace-fast-prefix"].value = "F";
   elements.context.value = "88";
-  elements.context.dispatchEvent({ type: "input" });
+  elements["five-hour"].value = "6";
+  elements["five-hour-pace"].value = "20";
+  elements["seven-day"].value = "4";
+  elements["seven-day-pace"].value = "13";
+  elements["hud-form"].dispatchEvent({ type: "input" });
 
   const customLine = elements["hud-line"].textContent;
   if (!customLine.includes("gpt-5.5xh · node v24 · CTX: 88.0%")) {
     fail.push("interactive preview must apply spacing, separator, labels, percent precision, and short effort controls");
+  }
+  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · node v24 · CTX: 88.0%")) {
+    fail.push("hero preview must apply the same panel settings as the result preview");
   }
   if (!customLine.includes("5h: 6.0%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
     fail.push("interactive preview must hide pace detail when format.pace is false");
@@ -402,6 +438,17 @@ const runInteractiveSmoke = () => {
   ];
   for (const snippet of expectedConfigSnippets) {
     if (!customConfig.includes(snippet)) fail.push(`generated config missing ${snippet}`);
+  }
+
+  elements["show-pace"].checked = true;
+  elements["seven-day"].value = "34";
+  elements["seven-day-pace"].value = "100";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("7d: 34.0%(4.6d,F100%)")) {
+    fail.push("7d pace control must stay separate from usage and cap at 100%");
+  }
+  if (elements["hud-line"].textContent.includes("113%")) {
+    fail.push("7d pace percentage must never be derived above 100 from usage");
   }
 };
 
