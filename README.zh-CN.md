@@ -315,3 +315,7 @@ codex-hud/
 ## 许可证
 
 [MIT](LICENSE) © Brandon Wie
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=brandonwie/codex-hud&type=Date)](https://star-history.com/#brandonwie/codex-hud&Date)

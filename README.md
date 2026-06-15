@@ -345,3 +345,7 @@ Issues and pull requests are welcome. After changing HUD output, run `npm test` 
 ## License
 
 [MIT](LICENSE) © Brandon Wie
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=brandonwie/codex-hud&type=Date)](https://star-history.com/#brandonwie/codex-hud&Date)

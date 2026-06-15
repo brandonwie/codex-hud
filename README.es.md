@@ -315,3 +315,7 @@ Comandos habituales de mantenimiento: `npm test`, `npm run test:rust`, `npm run 
 ## Licencia
 
 [MIT](LICENSE) © Brandon Wie
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=brandonwie/codex-hud&type=Date)](https://star-history.com/#brandonwie/codex-hud&Date)
