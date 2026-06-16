@@ -346,6 +346,8 @@ Issues and pull requests are welcome. After changing HUD output, run `npm test` 
 
 [MIT](LICENSE) © Brandon Wie
 
+Website UI direction openly inspired by [Herdr](https://herdr.dev/). I'm a huge fan.
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=brandonwie/codex-hud&type=Date)](https://star-history.com/#brandonwie/codex-hud&Date)
