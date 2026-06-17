@@ -8,6 +8,7 @@ const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const canonical = "https://brandonwie.github.io/codex-hud/";
+const repositoryName = "brandonwie/codex-hud";
 const unresolvedCustomHost = ["codex-hud", "brandonwie", "dev"].join(".");
 const requiredFiles = [
   "site/index.html",
@@ -65,6 +66,7 @@ const mustContain = [
   [readme, "assets/codex-hud-screenshot.png", "README screenshot"],
   [html, "https://herdr.dev/", "Herdr credit link"],
   [html, "I'm a huge fan", "Herdr fan note"],
+  [html, repositoryName, "exact owner/repo search phrase"],
 ];
 
 for (const [content, needle, label] of mustContain) {
@@ -146,11 +148,15 @@ if (
 const title = html.match(/<title>([^<]+)<\/title>/i);
 if (!title || title[1].length < 20 || title[1].length > 65) {
   fail.push("title length must stay between 20 and 65 characters");
+} else if (!title[1].includes(repositoryName)) {
+  fail.push("title must include exact owner/repo search phrase");
 }
 
 const description = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
 if (!description || description[1].length < 120 || description[1].length > 170) {
   fail.push("description length must stay between 120 and 170 characters");
+} else if (!description[1].includes(repositoryName)) {
+  fail.push("description must include exact owner/repo search phrase");
 }
 
 const jsonLdBlocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
