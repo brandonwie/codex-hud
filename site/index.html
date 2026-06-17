@@ -130,8 +130,8 @@
             <a class="button primary" href="#try">Try settings</a>
             <a class="button" href="https://github.com/brandonwie/codex-hud">View source</a>
           </div>
-          <div class="install-strip" aria-label="Quick install command">
-            <code>codex plugin add brandonwie@codex-hud</code>
+          <div class="install-strip" aria-label="Repo marketplace install commands">
+            <code>codex plugin marketplace add brandonwie/codex-hud &amp;&amp; codex plugin add brandonwie@codex-hud</code>
           </div>
         </div>
 
@@ -388,15 +388,19 @@
         </div>
         <div class="steps">
           <article>
-            <h3>1. Add the plugin</h3>
+            <h3>1. Add the repo marketplace</h3>
+            <code>codex plugin marketplace add brandonwie/codex-hud</code>
+          </article>
+          <article>
+            <h3>2. Add the plugin</h3>
             <code>codex plugin add brandonwie@codex-hud</code>
           </article>
           <article>
-            <h3>2. Preview the line</h3>
+            <h3>3. Preview the line</h3>
             <code>codex-hud --line --color</code>
           </article>
           <article>
-            <h3>3. Scaffold config</h3>
+            <h3>4. Scaffold config</h3>
             <code>codex-hud --init-config</code>
           </article>
         </div>
