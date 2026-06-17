@@ -131,7 +131,25 @@
             <a class="button" href="https://github.com/brandonwie/codex-hud">View source</a>
           </div>
           <div class="install-strip" aria-label="Repo marketplace install commands">
-            <code>codex plugin marketplace add brandonwie/codex-hud &amp;&amp; codex plugin add brandonwie@codex-hud</code>
+            <code id="install-command">codex plugin marketplace add brandonwie/codex-hud &amp;&amp; codex plugin add brandonwie@codex-hud</code>
+            <button
+              class="install-copy-button"
+              type="button"
+              id="copy-install"
+              aria-label="Copy install command"
+              title="Copy install command"
+            >
+              <svg
+                class="copy-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+              </svg>
+            </button>
+            <p class="install-copy-status" id="install-copy-status" role="status" aria-live="polite"></p>
           </div>
         </div>
 

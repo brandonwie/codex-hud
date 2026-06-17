@@ -198,12 +198,62 @@ h3 {
 .install-strip {
   width: min(100%, 620px);
   margin-top: 28px;
-  padding: 13px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px;
   color: var(--accent);
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 4px;
+  overflow: hidden;
+}
+
+.install-strip code {
+  min-width: 0;
   overflow-x: auto;
+  padding: 3px 0;
+  white-space: nowrap;
+}
+
+.install-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.install-copy-button:hover,
+.install-copy-button:focus-visible {
+  border-color: var(--ink);
+}
+
+.copy-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.install-copy-status {
+  grid-column: 1 / -1;
+  min-height: 16px;
+  margin: 0;
+  color: var(--ok);
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .terminal-hero {
