@@ -41,6 +41,9 @@ const readme = exists("README.md") ? read("README.md") : "";
 
 const mustContain = [
   [html, `<link rel="canonical" href="${canonical}">`, "canonical link"],
+  [html, 'name="author"', "author meta"],
+  [html, 'rel="author"', "author link"],
+  [html, 'rel="me"', "identity link"],
   [html, 'rel="icon"', "favicon link"],
   [html, 'name="description"', "meta description"],
   [html, 'property="og:title"', "Open Graph title"],
@@ -49,11 +52,23 @@ const mustContain = [
   [html, '"@type": "SoftwareApplication"', "SoftwareApplication schema"],
   [html, '"@type": "FAQPage"', "FAQ schema"],
   [html, 'id="hud-form"', "interactive form"],
+  [html, 'aria-describedby="settings-help"', "form accessible description"],
   [html, 'id="hud-line"', "live HUD output"],
+  [html, 'aria-label="Generated Codex HUD status line"', "HUD output accessible label"],
   [html, 'id="config-code"', "config output"],
+  [html, 'class="skip-link"', "skip link"],
+  [html, 'id="main-content"', "main skip target"],
+  [html, '<noscript>', "noscript fallback"],
   [html, "Codex HUD", "brand text"],
+  [html, '"downloadUrl": "https://github.com/brandonwie/codex-hud"', "schema download URL"],
+  [html, '"installUrl": "https://github.com/brandonwie/codex-hud#quick-start"', "schema install URL"],
   [css, "--terminal", "terminal styling"],
   [css, "@media", "responsive CSS"],
+  [css, ".skip-link", "skip link styling"],
+  [css, ":focus-visible", "visible focus styling"],
+  [css, "prefers-reduced-motion", "reduced motion preference"],
+  [css, "prefers-contrast: more", "high contrast preference"],
+  [css, ".sr-only", "screen-reader-only helper"],
   [js, "codex-hud.toml", "config generator"],
   [js, "navigator.clipboard", "copy behavior"],
   [robots, `Sitemap: ${canonical}sitemap.xml`, "robots sitemap"],
@@ -159,6 +174,17 @@ if (!description || description[1].length < 120 || description[1].length > 170) 
   fail.push("description must include exact owner/repo search phrase");
 }
 
+const sectionOpenCount = (html.match(/<section\b/g) || []).length;
+const sectionCloseCount = (html.match(/<\/section>/g) || []).length;
+if (sectionOpenCount !== sectionCloseCount) {
+  fail.push(`section tags must be balanced (${sectionOpenCount} open, ${sectionCloseCount} close)`);
+}
+
+const h1Count = (html.match(/<h1\b/g) || []).length;
+if (h1Count !== 1) {
+  fail.push(`site must have exactly one h1 (${h1Count})`);
+}
+
 const jsonLdBlocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
 for (const match of jsonLdBlocks) {
   try {
@@ -175,6 +201,11 @@ const readAttrs = (tag) => {
   }
   return attrs;
 };
+
+for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
+  const attrs = readAttrs(match[0]);
+  if (!("alt" in attrs)) fail.push(`image missing alt text: ${match[0].slice(0, 80)}`);
+}
 
 const externalScript = [...html.matchAll(/<script\b[^>]*>/gi)]
   .some((match) => /^https?:\/\//i.test(readAttrs(match[0]).src || ""));

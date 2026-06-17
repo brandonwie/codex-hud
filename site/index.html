@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
@@ -9,8 +9,11 @@
       content="brandonwie/codex-hud is a Codex CLI plugin that adds a compact, configurable status footer with context usage, git state, model, effort, and pace."
     >
     <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta name="author" content="Brandon Wie">
     <meta name="theme-color" content="#080d18">
     <link rel="canonical" href="https://brandonwie.github.io/codex-hud/">
+    <link rel="author" href="https://github.com/brandonwie">
+    <link rel="me" href="https://github.com/brandonwie">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css?v=20260618-copy-controls">
     <link rel="preload" href="assets/codex-hud-screenshot.png" as="image">
@@ -46,7 +49,16 @@
             "name": "brandonwie/codex-hud",
             "alternateName": "Codex HUD",
             "description": "Compact configurable status footer for OpenAI Codex CLI sessions from the brandonwie/codex-hud repository.",
-            "inLanguage": "en-US"
+            "inLanguage": "en-US",
+            "sameAs": [
+              "https://github.com/brandonwie/codex-hud",
+              "https://brandonwie.dev/"
+            ],
+            "publisher": {
+              "@type": "Person",
+              "name": "Brandon Wie",
+              "url": "https://github.com/brandonwie"
+            }
           },
           {
             "@type": "SoftwareApplication",
@@ -59,6 +71,10 @@
             "softwareVersion": "0.0.2",
             "description": "The brandonwie/codex-hud repository provides a local Codex plugin and patched TUI footer that renders model, effort, git branch, context usage, and rolling usage budgets in one line.",
             "url": "https://brandonwie.github.io/codex-hud/",
+            "downloadUrl": "https://github.com/brandonwie/codex-hud",
+            "installUrl": "https://github.com/brandonwie/codex-hud#quick-start",
+            "keywords": "OpenAI Codex CLI, Codex HUD, codex-hud, status footer, terminal HUD, context usage",
+            "softwareRequirements": "OpenAI Codex CLI",
             "sameAs": "https://github.com/brandonwie/codex-hud",
             "codeRepository": "https://github.com/brandonwie/codex-hud",
             "license": "https://github.com/brandonwie/codex-hud/blob/main/LICENSE",
@@ -108,6 +124,7 @@
     </script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
     <header class="site-header">
       <a class="brand" href="./" aria-label="Codex HUD home">
         <span class="brand-mark" aria-hidden="true">ch</span>
@@ -121,7 +138,7 @@
       </nav>
     </header>
 
-    <main>
+    <main id="main-content" tabindex="-1">
       <section class="hero" aria-labelledby="hero-title">
         <div class="hero-copy">
           <p class="eyebrow">OpenAI Codex CLI status line</p>
@@ -131,11 +148,11 @@
             Codex sessions: model, effort, git state, context budget, rolling
             usage, and pace without leaving the prompt.
           </p>
-          <div class="hero-actions" aria-label="Primary actions">
+          <div class="hero-actions">
             <a class="button primary" href="#try">Try settings</a>
             <a class="button" href="https://github.com/brandonwie/codex-hud">View source</a>
           </div>
-          <div class="install-strip" aria-label="Repo marketplace install commands">
+          <div class="install-strip" role="group" aria-label="Repo marketplace install commands">
             <code id="install-command">codex plugin marketplace add brandonwie/codex-hud &amp;&amp; codex plugin add brandonwie@codex-hud</code>
             <button
               class="install-copy-button"
@@ -174,7 +191,13 @@
             <p><span class="prompt">&gt;</span> tighten the installer docs and run checks</p>
             <p class="terminal-muted">Working... tests queued</p>
           </div>
-          <div class="hud-preview-line colorized" id="hero-hud-line" aria-live="polite"></div>
+          <div
+            class="hud-preview-line colorized"
+            id="hero-hud-line"
+            role="status"
+            aria-label="Codex HUD compact status line preview"
+            aria-live="polite"
+          ></div>
         </aside>
       </section>
 
@@ -194,7 +217,8 @@
           <h2 id="try-title">Tune the footer before install.</h2>
         </div>
 
-        <form class="settings-panel" id="hud-form">
+        <p class="sr-only" id="settings-help">Changing these controls updates the status line preview and generated codex-hud.toml configuration.</p>
+        <div class="settings-panel" id="hud-form" aria-describedby="settings-help">
           <fieldset>
             <legend>Session</legend>
             <label>
@@ -235,7 +259,7 @@
               Separator
               <input id="separator" data-setting type="text" value="|" maxlength="6" autocomplete="off">
             </label>
-            <div class="segment-options" aria-label="Segments">
+            <div class="segment-options" role="group" aria-label="Segments">
               <label class="toggle">
                 <input id="segment-model" data-setting type="checkbox" checked>
                 <span>Model</span>
@@ -317,30 +341,35 @@
                 <input id="threshold-crit" data-setting type="number" min="0" max="100" value="90" inputmode="numeric">
               </label>
             </div>
-            <label>
-              Context <output id="context-out" for="context">32%</output>
+            <div class="range-control">
+              <label for="context">Context</label>
+              <output id="context-out" for="context">32%</output>
               <input id="context" data-setting type="range" min="0" max="100" value="32">
-            </label>
-            <label>
-              5 hour <output id="five-hour-out" for="five-hour">6%</output>
+            </div>
+            <div class="range-control">
+              <label for="five-hour">5 hour</label>
+              <output id="five-hour-out" for="five-hour">6%</output>
               <input id="five-hour" data-setting type="range" min="0" max="100" value="6">
-            </label>
-            <label>
-              7 day <output id="seven-day-out" for="seven-day">4%</output>
+            </div>
+            <div class="range-control">
+              <label for="seven-day">7 day</label>
+              <output id="seven-day-out" for="seven-day">4%</output>
               <input id="seven-day" data-setting type="range" min="0" max="100" value="4">
-            </label>
+            </div>
           </fieldset>
 
           <fieldset>
             <legend>Pace</legend>
-            <label>
-              5 hour pace <output id="five-hour-pace-out" for="five-hour-pace">20%</output>
+            <div class="range-control">
+              <label for="five-hour-pace">5 hour pace</label>
+              <output id="five-hour-pace-out" for="five-hour-pace">20%</output>
               <input id="five-hour-pace" data-setting type="range" min="0" max="100" value="20">
-            </label>
-            <label>
-              7 day pace <output id="seven-day-pace-out" for="seven-day-pace">13%</output>
+            </div>
+            <div class="range-control">
+              <label for="seven-day-pace">7 day pace</label>
+              <output id="seven-day-pace-out" for="seven-day-pace">13%</output>
               <input id="seven-day-pace" data-setting type="range" min="0" max="100" value="13">
-            </label>
+            </div>
           </fieldset>
 
           <fieldset>
@@ -388,15 +417,21 @@
               </label>
             </div>
           </fieldset>
-        </form>
+        </div>
 
-        <div class="result-panel" aria-label="Generated Codex HUD result">
+        <section class="result-panel" aria-label="Generated Codex HUD result">
           <div class="terminal-surface">
             <div class="terminal-bar">
               <span>status line</span>
               <span id="pace-state">normal pace</span>
             </div>
-            <div class="hud-preview-line colorized" id="hud-line" aria-live="polite"></div>
+            <div
+              class="hud-preview-line colorized"
+              id="hud-line"
+              role="status"
+              aria-label="Generated Codex HUD status line"
+              aria-live="polite"
+            ></div>
           </div>
           <div class="config-output">
             <div class="config-heading">
@@ -406,7 +441,7 @@
             <pre><code id="config-code"></code></pre>
             <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
           </div>
-        </div>
+        </section>
       </section>
 
       <section class="split-section" id="install" aria-labelledby="install-title">
@@ -546,6 +581,9 @@
       <a href="https://brandonwie.dev/">brandonwie.dev</a>
     </footer>
 
+    <noscript>
+      <p class="noscript-note">Codex HUD install steps and repository links are available on this page. The interactive footer preview and generated config require JavaScript.</p>
+    </noscript>
     <script src="app.js?v=20260618-copy-controls" defer></script>
   </body>
 </html>
