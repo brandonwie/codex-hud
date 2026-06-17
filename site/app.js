@@ -56,6 +56,9 @@
     paceState: byId("pace-state"),
     copy: byId("copy-config"),
     copyStatus: byId("copy-status"),
+    installCommand: byId("install-command"),
+    copyInstall: byId("copy-install"),
+    installCopyStatus: byId("install-copy-status"),
   };
 
   // Mirror rust/src/render.rs format_reasoning_effort():
@@ -426,11 +429,9 @@
     if (output.config) output.config.textContent = configFor(state);
   };
 
-  const copyConfig = async () => {
-    if (!output.config) return;
-    const text = output.config.textContent || "";
+  const copyText = async (text, status) => {
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
       } else {
         const area = document.createElement("textarea");
@@ -443,10 +444,20 @@
         document.execCommand("copy");
         area.remove();
       }
-      if (output.copyStatus) output.copyStatus.textContent = "Copied.";
+      if (status) status.textContent = "Copied.";
     } catch (error) {
-      if (output.copyStatus) output.copyStatus.textContent = "Copy failed.";
+      if (status) status.textContent = "Copy failed.";
     }
+  };
+
+  const copyConfig = async () => {
+    if (!output.config) return;
+    await copyText(output.config.textContent || "", output.copyStatus);
+  };
+
+  const copyInstall = async () => {
+    if (!output.installCommand) return;
+    await copyText(output.installCommand.textContent || "", output.installCopyStatus);
   };
 
   document.querySelectorAll("[data-setting]").forEach((element) => {
@@ -463,6 +474,9 @@
 
   if (output.copy) {
     output.copy.addEventListener("click", copyConfig);
+  }
+  if (output.copyInstall) {
+    output.copyInstall.addEventListener("click", copyInstall);
   }
 
   render();
