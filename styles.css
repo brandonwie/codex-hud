@@ -199,8 +199,8 @@ h3 {
   width: min(100%, 620px);
   margin-top: 28px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: stretch;
   gap: 8px 10px;
   padding: 10px;
   color: var(--accent);
@@ -211,22 +211,26 @@ h3 {
 }
 
 .install-strip code {
+  display: block;
   min-width: 0;
   overflow-x: auto;
-  padding: 3px 0;
+  align-self: center;
+  padding: 4px 0;
+  line-height: 1.45;
   white-space: nowrap;
 }
 
 .install-copy-button {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
-  color: var(--ink);
-  background: var(--panel);
+  color: var(--accent);
+  background: var(--terminal);
   border: 1px solid var(--line);
   border-radius: 4px;
   cursor: pointer;
@@ -234,6 +238,8 @@ h3 {
 
 .install-copy-button:hover,
 .install-copy-button:focus-visible {
+  color: var(--ink);
+  background: var(--paper);
   border-color: var(--ink);
 }
 
@@ -572,7 +578,7 @@ pre {
 
 .command-copy-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   align-items: stretch;
   gap: 10px;
 }
