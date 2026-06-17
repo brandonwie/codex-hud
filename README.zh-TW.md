@@ -169,6 +169,7 @@ percentRound = true # false -> one decimal place
 tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> 僅顯示總計，隱藏 (I:.. O:.. C:..)
 pace = true     # false -> hide the pace % in 5h/7d
+pacePrefix = true # false -> 隱藏節奏圖示（🐢/👾/🔥），保留 %
 modelShort = true # false -> gpt-5.5 而不是 5.5
 effortShort = false # true -> xh 而不是 xhigh
 paceSlowPrefix = "🐢"

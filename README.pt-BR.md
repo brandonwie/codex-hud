@@ -169,6 +169,7 @@ percentRound = true # false -> one decimal place
 tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> apenas total, oculta (I:.. O:.. C:..)
 pace = true     # false -> hide the pace % in 5h/7d
+pacePrefix = true   # false -> oculta o ícone de ritmo (🐢/👾/🔥), mantém o %
 modelShort = true # false -> gpt-5.5 em vez de 5.5
 effortShort = false # true -> xh em vez de xhigh
 paceSlowPrefix = "🐢"

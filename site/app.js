@@ -32,6 +32,7 @@
     percentRound: byId("percent-round"),
     tokenUnits: byId("token-units"),
     pace: byId("show-pace"),
+    pacePrefix: byId("pace-prefix"),
     paceSlowPrefix: byId("pace-slow-prefix"),
     paceNormalPrefix: byId("pace-normal-prefix"),
     paceFastPrefix: byId("pace-fast-prefix"),
@@ -181,11 +182,12 @@
     // Port of paceStatePrefix(): the marker keys off (usedPercent - pacePercent),
     // not the pace value alone. Number respects format.percentRound like the plugin.
     const diff = used - pace;
-    const prefix = diff < -PACE_CRIT
+    const marker = diff < -PACE_CRIT
       ? state.paceSlowPrefix
       : diff > PACE_CRIT
         ? state.paceFastPrefix
         : state.paceNormalPrefix;
+    const prefix = state.pacePrefix ? marker : "";
     return `${prefix}${formatPercent(pace, state)}`;
   };
 
@@ -330,6 +332,7 @@
     `tokenUnits = ${state.tokenUnits}`,
     `tokenUsage = ${state.tokenUsage}`,
     `pace = ${state.pace}`,
+    `pacePrefix = ${state.pacePrefix}`,
     `modelShort = ${state.shortModel}`,
     `effortShort = ${state.shortEffort}`,
     `paceSlowPrefix = ${tomlString(state.paceSlowPrefix)}`,
@@ -385,6 +388,7 @@
       tokenUnits: readBool(field.tokenUnits, true),
       tokenUsage: readBool(field.tokenUsage, true),
       pace: readBool(field.pace, true),
+      pacePrefix: readBool(field.pacePrefix, true),
       shortModel: shortModelEnabled,
       shortEffort: shortEffortEnabled,
       paceSlowPrefix: readText(field.paceSlowPrefix, "🐢"),

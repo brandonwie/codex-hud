@@ -178,6 +178,10 @@ const LINE_CASES = [
     hud: { config: { format: { paceSlowPrefix: "slow-", paceNormalPrefix: "ok-", paceFastPrefix: "fast-" } } },
     usage: { rateLimits: { primary: { usedPercent: 80, windowMinutes: 100, resetsAt: (FIXED / 1000) + 3000 }, secondary: null } },
   } },
+  { name: "no-pace-prefix", over: {
+    hud: { config: { format: { pacePrefix: false } } },
+    usage: { rateLimits: { primary: { usedPercent: 50, windowMinutes: 100, resetsAt: (FIXED / 1000) + 3000 }, secondary: null } },
+  } },
   { name: "subset-segments", over: { hud: { config: { segments: ["model", "ctx", "tkn"] } } } },
   { name: "reordered-segments", over: { hud: { config: { segments: ["tkn", "branch", "model"] } } } },
   { name: "runtime-enabled", over: { hud: { config: { segments: ["model", "project", "branch", "runtime", "ctx", "5h", "7d", "tkn"] } } } },

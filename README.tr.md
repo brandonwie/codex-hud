@@ -169,6 +169,7 @@ percentRound = true # false -> one decimal place
 tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> yalnızca toplam, (I:.. O:.. C:..) gizle
 pace = true     # false -> hide the pace % in 5h/7d
+pacePrefix = true   # false -> hız simgesini (🐢/👾/🔥) gizle, %'yi koru
 modelShort = true # false -> 5.5 yerine gpt-5.5
 effortShort = false # true -> xhigh yerine xh
 paceSlowPrefix = "🐢"
