@@ -100,12 +100,34 @@ impl ChatWidget {
 }
 `);
 
+writeFile(root, "codex-rs/tui/src/skills_helpers.rs", `
+pub(crate) fn skill_display_name(skill: &SkillMetadata) -> String {
+    if let Some(display_name) = skill
+        .interface
+        .as_ref()
+        .and_then(|interface| interface.display_name.as_deref())
+    {
+        return display_name.to_string();
+    }
+
+    if let Some((plugin_name, skill_name)) = skill.name.split_once(':')
+        && !plugin_name.is_empty()
+        && !skill_name.is_empty()
+    {
+        return format!("{skill_name} ({plugin_name})");
+    }
+
+    skill.name.clone()
+}
+`);
+
 const firstChanges = patchSource(root);
 const secondChanges = patchSource(root);
 
 const configTypes = fs.readFileSync(path.join(root, "codex-rs/config/src/types.rs"), "utf8");
 const coreConfig = fs.readFileSync(path.join(root, "codex-rs/core/src/config/mod.rs"), "utf8");
 const statusSurfaces = fs.readFileSync(path.join(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs"), "utf8");
+const skillsHelpers = fs.readFileSync(path.join(root, "codex-rs/tui/src/skills_helpers.rs"), "utf8");
 
 assert(firstChanges.length >= 5, "expected patchSource to patch every anchor");
 assert.deepStrictEqual(secondChanges, [], "patchSource should be idempotent");
@@ -118,6 +140,14 @@ assert(statusSurfaces.includes("fn ansi_status_line_to_line"));
 assert(statusSurfaces.includes("ratatui::style::Color::Indexed"));
 assert(statusSurfaces.includes(".lines()"));
 assert(statusSurfaces.includes(".next()"));
+assert(
+  skillsHelpers.includes('format!("{plugin_name}:{skill_name}")'),
+  "skill_display_name must render plugin skills as plugin:skill",
+);
+assert(
+  !skillsHelpers.includes('format!("{skill_name} ({plugin_name})")'),
+  "old skill (plugin) formatter must be replaced",
+);
 assert(
   statusLineCommandFor({ kind: "rust", path: "/tmp/test-prefix/codex-hud" }).includes("--line --color"),
   "patched Codex footer command must use compact single-line HUD output",

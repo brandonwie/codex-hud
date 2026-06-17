@@ -606,6 +606,7 @@ function patchSource(sourceRoot) {
   const configTypes = path.join(sourceRoot, "codex-rs", "config", "src", "types.rs");
   const coreConfig = path.join(sourceRoot, "codex-rs", "core", "src", "config", "mod.rs");
   const statusSurfaces = path.join(sourceRoot, "codex-rs", "tui", "src", "chatwidget", "status_surfaces.rs");
+  const skillsHelpers = path.join(sourceRoot, "codex-rs", "tui", "src", "skills_helpers.rs");
 
   const changes = [];
 
@@ -728,6 +729,20 @@ function patchSource(sourceRoot) {
 
   if (ensureAnsiStatusLineParser(statusSurfaces)) {
     changes.push("TUI ANSI status-line parser");
+  }
+
+  // Render plugin-contributed skills in the interactive TUI picker / mention
+  // popup / composer as `plugin:skill` (e.g. `3b:wrap`) instead of the upstream
+  // `skill (plugin)` inversion (`wrap (3b)`). Matches the model-prompt label
+  // (core-skills render) and the Claude `/3b:` surface. Only the plugin branch
+  // (skill.name contains ':') is affected; bare skills fall through unchanged.
+  if (applyTextPatch(
+    skillsHelpers,
+    `format!("{plugin_name}:{skill_name}")`,
+    `        return format!("{skill_name} ({plugin_name})");`,
+    `        return format!("{plugin_name}:{skill_name}");`,
+  )) {
+    changes.push("TUI skill picker plugin:skill label");
   }
 
   return changes;
