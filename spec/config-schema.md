@@ -137,6 +137,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `tokenUnits`   | `true`  | Use `k`/`M` abbreviation for token counts.               |
 | `tokenUsage`   | `true`  | `false` → total only, hide `(I:.. O:.. C:..)`.           |
 | `pace`         | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
+| `pacePrefix`   | `true`  | `false` → hide the pace icon (🐢/👾/🔥), keep the `%`.   |
 | `modelShort`   | `true`  | `false` → keep full model names such as `gpt-5.5`.      |
 | `effortShort`  | `false` | `true` → `xh` instead of `xhigh`.                        |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
@@ -159,7 +160,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
   },
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
   format: {
-    percentRound: true, tokenUnits: true, tokenUsage: true, pace: true,
+    percentRound: true, tokenUnits: true, tokenUsage: true, pace: true, pacePrefix: true,
     modelShort: true, effortShort: false,
     paceSlowPrefix: "🐢", paceNormalPrefix: "👾", paceFastPrefix: "🔥",
   },

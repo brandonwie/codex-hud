@@ -169,6 +169,7 @@ percentRound = true # false -> one decimal place
 tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> только итог, скрыть (I:.. O:.. C:..)
 pace = true     # false -> hide the pace % in 5h/7d
+pacePrefix = true   # false -> скрыть значок темпа (🐢/👾/🔥), оставить %
 modelShort = true # false -> gpt-5.5 вместо 5.5
 effortShort = false # true -> xh вместо xhigh
 paceSlowPrefix = "🐢"

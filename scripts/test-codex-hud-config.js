@@ -84,6 +84,7 @@ try {
     assert.strictEqual(config.config.format.effortShort, false);
     assert.strictEqual(config.config.format.tokenUsage, true);
     assert.strictEqual(config.config.format.pace, true);
+    assert.strictEqual(config.config.format.pacePrefix, true);
     assert.strictEqual(config.config.format.paceSlowPrefix, "🐢");
     assert.strictEqual(config.config.format.paceNormalPrefix, "👾");
     assert.strictEqual(config.config.format.paceFastPrefix, "🔥");

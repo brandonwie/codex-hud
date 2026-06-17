@@ -169,6 +169,7 @@ percentRound = true # false -> one decimal place
 tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> แสดงเฉพาะยอดรวม, ซ่อน (I:.. O:.. C:..)
 pace = true     # false -> hide the pace % in 5h/7d
+pacePrefix = true # false -> ซ่อนไอคอน pace (🐢/👾/🔥), คง % ไว้
 modelShort = true # false -> gpt-5.5 แทน 5.5
 effortShort = false # true -> xh แทน xhigh
 paceSlowPrefix = "🐢"

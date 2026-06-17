@@ -370,6 +370,9 @@ fn color_by_pace_delta_cfg<'a>(
 }
 
 fn pace_state_prefix(percent: Option<f64>, pace: Option<f64>, ctx: &RenderCtx) -> String {
+    if !ctx.format_flag("pacePrefix") {
+        return String::new();
+    }
     let (Some(percent), Some(pace)) = (
         percent.filter(|v| v.is_finite()),
         pace.filter(|v| v.is_finite()),
