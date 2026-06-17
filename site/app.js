@@ -460,6 +460,15 @@
     await copyText(output.installCommand.textContent || "", output.installCopyStatus);
   };
 
+  const bindCommandCopyButtons = () => {
+    document.querySelectorAll("[data-copy-target]").forEach((button) => {
+      const target = byId(button.getAttribute("data-copy-target"));
+      const status = byId(button.getAttribute("data-copy-status"));
+      if (!target) return;
+      button.addEventListener("click", () => copyText(target.textContent || "", status));
+    });
+  };
+
   document.querySelectorAll("[data-setting]").forEach((element) => {
     element.addEventListener("input", render);
     element.addEventListener("change", render);
@@ -478,6 +487,7 @@
   if (output.copyInstall) {
     output.copyInstall.addEventListener("click", copyInstall);
   }
+  bindCommandCopyButtons();
 
   render();
   if (typeof window !== "undefined" && window.requestAnimationFrame) {

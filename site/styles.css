@@ -570,14 +570,31 @@ pre {
   padding: 18px;
 }
 
+.command-copy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: stretch;
+  gap: 10px;
+}
+
 .steps code {
   display: block;
+  min-width: 0;
   padding: 12px;
   color: var(--accent);
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 4px;
   overflow-x: auto;
+  white-space: nowrap;
+}
+
+.command-copy-status {
+  min-height: 16px;
+  margin: 6px 0 0;
+  color: var(--ok);
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .seo-grid {
