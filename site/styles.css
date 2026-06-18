@@ -11,6 +11,7 @@
   --ok: #7ed6a8;
   --warn: #f2bc66;
   --crit: #ff7f86;
+  --bench-work: rgba(141, 183, 255, 0.3);
   --terminal: #090d18;
   --terminal-line: #28324d;
   --terminal-text: #e7ebf7;
@@ -905,7 +906,7 @@ details p {
 }
 
 .bench-seg.work {
-  background: rgba(141, 183, 255, 0.3);
+  background: var(--bench-work);
 }
 
 .bench-total {
@@ -939,7 +940,7 @@ details p {
 }
 
 .swatch.work {
-  background: rgba(141, 183, 255, 0.3);
+  background: var(--bench-work);
 }
 
 .bench-takeaway {
