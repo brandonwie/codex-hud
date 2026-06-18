@@ -74,8 +74,8 @@ function timeOne(command, args) {
   const r = spawnSync(command, args, { cwd: repoRoot, encoding: "utf8", env });
   const elapsedMs = Number(process.hrtime.bigint() - start) / 1e6;
   if (r.status !== 0) {
-    console.error(`${command} ${args.join(" ")} exited ${r.status}: ${r.stderr || ""}`);
-    process.exit(1);
+    const stderr = (r.stderr || "").trim();
+    throw new Error(`${command} ${args.join(" ")} exited ${r.status}${stderr ? `: ${stderr}` : ""}`);
   }
   return { ms: elapsedMs, out: (r.stdout || "").trim() };
 }
@@ -143,6 +143,9 @@ try {
     console.log(`  => startupDelta ~= lineDelta means the per-paint win is runtime startup, not the shared git/log work.`);
     console.log(`\nNote: single machine, single session snapshot; absolute ms are not portable. Direction + delta are the durable signal.`);
   }
+} catch (error) {
+  console.error(error && error.message ? error.message : error);
+  process.exitCode = 1;
 } finally {
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (error) { /* ignore */ }
 }
