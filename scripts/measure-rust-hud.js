@@ -121,29 +121,28 @@ try {
 
   if (!nodeRenderer) {
     console.log(`\n(legacy Node renderer not recoverable from git ref ${LEGACY_REF}; skipping comparison)`);
-    return;
+  } else {
+    console.log(`\nStartup-only (--help: no git, no log parse):`);
+    const rustHelp = measure("rust --help", rustBin, ["--help"]);
+    const nodeHelp = measure("node --help", "node", [nodeRenderer, "--help"]);
+
+    console.log(`\nFull hot path (--line: startup + git subprocs + rollout-log parse):`);
+    // rustLine already measured above; measure node --line here.
+    const nodeLine = measure("node --line", "node", [nodeRenderer, "--line"]);
+
+    const startupDelta = nodeHelp.stats.median - rustHelp.stats.median;
+    const lineDelta = nodeLine.stats.median - rustLine.stats.median;
+
+    console.log(`\nAnalysis (Rust vs legacy Node, recovered from ${LEGACY_REF}):`);
+    console.log(`  output parity (--line): ${rustLine.out === nodeLine.out ? "IDENTICAL" : "DIFFERENT"}`);
+    console.log(`  startup delta  (node --help - rust --help): ${startupDelta.toFixed(1)}ms  (language/runtime startup cost)`);
+    console.log(`  hot-path delta (node --line - rust --line): ${lineDelta.toFixed(1)}ms  (saved per paint)`);
+    console.log(`  hot-path speedup (median): ${(nodeLine.stats.median / rustLine.stats.median).toFixed(2)}x`);
+    console.log(`  rust --line is ${(rustLine.stats.median - rustHelp.stats.median).toFixed(1)}ms above its own startup (shared git+log work)`);
+    console.log(`  node --line is ${(nodeLine.stats.median - nodeHelp.stats.median).toFixed(1)}ms above its own startup`);
+    console.log(`  => startupDelta ~= lineDelta means the per-paint win is runtime startup, not the shared git/log work.`);
+    console.log(`\nNote: single machine, single session snapshot; absolute ms are not portable. Direction + delta are the durable signal.`);
   }
-
-  console.log(`\nStartup-only (--help: no git, no log parse):`);
-  const rustHelp = measure("rust --help", rustBin, ["--help"]);
-  const nodeHelp = measure("node --help", "node", [nodeRenderer, "--help"]);
-
-  console.log(`\nFull hot path (--line: startup + git subprocs + rollout-log parse):`);
-  // rustLine already measured above; measure node --line here.
-  const nodeLine = measure("node --line", "node", [nodeRenderer, "--line"]);
-
-  const startupDelta = nodeHelp.stats.median - rustHelp.stats.median;
-  const lineDelta = nodeLine.stats.median - rustLine.stats.median;
-
-  console.log(`\nAnalysis (Rust vs legacy Node, recovered from ${LEGACY_REF}):`);
-  console.log(`  output parity (--line): ${rustLine.out === nodeLine.out ? "IDENTICAL" : "DIFFERENT"}`);
-  console.log(`  startup delta  (node --help - rust --help): ${startupDelta.toFixed(1)}ms  (language/runtime startup cost)`);
-  console.log(`  hot-path delta (node --line - rust --line): ${lineDelta.toFixed(1)}ms  (saved per paint)`);
-  console.log(`  hot-path speedup (median): ${(nodeLine.stats.median / rustLine.stats.median).toFixed(2)}x`);
-  console.log(`  rust --line is ${(rustLine.stats.median - rustHelp.stats.median).toFixed(1)}ms above its own startup (shared git+log work)`);
-  console.log(`  node --line is ${(nodeLine.stats.median - nodeHelp.stats.median).toFixed(1)}ms above its own startup`);
-  console.log(`  => startupDelta ~= lineDelta means the per-paint win is runtime startup, not the shared git/log work.`);
-  console.log(`\nNote: single machine, single session snapshot; absolute ms are not portable. Direction + delta are the durable signal.`);
 } finally {
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (error) { /* ignore */ }
 }
