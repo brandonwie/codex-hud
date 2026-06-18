@@ -40,6 +40,8 @@ Options:
   --mode <stock|patched>    Install mode. Defaults to stock.
   --renderer <auto|rust>    Status-line renderer. Defaults to auto (Rust renderer).
   --doctor                  Print install/runtime diagnostics and exit.
+  --check-patched           Check whether the patched runtime matches stock Codex.
+  --sync-patched            Check and repair the patched runtime when stock Codex changed.
   --version <version>       Codex CLI version to patch (patched mode). Defaults to installed codex version.
   --prefix <dir>            Install directory prefix. Defaults to ~/.local/bin.
   --bin-name <name>         Installed command name. Defaults to ${DEFAULT_BIN_NAME}.
@@ -205,6 +207,8 @@ function parseArgs(argv) {
     renderer: "auto",
     keepVersions: 2,
     doctor: false,
+    checkPatched: false,
+    syncPatched: false,
     dryRun: false,
     makeDefault: false,
     forceShim: false,
@@ -219,6 +223,10 @@ function parseArgs(argv) {
       args.help = true;
     } else if (arg === "--doctor") {
       args.doctor = true;
+    } else if (arg === "--check-patched") {
+      args.checkPatched = true;
+    } else if (arg === "--sync-patched") {
+      args.syncPatched = true;
     } else if (arg === "--dry-run") {
       args.dryRun = true;
     } else if (arg === "--make-default") {
@@ -1538,6 +1546,151 @@ function doctor(args, options = {}) {
   return report;
 }
 
+function patchedRuntimeStatus(report) {
+  const metadata = report.launcher.metadata || {};
+  const active = report.patched.active;
+  const stock = report.stock;
+  const activeVersion = active && !active.broken ? active.version : null;
+  const metadataPatchedVersion = metadata.patchedVersion || null;
+  const patchedVersion = activeVersion || metadataPatchedVersion || null;
+  const status = {
+    mode: report.launcher.mode || report.launcher.status,
+    stockVersion: stock ? stock.version : null,
+    stockRealpath: stock ? stock.realpath : null,
+    metadataStockVersion: metadata.stockVersion || null,
+    metadataStockRealpath: metadata.stockRealpath || null,
+    patchedVersion,
+    activeVersion,
+    metadataPatchedVersion,
+    needsSync: false,
+    action: "none",
+    canFix: true,
+    issues: [],
+  };
+
+  if (report.launcher.mode !== "patched") {
+    status.reason = report.launcher.mode === "stock"
+      ? "stock launcher delegates to stock Codex, so updates are picked up automatically"
+      : "patched launcher is not installed";
+    return status;
+  }
+
+  if (!stock) {
+    status.canFix = false;
+    status.issues.push("stock Codex was not found");
+  }
+
+  if (!active || active.broken) {
+    status.needsSync = true;
+    status.action = "rebuild";
+    status.issues.push(active && active.broken ? "active patched payload is broken" : "active patched payload is missing");
+  }
+
+  if (!patchedVersion) {
+    status.needsSync = true;
+    status.action = "rebuild";
+    status.issues.push("patched runtime version is unknown");
+  } else if (stock && stock.version !== patchedVersion) {
+    status.needsSync = true;
+    status.action = "rebuild";
+    status.issues.push(`stock Codex is ${stock.version} but patched runtime is ${patchedVersion}`);
+  }
+
+  if (stock && metadata.stockVersion && metadata.stockVersion !== stock.version) {
+    status.needsSync = true;
+    if (status.action !== "rebuild") {
+      status.action = "refresh-launcher";
+    }
+    status.issues.push(`launcher metadata stock version is ${metadata.stockVersion} but stock Codex is ${stock.version}`);
+  }
+
+  if (stock && metadata.stockRealpath && metadata.stockRealpath !== stock.realpath) {
+    status.needsSync = true;
+    if (status.action !== "rebuild") {
+      status.action = "refresh-launcher";
+    }
+    status.issues.push("launcher metadata stock realpath changed");
+  }
+
+  status.reason = status.needsSync
+    ? status.issues.join("; ")
+    : `patched runtime matches stock Codex ${patchedVersion}`;
+  return status;
+}
+
+function printPatchedRuntimeStatus(status) {
+  console.log(`patched sync mode: ${status.mode || "unknown"}`);
+  console.log(`stock Codex: ${status.stockVersion || "not found"}${status.stockRealpath ? ` (${status.stockRealpath})` : ""}`);
+  console.log(`patched runtime: ${status.patchedVersion || "not found"}`);
+  console.log(`sync action: ${status.needsSync ? status.action : "none"}`);
+  if (status.reason) {
+    console.log(`reason: ${status.reason}`);
+  }
+}
+
+function checkPatchedRuntime(args, options = {}) {
+  const report = doctor(args, options);
+  const status = patchedRuntimeStatus(report);
+  printPatchedRuntimeStatus(status);
+  return { report, status };
+}
+
+function refreshPatchedLauncher(args, report, options = {}) {
+  if (!report.stock) {
+    throw new Error("Cannot refresh patched launcher metadata because stock Codex was not found.");
+  }
+  const active = report.patched.active;
+  if (!active || active.broken || !active.version) {
+    throw new Error("Cannot refresh patched launcher metadata because the active patched payload is missing or broken.");
+  }
+  const resolveRendererImpl = options.resolveRenderer || resolveRenderer;
+  const renderer = resolveRendererImpl(args);
+  const statusLineCommand = statusLineCommandFor(renderer);
+  const launcher = installLauncher(args, {
+    mode: "patched",
+    patchedBinary: active.path,
+    patchedVersion: active.version,
+    stockPath: report.stock.path,
+    stockRealpath: report.stock.realpath,
+    stockVersion: report.stock.version,
+    statusLineCommand,
+    renderer: renderer.kind,
+    builtAt: new Date().toISOString(),
+  });
+  console.log(`Refreshed patched launcher metadata: ${launcher}`);
+  return { launcher, statusLineCommand };
+}
+
+function syncPatchedRuntime(args, options = {}) {
+  const first = checkPatchedRuntime(args, options);
+  if (!first.status.needsSync) {
+    console.log("Patched runtime is current; nothing to do.");
+    return { action: "none", status: first.status };
+  }
+  if (!first.status.canFix) {
+    throw new Error(`Cannot sync patched runtime: ${first.status.reason}`);
+  }
+
+  if (first.status.action === "refresh-launcher") {
+    refreshPatchedLauncher(args, first.report, options);
+    const afterRefresh = checkPatchedRuntime(args, options);
+    if (afterRefresh.status.needsSync) {
+      throw new Error(`Patched launcher refresh did not clear sync state: ${afterRefresh.status.reason}`);
+    }
+    return { action: "refreshed", status: afterRefresh.status };
+  }
+
+  const installPatched = options.runPatchedInstall || runPatchedInstall;
+  const installArgs = { ...args, mode: "patched", version: first.status.stockVersion || args.version };
+  console.log("Rebuilding patched runtime to match stock Codex.");
+  installPatched(installArgs);
+  const afterRebuild = checkPatchedRuntime(args, options);
+  if (afterRebuild.status.needsSync) {
+    throw new Error(`Patched runtime rebuild did not clear sync state: ${afterRebuild.status.reason}`);
+  }
+  return { action: "rebuilt", status: afterRebuild.status };
+}
+
 function printDoctorReport(report) {
   const lines = [];
   lines.push(`prefix: ${report.prefix}`);
@@ -1748,6 +1901,19 @@ function main() {
     return;
   }
 
+  if (args.checkPatched) {
+    const result = checkPatchedRuntime(args);
+    if (!result.status.canFix) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (args.syncPatched) {
+    syncPatchedRuntime(args);
+    return;
+  }
+
   if (args.mode === "stock") {
     runStockInstall(args);
     return;
@@ -1777,17 +1943,21 @@ module.exports = {
   installLauncher,
   installRustRenderer,
   isManagedDefaultShim,
+  checkPatchedRuntime,
   migrateLegacyLayout,
   parseArgs,
   parseLauncherMetadata,
+  patchedRuntimeStatus,
   patchSource,
   pruneVersionDirs,
   renderLauncherScript,
   rendererBinaryName,
   resolveRenderer,
+  refreshPatchedLauncher,
   reviewLegacyBinEntry,
   stageBuiltBinary,
   statusLineCommandFor,
+  syncPatchedRuntime,
   uninstallDefaultShim,
   verifyInstalledBinary,
   verifyRustRenderer,

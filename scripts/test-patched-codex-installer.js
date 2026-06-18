@@ -11,6 +11,7 @@ const {
   detectStockCodex,
   doctor,
   findStockCodexPath,
+  checkPatchedRuntime,
   installBuiltBinary,
   installDefaultShim,
   installLauncher,
@@ -19,13 +20,16 @@ const {
   migrateLegacyLayout,
   parseArgs,
   parseLauncherMetadata,
+  patchedRuntimeStatus,
   patchSource,
   pruneVersionDirs,
   renderLauncherScript,
   rendererBinaryName,
   resolveRenderer,
+  refreshPatchedLauncher,
   reviewLegacyBinEntry,
   statusLineCommandFor,
+  syncPatchedRuntime,
   uninstallDefaultShim,
   verifyInstalledBinary,
   verifyRustRenderer,
@@ -52,6 +56,7 @@ function escapeRegExp(value) {
 }
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-patch-test-"));
+const repoPackageVersion = require("../package.json").version;
 
 writeFile(root, "codex-rs/config/src/types.rs", `
 pub struct Tui {
@@ -222,6 +227,8 @@ assert.strictEqual(parsed.mode, "stock", "default mode must be stock (safe-by-de
 assert.strictEqual(parsed.keepVersions, 2);
 assert.strictEqual(parseArgs(["--mode", "patched"]).mode, "patched");
 assert.strictEqual(parseArgs(["--doctor"]).doctor, true);
+assert.strictEqual(parseArgs(["--check-patched"]).checkPatched, true);
+assert.strictEqual(parseArgs(["--sync-patched"]).syncPatched, true);
 assert.strictEqual(parseArgs(["--keep-versions", "3"]).keepVersions, 3);
 assert.strictEqual(parseArgs(["--version", "0.139.0-beta.1+build.2"]).version, "0.139.0-beta.1+build.2");
 assert.throws(() => parseArgs(["--mode", "yolo"]), /--mode must be stock or patched/);
@@ -722,11 +729,12 @@ const doctorStockRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-
 const doctorStockBin = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-stock-bin-test-"));
 const doctorFakeStock = path.join(doctorStockBin, "codex");
 writeExecutable(doctorFakeStock, fakeCodexScript("0.139.0"));
+const doctorFakeStockRealpath = fs.realpathSync.native(doctorFakeStock);
 const doctorStockArgs = { prefix: doctorStockRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
 const doctorStockLauncher = installLauncher(doctorStockArgs, {
   mode: "stock",
   stockPath: doctorFakeStock,
-  stockRealpath: doctorFakeStock,
+  stockRealpath: doctorFakeStockRealpath,
   stockVersion: "0.139.0",
 });
 fs.symlinkSync(doctorStockLauncher, path.join(doctorStockRoot, "codex"));
@@ -750,7 +758,7 @@ installLauncher(doctorStaleArgs, {
   patchedBinary: path.join(doctorStaleRoot, "codex-hud-codex"),
   patchedVersion: "0.138.0",
   stockPath: doctorFakeStock,
-  stockRealpath: doctorFakeStock,
+  stockRealpath: doctorFakeStockRealpath,
   stockVersion: "0.138.0",
   statusLineCommand: `'${path.join(doctorStaleRoot, "codex-hud")}' --line --color`,
   renderer: "rust",
@@ -765,6 +773,16 @@ assert(
   staleReport.recommendations.some((entry) => entry.includes("0.139.0") && entry.includes("0.138.0")),
   "doctor must recommend a rebuild when stock moved past the patched runtime",
 );
+const staleStatus = patchedRuntimeStatus(staleReport);
+assert.strictEqual(staleStatus.needsSync, true);
+assert.strictEqual(staleStatus.action, "rebuild");
+assert.strictEqual(staleStatus.stockVersion, "0.139.0");
+assert.strictEqual(staleStatus.patchedVersion, "0.138.0");
+
+const stockStatus = patchedRuntimeStatus(stockReport);
+assert.strictEqual(stockStatus.needsSync, false);
+assert.strictEqual(stockStatus.action, "none");
+assert.match(stockStatus.reason, /stock launcher delegates/);
 
 const brokenReport = doctor(doctorStaleArgs, {
   env: { PATH: doctorStockBin },
@@ -777,6 +795,93 @@ const brokenReport = doctor(doctorStaleArgs, {
 });
 assert.strictEqual(brokenReport.healthy, false, "broken active payload must mark the chain unhealthy");
 assert(brokenReport.anomalies.some((entry) => entry.includes("active patched payload is broken")));
+const brokenStatus = patchedRuntimeStatus(brokenReport);
+assert.strictEqual(brokenStatus.needsSync, true);
+assert.strictEqual(brokenStatus.action, "rebuild");
+
+// --- patched runtime check/sync ---
+const checkResult = checkPatchedRuntime(doctorStaleArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command === path.join(doctorStaleRoot, "codex-hud-codex") ? "codex-cli 0.138.0\n" : "codex-cli 0.139.0\n"),
+});
+assert.strictEqual(checkResult.status.action, "rebuild");
+
+let syncRebuilt = false;
+const syncResult = syncPatchedRuntime(doctorStaleArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => {
+    if (command === path.join(doctorStaleRoot, "codex-hud-codex")) {
+      return syncRebuilt ? "codex-cli 0.139.0\n" : "codex-cli 0.138.0\n";
+    }
+    return "codex-cli 0.139.0\n";
+  },
+  runPatchedInstall(installArgs) {
+    assert.strictEqual(installArgs.version, "0.139.0");
+    writeExecutable(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
+    fs.unlinkSync(path.join(doctorStaleRoot, "codex-hud-codex"));
+    fs.symlinkSync(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.139.0", "codex"), path.join(doctorStaleRoot, "codex-hud-codex"));
+    installLauncher(doctorStaleArgs, {
+      mode: "patched",
+      patchedBinary: path.join(doctorStaleRoot, "codex-hud-codex"),
+      patchedVersion: "0.139.0",
+      stockPath: doctorFakeStock,
+      stockRealpath: doctorFakeStockRealpath,
+      stockVersion: "0.139.0",
+      statusLineCommand: `'${path.join(doctorStaleRoot, "codex-hud")}' --line --color`,
+      renderer: "rust",
+    });
+    syncRebuilt = true;
+  },
+});
+assert.strictEqual(syncResult.action, "rebuilt");
+assert.strictEqual(syncResult.status.needsSync, false);
+
+const realpathOnlyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-realpath-sync-test-"));
+const realpathOnlyArgs = { prefix: realpathOnlyRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
+writeExecutable(path.join(realpathOnlyRoot, "codex-hud"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
+writeExecutable(path.join(realpathOnlyRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
+fs.symlinkSync(path.join(realpathOnlyRoot, "codex-hud-codex.d", "0.139.0", "codex"), path.join(realpathOnlyRoot, "codex-hud-codex"));
+installLauncher(realpathOnlyArgs, {
+  mode: "patched",
+  patchedBinary: path.join(realpathOnlyRoot, "codex-hud-codex"),
+  patchedVersion: "0.139.0",
+  stockPath: doctorFakeStock,
+  stockRealpath: "/old/codex/realpath",
+  stockVersion: "0.139.0",
+  statusLineCommand: `'${path.join(realpathOnlyRoot, "codex-hud")}' --line --color`,
+  renderer: "rust",
+});
+const realpathOnlyReport = doctor(realpathOnlyArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+});
+const realpathOnlyStatus = patchedRuntimeStatus(realpathOnlyReport);
+assert.strictEqual(realpathOnlyStatus.needsSync, true);
+assert.strictEqual(realpathOnlyStatus.action, "refresh-launcher");
+const refreshed = refreshPatchedLauncher(realpathOnlyArgs, realpathOnlyReport, {
+  resolveRenderer: () => ({ kind: "rust", path: path.join(realpathOnlyRoot, "codex-hud") }),
+});
+assert.strictEqual(refreshed.statusLineCommand, `'${path.join(realpathOnlyRoot, "codex-hud")}' --line --color`);
+const refreshedMetadata = parseLauncherMetadata(fs.readFileSync(path.join(realpathOnlyRoot, "codex-hud-tui"), "utf8"));
+assert.strictEqual(refreshedMetadata.stockRealpath, doctorFakeStockRealpath);
+
+installLauncher(realpathOnlyArgs, {
+  mode: "patched",
+  patchedBinary: path.join(realpathOnlyRoot, "codex-hud-codex"),
+  patchedVersion: "0.139.0",
+  stockPath: doctorFakeStock,
+  stockRealpath: "/old/codex/realpath",
+  stockVersion: "0.139.0",
+  statusLineCommand: `'${path.join(realpathOnlyRoot, "codex-hud")}' --line --color`,
+  renderer: "rust",
+});
+const syncRefreshResult = syncPatchedRuntime(realpathOnlyArgs, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  resolveRenderer: () => ({ kind: "rust", path: path.join(realpathOnlyRoot, "codex-hud") }),
+});
+assert.strictEqual(syncRefreshResult.action, "refreshed");
+assert.strictEqual(syncRefreshResult.status.needsSync, false);
 
 // --- shim management ---
 const shimArgs = {
@@ -806,15 +911,13 @@ assert.deepStrictEqual(forcedShim, { target: shim, status: "installed" });
 assert.strictEqual(isManagedDefaultShim(shim, launcher), true);
 
 // --- doctor renderer reporting ---
-const repoPackageVersion = require("../package.json").version;
-
 // (1a) stock launcher with renderer=rust marker, no codex-hud binary: informational only.
 const doctorRendererStockRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-renderer-stock-test-"));
 const doctorRendererStockArgs = { prefix: doctorRendererStockRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
 installLauncher(doctorRendererStockArgs, {
   mode: "stock",
   stockPath: doctorFakeStock,
-  stockRealpath: doctorFakeStock,
+  stockRealpath: doctorFakeStockRealpath,
   stockVersion: "0.139.0",
   renderer: "rust",
 });
@@ -855,7 +958,7 @@ installLauncher(doctorRendererPatchedArgs, {
   patchedBinary: path.join(doctorRendererPatchedRoot, "codex-hud-codex"),
   patchedVersion: "0.139.0",
   stockPath: doctorFakeStock,
-  stockRealpath: doctorFakeStock,
+  stockRealpath: doctorFakeStockRealpath,
   stockVersion: "0.139.0",
   statusLineCommand: `'${path.join(doctorRendererPatchedRoot, "codex-hud")}' --line --color`,
   renderer: "rust",
