@@ -11,6 +11,7 @@
 [![Stars](https://img.shields.io/github/stars/brandonwie/codex-hud?style=for-the-badge&logo=github&logoColor=white&color=f5a623)](https://github.com/brandonwie/codex-hud/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/brandonwie/codex-hud?style=for-the-badge&logo=git&logoColor=white&color=ff6b6b)](https://github.com/brandonwie/codex-hud/commits/main)
 
+[![Built with Rust](https://img.shields.io/badge/Built_with-Rust-dea584?style=for-the-badge&logo=rust&logoColor=white)](rust/Cargo.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-CommonJS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI-Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#配置)
@@ -34,7 +35,7 @@ Codex HUD 是一个本地 Codex 插件，为 OpenAI Codex CLI 会话渲染多行
 
 > 该行中的各段、标签、颜色和阈值都是可配置的 —— 参见[配置](#配置)。
 
-The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
+默认的状态行渲染器是 `codex-hud`，一个小巧的原生 Rust 二进制（edition 2021，MIT）：单个自包含的可执行文件，渲染路径上没有任何解释器，依赖极少（仅 `serde_json` 和 `toml`），零 `unsafe` 代码，并采用为体积优化的 release 构建，最终大小约 574 KB。为避免混淆，本 README 中出现了两个不同的「Rust」：上游 Codex CLI 本身就是一个 Rust 程序（即下文实验性补丁的构建目标），而 `codex-hud` 则是仓库内独立的状态行渲染器。
 
 ## 功能
 
@@ -311,7 +312,7 @@ codex-hud/
 
 ### 维护者脚本
 
-常用维护命令：`npm test`、`npm run test:rust`、`npm run check:i18n`、`npm run doctor`、`npm run sync:version`。
+常用维护命令：`npm test`、`npm run test:rust`、`npm run check:i18n`、`npm run doctor`、`npm run sync:version`、`npm run measure:rust`（报告 release 二进制的大小（约 574 KB），并将 Rust 渲染器的延迟与旧版 Node 渲染器进行对比）。
 
 ## 许可证
 

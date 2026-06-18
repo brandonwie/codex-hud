@@ -11,6 +11,7 @@
 [![Stars](https://img.shields.io/github/stars/brandonwie/codex-hud?style=for-the-badge&logo=github&logoColor=white&color=f5a623)](https://github.com/brandonwie/codex-hud/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/brandonwie/codex-hud?style=for-the-badge&logo=git&logoColor=white&color=ff6b6b)](https://github.com/brandonwie/codex-hud/commits/main)
 
+[![Built with Rust](https://img.shields.io/badge/Built_with-Rust-dea584?style=for-the-badge&logo=rust&logoColor=white)](rust/Cargo.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-CommonJS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI-Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#configuração)
@@ -34,7 +35,7 @@ A linha de status compacta, impressa por `--line` (renderizada como rodapé dent
 
 > Os segmentos, rótulos, cores e limites dessa linha são todos configuráveis — veja [Configuração](#configuração).
 
-The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
+O renderizador padrão da linha de status é o `codex-hud`, um pequeno binário Rust nativo (edition 2021, MIT): um único executável autocontido, sem nenhum interpretador no caminho de renderização, com uma pegada de dependências mínima (apenas `serde_json` e `toml`), zero código `unsafe` e uma build de release otimizada para tamanho que fica em torno de 574 KB. Para deixar claro, dois "Rust" diferentes aparecem neste README: a Codex CLI upstream é, ela própria, um programa Rust (o alvo de compilação do patch experimental abaixo), enquanto o `codex-hud` é o renderizador da linha de status separado, contido neste repositório.
 
 ## Recursos
 
@@ -311,7 +312,7 @@ Issues e pull requests são bem-vindos. Após alterar a saída do HUD, execute `
 
 ### Scripts de mantenedor
 
-Comandos comuns de manutenção: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`.
+Comandos comuns de manutenção: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run measure:rust` (reporta o tamanho do binário de release (~574 KB) e compara a latência do renderizador em Rust com a do antigo renderizador em Node), `npm run sync:version`.
 
 ## Licença
 

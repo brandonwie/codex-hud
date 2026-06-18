@@ -11,6 +11,7 @@
 [![Stars](https://img.shields.io/github/stars/brandonwie/codex-hud?style=for-the-badge&logo=github&logoColor=white&color=f5a623)](https://github.com/brandonwie/codex-hud/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/brandonwie/codex-hud?style=for-the-badge&logo=git&logoColor=white&color=ff6b6b)](https://github.com/brandonwie/codex-hud/commits/main)
 
+[![Built with Rust](https://img.shields.io/badge/Built_with-Rust-dea584?style=for-the-badge&logo=rust&logoColor=white)](rust/Cargo.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-CommonJS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI-Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#configuration)
@@ -38,7 +39,7 @@ The compact status line, printed by `--line` (rendered as an in-TUI footer only 
 
 > The segments, labels, colors, and thresholds in that line are all configurable — see [Configuration](#configuration).
 
-The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
+The default status-line renderer is `codex-hud`, a small native Rust binary (edition 2021, MIT): a single self-contained executable with no interpreter on the rendering path, a minimal dependency footprint (just `serde_json` and `toml`), zero `unsafe` code, and a size-optimized release build that comes in around 574 KB. For clarity, two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the separate in-repo status-line renderer.
 
 ## Features
 
@@ -333,7 +334,7 @@ Issues and pull requests are welcome. After changing HUD output, run `npm test` 
 | `npm run check:i18n` | Check localized README heading and code-block skeletons against `README.md`. |
 | `npm run hud` | Run the built Rust HUD renderer directly. |
 | `npm run build:rust` | Build the release Rust renderer. |
-| `npm run measure:rust` | Compare renderer timing for local performance checks. |
+| `npm run measure:rust` | Report the real release-binary size (~574 KB) and `--line` latency, and compare the Rust renderer against the recovered legacy Node renderer. The Rust binary's own startup/render is effectively instant; end-to-end `--line` latency is bounded by the git subprocesses it shells out to, not Rust execution. |
 | `npm run golden:update` | Refresh golden fixtures after an intentional output grammar change. |
 | `npm run sync:version` | Fan out `package.json` version changes to lockfile, plugin manifest, Rust, and site metadata. |
 | `npm run install:launcher` | Install the stock-delegating HUD launcher. |

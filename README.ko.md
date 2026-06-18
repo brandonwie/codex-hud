@@ -11,6 +11,7 @@
 [![Stars](https://img.shields.io/github/stars/brandonwie/codex-hud?style=for-the-badge&logo=github&logoColor=white&color=f5a623)](https://github.com/brandonwie/codex-hud/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/brandonwie/codex-hud?style=for-the-badge&logo=git&logoColor=white&color=ff6b6b)](https://github.com/brandonwie/codex-hud/commits/main)
 
+[![Built with Rust](https://img.shields.io/badge/Built_with-Rust-dea584?style=for-the-badge&logo=rust&logoColor=white)](rust/Cargo.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-CommonJS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI-Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#설정)
@@ -34,7 +35,7 @@ Codex HUD는 OpenAI Codex CLI 세션을 위한 멀티라인 워크스페이스 H
 
 > 해당 라인의 세그먼트, 라벨, 색상, 임계값은 모두 설정할 수 있습니다 — [설정](#설정)을 참고하세요.
 
-The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
+기본 상태 라인 렌더러는 작은 네이티브 Rust 바이너리인 `codex-hud`입니다(edition 2021, MIT). 렌더링 경로에 인터프리터가 끼어들지 않는 단일 자기완결형 실행 파일이며, 의존성이 최소(`serde_json`과 `toml`뿐)이고, `unsafe` 코드가 전혀 없으며, 크기를 최적화한 릴리스 빌드는 약 574 KB입니다. 혼동을 막기 위해 짚어 두자면, 이 README에는 서로 다른 "Rust"가 두 개 등장합니다. 업스트림 Codex CLI 자체가 Rust 프로그램이고(아래 실험적 패치의 빌드 대상), `codex-hud`는 이와 별개로 저장소 안에 있는 상태 라인 렌더러입니다.
 
 ## 주요 기능
 
@@ -311,7 +312,7 @@ codex-hud/
 
 ### 메인테이너 스크립트
 
-주요 메인테이너 명령: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`.
+주요 메인테이너 명령: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`, `npm run measure:rust`(릴리스 바이너리 크기(약 574 KB)를 보고하고 Rust 렌더러의 지연 시간을 레거시 Node 렌더러와 비교합니다).
 
 ## 라이선스
 

@@ -11,6 +11,7 @@
 [![Stars](https://img.shields.io/github/stars/brandonwie/codex-hud?style=for-the-badge&logo=github&logoColor=white&color=f5a623)](https://github.com/brandonwie/codex-hud/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/brandonwie/codex-hud?style=for-the-badge&logo=git&logoColor=white&color=ff6b6b)](https://github.com/brandonwie/codex-hud/commits/main)
 
+[![Built with Rust](https://img.shields.io/badge/Built_with-Rust-dea584?style=for-the-badge&logo=rust&logoColor=white)](rust/Cargo.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-CommonJS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI-Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#yapılandırma)
@@ -34,7 +35,7 @@ Varsayılan olarak, Codex'in yerel `[tui].status_line` özelliğine eşlik eder;
 
 > Bu satırdaki segmentler, etiketler, renkler ve eşiklerin tümü yapılandırılabilir — bkz. [Yapılandırma](#yapılandırma).
 
-The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
+Varsayılan durum satırı oluşturucusu `codex-hud`'dur: küçük, yerel (native) bir Rust ikilisidir (edition 2021, MIT) — render yolunda yorumlayıcı bulunmayan, tek parça ve kendi kendine yeten bir çalıştırılabilir dosya; minimal bir bağımlılık ayak izi (yalnızca `serde_json` ve `toml`), sıfır `unsafe` kod ve yaklaşık 574 KB civarında gelen, boyut için optimize edilmiş bir release derlemesi. Netlik için: bu README'de iki farklı "Rust" geçer — yukarı akıştaki Codex CLI'nin kendisi bir Rust programıdır (aşağıdaki deneysel yamanın derleme hedefi), `codex-hud` ise depo içindeki ayrı durum satırı oluşturucusudur.
 
 ## Özellikler
 
@@ -311,7 +312,7 @@ Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. 
 
 ### Bakımcı betikleri
 
-Yaygın bakım komutları: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`.
+Yaygın bakım komutları: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`, `npm run measure:rust` (release ikilisi boyutunu (~574 KB) bildirir ve Rust oluşturucusunun gecikmesini eski Node oluşturucusuyla karşılaştırır).
 
 ## Lisans
 
