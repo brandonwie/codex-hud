@@ -11,6 +11,7 @@
 [![Stars](https://img.shields.io/github/stars/brandonwie/codex-hud?style=for-the-badge&logo=github&logoColor=white&color=f5a623)](https://github.com/brandonwie/codex-hud/stargazers)
 [![Last commit](https://img.shields.io/github/last-commit/brandonwie/codex-hud?style=for-the-badge&logo=git&logoColor=white&color=ff6b6b)](https://github.com/brandonwie/codex-hud/commits/main)
 
+[![Built with Rust](https://img.shields.io/badge/Built_with-Rust-dea584?style=for-the-badge&logo=rust&logoColor=white)](rust/Cargo.toml)
 [![Node.js](https://img.shields.io/badge/Node.js-CommonJS-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI-Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/codex)
 [![Config](https://img.shields.io/badge/Config-TOML-9c4221?style=for-the-badge&logo=toml&logoColor=white)](#cấu-hình)
@@ -34,7 +35,7 @@ Status line nhỏ gọn, được in bởi `--line` (chỉ được render thàn
 
 > Các segment, nhãn, màu sắc và ngưỡng trong dòng đó đều có thể cấu hình — xem [Cấu hình](#cấu-hình).
 
-The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
+Bộ render status-line mặc định là `codex-hud`, một nhị phân Rust gốc nhỏ gọn (edition 2021, MIT): một tệp thực thi độc lập duy nhất, không có trình thông dịch nào trên đường render, dấu chân phụ thuộc tối thiểu (chỉ `serde_json` và `toml`), không một dòng mã `unsafe` nào, cùng một bản build release được tối ưu kích thước với dung lượng khoảng 574 KB. Để nói cho rõ, hai chữ "Rust" khác nhau xuất hiện trong README này: Codex CLI thượng nguồn bản thân nó là một chương trình Rust (mục tiêu build của bản vá thử nghiệm bên dưới), còn `codex-hud` là bộ render status-line riêng nằm trong repo này.
 
 ## Tính năng
 
@@ -311,7 +312,7 @@ Hoan nghênh các issue và pull request. Sau khi thay đổi đầu ra HUD, hã
 
 ### Script bảo trì
 
-Các lệnh bảo trì thường dùng: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version` và .
+Các lệnh bảo trì thường dùng: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version` và `npm run measure:rust` (báo cáo kích thước nhị phân release (~574 KB) và so sánh độ trễ của bộ render Rust với bộ render Node cũ).
 
 ## Giấy phép
 
