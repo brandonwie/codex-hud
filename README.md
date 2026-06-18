@@ -227,6 +227,8 @@ status: healthy
 
 It exits non-zero only when the active entrypoint chain is broken — renderer degradation never flips a healthy status. The renderer rebuild recommendation is release-granularity: it compares the compile-time `codex-hud` version against `package.json`, so it fires when a release moves the version, not on every commit.
 
+For patched-mode maintenance, `npm run codex:check` prints the focused stock-vs-patched version state without changing anything. `npm run codex:sync` performs the same check and then no-ops, refreshes launcher metadata, or rebuilds the patched payload through the staged `npm run patch:codex` path when stock Codex changed.
+
 ## Troubleshooting
 
 Start with `npm run doctor`; it prints the active shim, launcher, stock Codex, renderer, and patched payload state.
@@ -235,7 +237,7 @@ Start with `npm run doctor`; it prints the active shim, launcher, stock Codex, r
 | ------- | ------------- | --- |
 | `codex` does not start after enabling the shim | `codex shim` missing, unmanaged, or points somewhere unexpected | Run `npm run install:launcher -- --make-default`, then `rehash`. If a non-managed shim exists, inspect it before using `--force-shim`. |
 | Exit 127 or "no stock codex found" | `stock codex: not found` or launcher metadata has no usable stock path | Install or repair the stock Codex CLI, then rerun `npm run install:launcher` so the launcher records the real path. |
-| Patched footer disappeared after a Codex update | `patched command` exists but doctor reports stale versions | Rerun `npm run patch:codex`, or switch back to stock delegation with `npm run install:launcher`. |
+| Patched footer disappeared after a Codex update | `patched command` exists but doctor reports stale versions | Run `npm run codex:sync`, or switch back to stock delegation with `npm run install:launcher`. |
 | Config changes are ignored | `codex-hud --config-path` does not list the file you edited, or `--print-config` shows defaults | Move the config to `$CODEX_HOME/codex-hud.toml`, `./.codex/codex-hud.toml`, or set `$CODEX_HUD_CONFIG` to the exact file. |
 | Rust renderer is not used | `renderer` reports a missing binary or failed health check | Run `npm run build:rust`, then reinstall the launcher or rerun the patched flow that should use the Rust renderer. |
 
@@ -245,7 +247,7 @@ If you previously ran `npm run patch:codex` (the old default flow), run `npm run
 
 ## Experimental: Patched Codex Footer
 
-> **Warning — experimental.** This mode builds a locally patched, unsigned Codex binary. macOS may kill unsigned rebuilds (the installer health-checks every payload *before* activating it, so a failed build can never break your active `codex`), and the patched binary **goes stale when stock Codex updates** — you must rerun `npm run patch:codex` after Codex updates. Prefer the default stock-delegating launcher unless you specifically want the in-TUI footer.
+> **Warning — experimental.** This mode builds a locally patched, unsigned Codex binary. macOS may kill unsigned rebuilds (the installer health-checks every payload *before* activating it, so a failed build can never break your active `codex`), and the patched binary **goes stale when stock Codex updates** — run `npm run codex:sync` after Codex updates to check and repair it. Prefer the default stock-delegating launcher unless you specifically want the in-TUI footer.
 
 Stock Codex cannot render arbitrary plugin output under the input area. To get a Claude-HUD-style footer, build a separate patched Codex command:
 
@@ -294,7 +296,7 @@ Then paste it under `[tui]` in `~/.codex/config.toml`:
 status_line_command = "/Users/you/.local/bin/codex-hud --line --color"
 ```
 
-Run `codex-hud-tui` to see the compact footer. The patched binary does not track stock Codex updates: when stock Codex changes after a build, the patched launcher prints a one-line warning at launch (it still runs the patched binary you opted into) — rerun `npm run patch:codex` to rebuild, or `npm run install:launcher` to switch back to stock delegation. Each rebuild is staged, health-checked, and atomically activated; the previous working version stays under `~/.local/bin/codex-hud-codex.d/` for rollback, and `npm run doctor` reports staleness and broken payloads. When the managed `codex` shim is active, the installer skips that shim while detecting the base Codex version and uses the next real `codex` on `PATH`; pass `--version <version>` if you need to pin the rebuild target explicitly.
+Run `codex-hud-tui` to see the compact footer. The patched binary does not track stock Codex updates automatically: when stock Codex changes after a build, the patched launcher prints a one-line warning at launch (it still runs the patched binary you opted into). Run `npm run codex:sync` from the repo to check and repair the patched runtime; it no-ops when current, refreshes launcher metadata when only the stock realpath changed, and rebuilds through the staged patched install when the stock version changed. Use `npm run install:launcher` to switch back to stock delegation. Each rebuild is staged, health-checked, and atomically activated; the previous working version stays under `~/.local/bin/codex-hud-codex.d/` for rollback, and `npm run doctor` reports staleness and broken payloads. When the managed `codex` shim is active, the installer skips that shim while detecting the base Codex version and uses the next real `codex` on `PATH`; pass `--version <version>` if you need to pin the rebuild target explicitly.
 
 ## Project Layout
 
@@ -340,6 +342,8 @@ Issues and pull requests are welcome. After changing HUD output, run `npm test` 
 | `npm run install:launcher` | Install the stock-delegating HUD launcher. |
 | `npm run patch:codex` | Build and install the experimental patched Codex footer payload. |
 | `npm run patch:codex:dry-run` | Preview the patched Codex build/install flow. |
+| `npm run codex:check` | Print focused stock-vs-patched Codex drift state. |
+| `npm run codex:sync` | Check patched drift and repair it with a metadata refresh or staged rebuild. |
 | `npm run doctor` | Print launch-chain diagnostics. |
 | `npm run release:dry-run` | Preview semantic-release output. |
 | `npm run release` | Run semantic-release in CI. |
