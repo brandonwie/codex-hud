@@ -94,13 +94,13 @@ function stats(samples) {
 function measure(label, command, args) {
   const warm = timeOne(command, args); // warmup (fs cache, git index)
   const samples = [];
-  for (let i = 0; i < RUNS; i++) samples.push(timeOne(command, args).ms);
-  const s = stats(samples);
+  for (let i = 0; i < RUNS; i++) samples.push(timeOne(command, args));
+  const s = stats(samples.map((sample) => sample.ms));
   console.log(
     `  ${label.padEnd(16)} median ${s.median.toFixed(1)}ms  mean ${s.mean.toFixed(1)}ms  ` +
       `min ${s.min.toFixed(1)}ms  p90 ${s.p90.toFixed(1)}ms  max ${s.max.toFixed(1)}ms`
   );
-  return { stats: s, out: warm.out };
+  return { stats: s, out: samples[0] ? samples[0].out : warm.out };
 }
 
 try {
