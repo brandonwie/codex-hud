@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>brandonwie/codex-hud - Codex CLI Status Footer</title>
+    <title>brandonwie/codex-hud - Rust Codex CLI Status Footer</title>
     <meta
       name="description"
-      content="brandonwie/codex-hud is a Codex CLI plugin that adds a compact, configurable status footer with context usage, git state, model, effort, and pace."
+      content="brandonwie/codex-hud is a Codex CLI plugin whose status footer is rendered by a tiny native Rust binary: context usage, git state, model, effort, and pace."
     >
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="author" content="Brandon Wie">
@@ -15,7 +15,7 @@
     <link rel="author" href="https://github.com/brandonwie">
     <link rel="me" href="https://github.com/brandonwie">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20260618-copy-controls">
+    <link rel="stylesheet" href="styles.css?v=20260618-rust">
     <link rel="preload" href="assets/codex-hud-screenshot.png" as="image">
 
     <meta property="og:type" content="website">
@@ -61,6 +61,17 @@
             }
           },
           {
+            "@type": "SoftwareSourceCode",
+            "@id": "https://brandonwie.github.io/codex-hud/#source",
+            "name": "codex-hud",
+            "description": "The default status-line renderer for Codex HUD: a small self-contained native Rust binary with a minimal dependency footprint and no unsafe code.",
+            "programmingLanguage": "Rust",
+            "runtimePlatform": "Rust edition 2021",
+            "codeRepository": "https://github.com/brandonwie/codex-hud",
+            "license": "https://github.com/brandonwie/codex-hud/blob/main/LICENSE",
+            "author": { "@type": "Person", "name": "Brandon Wie", "url": "https://brandonwie.dev/" }
+          },
+          {
             "@type": "SoftwareApplication",
             "@id": "https://brandonwie.github.io/codex-hud/#software",
             "name": "Codex HUD",
@@ -73,7 +84,7 @@
             "url": "https://brandonwie.github.io/codex-hud/",
             "downloadUrl": "https://github.com/brandonwie/codex-hud",
             "installUrl": "https://github.com/brandonwie/codex-hud#quick-start",
-            "keywords": "OpenAI Codex CLI, Codex HUD, codex-hud, status footer, terminal HUD, context usage",
+            "keywords": "OpenAI Codex CLI, Codex HUD, codex-hud, status footer, terminal HUD, context usage, Rust, Rust status line, Rust Codex status line, native binary, Rust CLI",
             "softwareRequirements": "OpenAI Codex CLI",
             "sameAs": "https://github.com/brandonwie/codex-hud",
             "codeRepository": "https://github.com/brandonwie/codex-hud",
@@ -115,6 +126,14 @@
                 "acceptedAnswer": {
                   "@type": "Answer",
                   "text": "Yes. Codex HUD reads codex-hud.toml from user, project, or explicit config paths and supports segment, color, threshold, and formatting options."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What is the codex-hud status line built with?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The default renderer is codex-hud, a small native Rust binary. It has a minimal dependency footprint, no unsafe code, and a size-optimized build of about 574 KB. The Rust binary's own startup and render is effectively instant; end-to-end status-line latency is bounded mainly by the git commands it runs."
                 }
               }
             ]
@@ -209,6 +228,53 @@
           alt="Codex HUD compact single-line footer shown in a terminal"
           loading="eager"
         >
+      </section>
+
+      <section class="renderer-section" id="rust" aria-labelledby="rust-title">
+        <div class="section-heading">
+          <p class="eyebrow">Native Rust renderer</p>
+          <h2 id="rust-title">Rendered by a small native Rust binary.</h2>
+        </div>
+        <div class="renderer-grid">
+          <div class="renderer-copy">
+            <p>The default status line is rendered by codex-hud, a single self-contained Rust binary (edition 2021, MIT): minimal dependencies, no unsafe code, and a size-optimized build of about 574 KB. No Node runtime sits on the rendering path.</p>
+            <ul class="renderer-pills" aria-label="Renderer properties">
+              <li>Rust</li>
+              <li>MIT</li>
+              <li>~574 KB</li>
+              <li>1 binary</li>
+              <li>0 runtime deps</li>
+              <li>no unsafe</li>
+            </ul>
+          </div>
+          <figure class="bench" aria-labelledby="bench-caption">
+            <figcaption id="bench-caption">Per-paint latency · lower is better</figcaption>
+            <div class="bench-rows">
+              <div class="bench-row">
+                <span class="bench-label">Rust</span>
+                <span class="bench-track" role="img" aria-label="Rust renderer: 1.5 ms startup plus 54 ms shared work, 56 ms total">
+                  <span class="bench-seg startup" style="width: 2%"></span>
+                  <span class="bench-seg work" style="width: 72%"></span>
+                </span>
+                <span class="bench-total">~56 ms</span>
+              </div>
+              <div class="bench-row">
+                <span class="bench-label">Node</span>
+                <span class="bench-track" role="img" aria-label="Legacy Node renderer: 22 ms startup plus 53 ms shared work, 75 ms total">
+                  <span class="bench-seg startup" style="width: 29%"></span>
+                  <span class="bench-seg work" style="width: 71%"></span>
+                </span>
+                <span class="bench-total">~75 ms</span>
+              </div>
+            </div>
+            <div class="bench-legend" aria-hidden="true">
+              <span><i class="swatch startup"></i> runtime startup</span>
+              <span><i class="swatch work"></i> shared git + log work</span>
+            </div>
+            <p class="bench-takeaway">~19 ms saved per paint, about 1.34&times; faster. The win is Node's ~20 ms interpreter cold-start, which the native binary skips. The rest is identical git and log work, so end to end the gap stays modest and honest.</p>
+            <p class="bench-method">Median of 40 runs, Apple M4 Pro, 2026-06-18. Indicative, single machine; reproduce with <code>npm run measure:rust</code>.</p>
+          </figure>
+        </div>
       </section>
 
       <section class="try-section" id="try" aria-labelledby="try-title">
@@ -544,8 +610,8 @@
             <p>Targets the practical phrase set around OpenAI Codex CLI, status line, context usage, and terminal HUD workflows.</p>
           </article>
           <article>
-            <h3>Structured data</h3>
-            <p>Ships SoftwareApplication, WebSite, and FAQPage schema with canonical metadata for the live GitHub Pages URL.</p>
+            <h3>Rust Codex status line</h3>
+            <p>The status line is rendered by codex-hud, a native Rust binary: a single self-contained executable with no Node runtime on the rendering path.</p>
           </article>
           <article>
             <h3>Fast static page</h3>
@@ -570,6 +636,10 @@
         <details>
           <summary>What does the footer show?</summary>
           <p>Model, reasoning effort, project, branch, context usage, rolling usage windows, token totals, and pace formatting.</p>
+        </details>
+        <details>
+          <summary>What is the codex-hud status line built with?</summary>
+          <p>The default renderer is codex-hud, a small native Rust binary: minimal dependencies, no unsafe code, and a size-optimized build of about 574 KB. The Rust binary's own startup and render is effectively instant; end-to-end status-line latency is bounded mainly by the git commands it runs.</p>
         </details>
       </section>
     </main>
