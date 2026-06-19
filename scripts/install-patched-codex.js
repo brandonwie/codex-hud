@@ -1505,12 +1505,12 @@ function doctor(args, options = {}) {
       (report.patched.active && report.patched.active.version);
     if (report.stock && patchedVersion && report.stock.version !== patchedVersion) {
       report.recommendations.push(
-        `stock codex is ${report.stock.version} but patched runtime is ${patchedVersion} -> run: npm run patch:codex (or npm run install:launcher for stock mode)`,
+        `stock codex is ${report.stock.version} but patched runtime is ${patchedVersion} -> run: npm run codex:sync (or npm run install:launcher for stock mode)`,
       );
     }
     if (!report.patched.active || report.patched.active.broken) {
       report.healthy = false;
-      report.recommendations.push("patched-mode launcher but its payload is missing or broken -> run: npm run patch:codex or npm run install:launcher");
+      report.recommendations.push("patched-mode launcher but its payload is missing or broken -> run: npm run codex:sync or npm run install:launcher");
     }
   }
 

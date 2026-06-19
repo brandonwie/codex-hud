@@ -773,6 +773,10 @@ assert(
   staleReport.recommendations.some((entry) => entry.includes("0.139.0") && entry.includes("0.138.0")),
   "doctor must recommend a rebuild when stock moved past the patched runtime",
 );
+assert(
+  staleReport.recommendations.some((entry) => entry.includes("npm run codex:sync")),
+  "doctor must point stale patched runtimes at the post-update sync command",
+);
 const staleStatus = patchedRuntimeStatus(staleReport);
 assert.strictEqual(staleStatus.needsSync, true);
 assert.strictEqual(staleStatus.action, "rebuild");
