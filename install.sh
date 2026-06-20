@@ -201,8 +201,12 @@ print_plan() {
     [ "${CODEX_HUD_FORCE_SHIM:-0}" = "1" ] && plan_flags="$plan_flags --force-shim"
   fi
   printf '  node %s/scripts/install-patched-codex.js --mode stock%s\n' "$SRC" "$plan_flags"
-  printf '  codex plugin marketplace add %s\n' "$SRC"
-  printf '  codex plugin add %s\n' "$PLUGIN_NAME"
+  if [ "${CODEX_HUD_SKIP_PLUGIN:-0}" = "1" ]; then
+    printf '  # plugin registration skipped (CODEX_HUD_SKIP_PLUGIN=1)\n'
+  else
+    printf '  codex plugin marketplace add %s\n' "$SRC"
+    printf '  codex plugin add %s\n' "$PLUGIN_NAME"
+  fi
 }
 
 print_success() {
