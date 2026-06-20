@@ -88,8 +88,7 @@ check_prereqs() {
   need_cmd codex "install the OpenAI Codex CLI first — codex-hud augments an existing Codex"
 }
 
-# Resolve the ref to install: explicit override, else the highest vX.Y.Z tag,
-# else fall back to the default branch.
+# Resolve the ref to install: explicit override, else the highest vX.Y.Z tag.
 resolve_ref() {
   if [ -n "${CODEX_HUD_REF:-}" ]; then
     printf '%s' "$CODEX_HUD_REF"
@@ -98,17 +97,16 @@ resolve_ref() {
   # Portable "latest semver tag": strip the v, numeric-sort by major/minor/patch
   # (BSD + GNU sort both support -t/-k -n), then re-add the v. Avoids `sort -V`,
   # which is a GNU-only extension absent from stock macOS BSD sort.
-  local tag
-  tag="$(git ls-remote --tags --refs "$REPO" 2>/dev/null \
-    | awk -F/ '{print $NF}' \
-    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-    | sed 's/^v//' \
+  local remote_tags tag
+  remote_tags="$(git ls-remote --tags --refs "$REPO" 2>/dev/null)" \
+    || err "failed to resolve release tags from $REPO (set CODEX_HUD_REF explicitly to continue)"
+  tag="$(printf '%s\n' "$remote_tags" \
+    | awk -F/ '$NF ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ { sub(/^v/, "", $NF); print $NF }' \
     | sort -t. -k1,1n -k2,2n -k3,3n | tail -n1)" || true
   if [ -n "$tag" ]; then
     printf 'v%s' "$tag"
   else
-    warn "no release tags found; falling back to 'main'"
-    printf 'main'
+    err "no semver release tags found in $REPO (set CODEX_HUD_REF explicitly to continue)"
   fi
 }
 
