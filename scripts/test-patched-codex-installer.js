@@ -914,6 +914,147 @@ const forcedShim = installDefaultShim(launcher, { ...shimArgs, forceShim: true }
 assert.deepStrictEqual(forcedShim, { target: shim, status: "installed" });
 assert.strictEqual(isManagedDefaultShim(shim, launcher), true);
 
+// --- default-shim opt-in marker + drift detection/reclaim ---
+function buildPatchedInstall(label, { defaultShim } = {}) {
+  const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), `codex-hud-${label}-`));
+  const installArgs = { prefix: installRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
+  writeExecutable(path.join(installRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
+  fs.symlinkSync(
+    path.join(installRoot, "codex-hud-codex.d", "0.139.0", "codex"),
+    path.join(installRoot, "codex-hud-codex"),
+  );
+  writeExecutable(path.join(installRoot, "codex-hud"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
+  const installLauncherPath = installLauncher(installArgs, {
+    mode: "patched",
+    patchedBinary: path.join(installRoot, "codex-hud-codex"),
+    patchedVersion: "0.139.0",
+    stockPath: doctorFakeStock,
+    stockRealpath: doctorFakeStockRealpath,
+    stockVersion: "0.139.0",
+    statusLineCommand: `'${path.join(installRoot, "codex-hud")}' --line --color`,
+    renderer: "rust",
+    defaultShim,
+  });
+  return { root: installRoot, args: installArgs, launcher: installLauncherPath };
+}
+
+function patchedSyncOptions(installRoot) {
+  return {
+    env: { PATH: doctorStockBin },
+    runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+    resolveRenderer: () => ({ kind: "rust", path: path.join(installRoot, "codex-hud") }),
+  };
+}
+
+// (1) --make-default records default_shim=1, and a plain rebuild preserves it.
+const optIn = buildPatchedInstall("default-shim-optin-test", { defaultShim: "1" });
+assert.strictEqual(
+  parseLauncherMetadata(fs.readFileSync(optIn.launcher, "utf8")).defaultShim,
+  "1",
+  "--make-default must record default_shim=1 in the launcher",
+);
+installLauncher(optIn.args, {
+  mode: "patched",
+  patchedBinary: path.join(optIn.root, "codex-hud-codex"),
+  patchedVersion: "0.139.0",
+  stockPath: doctorFakeStock,
+  stockRealpath: doctorFakeStockRealpath,
+  stockVersion: "0.139.0",
+  statusLineCommand: `'${path.join(optIn.root, "codex-hud")}' --line --color`,
+  renderer: "rust",
+});
+assert.strictEqual(
+  parseLauncherMetadata(fs.readFileSync(optIn.launcher, "utf8")).defaultShim,
+  "1",
+  "a plain rebuild (no defaultShim) must preserve the opt-in marker",
+);
+
+// (2) Opted-in drift -> doctor reports 'drifted' + unhealthy; codex:sync reclaims
+// even though the payload is current.
+const optInShim = path.join(optIn.root, "codex");
+fs.symlinkSync(doctorFakeStock, optInShim); // Codex self-updater hijack: codex -> stock
+const driftReport = doctor(optIn.args, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+});
+assert.strictEqual(driftReport.shim.status, "drifted", "hijacked shim on an opted-in patched install must be 'drifted'");
+assert.strictEqual(driftReport.healthy, false, "opted-in drift must mark the entrypoint chain unhealthy");
+assert(
+  driftReport.anomalies.some((entry) => entry.includes("drifted off the patched launcher")),
+  "opted-in drift must push a drift anomaly",
+);
+const driftStatus = patchedRuntimeStatus(driftReport);
+assert.strictEqual(driftStatus.shimDrifted, true);
+assert.strictEqual(driftStatus.shimOptedIn, true);
+const reclaimSync = syncPatchedRuntime(optIn.args, patchedSyncOptions(optIn.root));
+assert.strictEqual(reclaimSync.shim.action, "reclaimed");
+assert.strictEqual(reclaimSync.action, "none", "payload is current, so the top-level sync action stays 'none'");
+assert.strictEqual(isManagedDefaultShim(optInShim, optIn.launcher), true, "after reclaim the shim points at the launcher");
+
+// (3) Non-opted-in foreign symlink -> recommendation only, never relinked.
+const noOptIn = buildPatchedInstall("default-shim-no-optin-test");
+assert.strictEqual(
+  parseLauncherMetadata(fs.readFileSync(noOptIn.launcher, "utf8")).defaultShim,
+  undefined,
+  "an install without --make-default must not carry the opt-in marker",
+);
+const noOptInShim = path.join(noOptIn.root, "codex");
+fs.symlinkSync(doctorFakeStock, noOptInShim); // a foreign codex the user set themselves
+const noOptInReport = doctor(noOptIn.args, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+});
+assert.strictEqual(noOptInReport.shim.status, "drifted");
+assert.strictEqual(noOptInReport.healthy, true, "an un-opted-in foreign shim must NOT mark the chain unhealthy");
+assert(
+  noOptInReport.recommendations.some((entry) => entry.includes("--make-default --force-shim")),
+  "un-opted-in drift must recommend the explicit reclaim command",
+);
+const noOptInSync = syncPatchedRuntime(noOptIn.args, patchedSyncOptions(noOptIn.root));
+assert.strictEqual(noOptInSync.shim.action, "recommend");
+assert.strictEqual(
+  fs.readlinkSync(noOptInShim),
+  doctorFakeStock,
+  "sync must NOT relink a shim the user never opted into",
+);
+
+// (4) Migration: a managed shim on a launcher predating the marker gets the
+// marker stamped while still managed; the shim itself is untouched; idempotent.
+const migrate = buildPatchedInstall("default-shim-migrate-test");
+const migrateShim = path.join(migrate.root, "codex");
+fs.symlinkSync(migrate.launcher, migrateShim); // currently managed, but launcher has no marker
+assert.strictEqual(isManagedDefaultShim(migrateShim, migrate.launcher), true);
+assert.strictEqual(parseLauncherMetadata(fs.readFileSync(migrate.launcher, "utf8")).defaultShim, undefined);
+const migrateSync = syncPatchedRuntime(migrate.args, patchedSyncOptions(migrate.root));
+assert.strictEqual(migrateSync.shim.action, "stamped");
+assert.strictEqual(
+  parseLauncherMetadata(fs.readFileSync(migrate.launcher, "utf8")).defaultShim,
+  "1",
+  "migration must stamp default_shim=1 while the shim is still managed",
+);
+assert.strictEqual(isManagedDefaultShim(migrateShim, migrate.launcher), true, "migration must leave the managed shim untouched");
+const migrateSync2 = syncPatchedRuntime(migrate.args, patchedSyncOptions(migrate.root));
+assert.strictEqual(migrateSync2.shim.action, "none", "a second sync with the marker present is a no-op");
+
+// (5) A regular-file `codex` is the user's own; it stays 'foreign' and is never
+// reclassified or overwritten, even on an opted-in install.
+const regular = buildPatchedInstall("default-shim-regular-test", { defaultShim: "1" });
+const regularShim = path.join(regular.root, "codex");
+const regularContents = "#!/usr/bin/env bash\necho my own codex\n";
+fs.writeFileSync(regularShim, regularContents);
+const regularReport = doctor(regular.args, {
+  env: { PATH: doctorStockBin },
+  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+});
+assert.strictEqual(regularReport.shim.status, "foreign", "a regular-file codex must stay 'foreign', never 'drifted'");
+const regularSync = syncPatchedRuntime(regular.args, patchedSyncOptions(regular.root));
+assert.strictEqual(regularSync.shim.action, "none");
+assert.strictEqual(
+  fs.readFileSync(regularShim, "utf8"),
+  regularContents,
+  "sync must never overwrite a regular-file codex",
+);
+
 // --- doctor renderer reporting ---
 // (1a) stock launcher with renderer=rust marker, no codex-hud binary: informational only.
 const doctorRendererStockRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-renderer-stock-test-"));

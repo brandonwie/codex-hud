@@ -20,6 +20,7 @@ const LAUNCHER_MARKER_FIELDS = {
   stock_version: "stockVersion",
   renderer: "renderer",
   built_at: "builtAt",
+  default_shim: "defaultShim",
 };
 
 function rendererBinaryName(platform = process.platform) {
@@ -1151,11 +1152,26 @@ function parseLauncherMetadata(scriptText) {
 
 function installLauncher(args, opts) {
   const launcher = path.join(args.prefix, args.launcherName);
+  // Preserve an existing default-shim opt-in marker across rebuilds unless the
+  // caller explicitly sets `defaultShim` (e.g. --make-default sets "1"). Without
+  // this, a plain `codex:sync` rebuild would silently drop the user's opt-in.
+  let defaultShim = opts.defaultShim;
+  if (defaultShim === undefined) {
+    try {
+      const existing = parseLauncherMetadata(fs.readFileSync(launcher, "utf8"));
+      if (existing.defaultShim === "1") {
+        defaultShim = "1";
+      }
+    } catch (_) {
+      // No existing launcher to preserve a marker from.
+    }
+  }
   const script = renderLauncherScript({
     prefix: args.prefix,
     binName: args.binName,
     launcherName: args.launcherName,
     ...opts,
+    defaultShim,
   });
 
   fs.mkdirSync(args.prefix, { recursive: true });
@@ -1543,6 +1559,33 @@ function doctor(args, options = {}) {
     report.anomalies.push("codex shim points at a missing launcher");
   }
 
+  // Default-shim drift: a patched install whose bare `codex` shim was repointed
+  // away from the launcher (e.g. by Codex's own self-updater). Only a symlink
+  // qualifies as drift — a regular-file `codex` is the user's own entry and is
+  // never reclassified or touched.
+  if (report.launcher.mode === "patched" && report.shim.status === "foreign") {
+    let driftStat = null;
+    try {
+      driftStat = fs.lstatSync(shimPath);
+    } catch (_) {
+      driftStat = null;
+    }
+    if (driftStat && driftStat.isSymbolicLink()) {
+      report.shim.status = "drifted";
+      const optedIn = Boolean(report.launcher.metadata && report.launcher.metadata.defaultShim === "1");
+      if (optedIn) {
+        report.healthy = false;
+        report.anomalies.push(
+          `codex shim drifted off the patched launcher${report.shim.target ? ` (-> ${report.shim.target})` : ""} -> run: npm run codex:sync`,
+        );
+      } else {
+        report.recommendations.push(
+          `codex shim points away from the patched launcher${report.shim.target ? ` (-> ${report.shim.target})` : ""} -> reclaim with: node scripts/install-patched-codex.js --make-default --force-shim`,
+        );
+      }
+    }
+  }
+
   return report;
 }
 
@@ -1566,6 +1609,8 @@ function patchedRuntimeStatus(report) {
     action: "none",
     canFix: true,
     issues: [],
+    shimDrifted: report.shim.status === "drifted",
+    shimOptedIn: Boolean(report.launcher.metadata && report.launcher.metadata.defaultShim === "1"),
   };
 
   if (report.launcher.mode !== "patched") {
@@ -1623,6 +1668,11 @@ function printPatchedRuntimeStatus(status) {
   console.log(`stock Codex: ${status.stockVersion || "not found"}${status.stockRealpath ? ` (${status.stockRealpath})` : ""}`);
   console.log(`patched runtime: ${status.patchedVersion || "not found"}`);
   console.log(`sync action: ${status.needsSync ? status.action : "none"}`);
+  if (status.shimDrifted) {
+    console.log(
+      `default shim: drifted${status.shimOptedIn ? " (codex:sync will reclaim)" : " (run --make-default --force-shim to reclaim)"}`,
+    );
+  }
   if (status.reason) {
     console.log(`reason: ${status.reason}`);
   }
@@ -1656,16 +1706,81 @@ function refreshPatchedLauncher(args, report, options = {}) {
     statusLineCommand,
     renderer: renderer.kind,
     builtAt: new Date().toISOString(),
+    defaultShim: options.defaultShim,
   });
   console.log(`Refreshed patched launcher metadata: ${launcher}`);
   return { launcher, statusLineCommand };
 }
 
+function reconcileDefaultShim(args, report, options = {}) {
+  // Only patched-mode installs participate in default-shim ownership. A stock
+  // launcher delegates to stock Codex anyway, so a foreign `codex` there is the
+  // user's own and none of our business.
+  if (report.launcher.mode !== "patched") {
+    return { action: "none" };
+  }
+
+  const launcherPath = path.join(args.prefix, args.launcherName);
+  const shimPath = defaultShimPath(args);
+  const markerOptedIn = Boolean(report.launcher.metadata && report.launcher.metadata.defaultShim === "1");
+
+  // Migration: the shim is still managed but the launcher predates the opt-in
+  // marker. Stamp it now (durable proof) so a future hijack — which leaves the
+  // shim un-managed — can still be recognized as opted-in. Re-rendering the
+  // launcher needs a healthy stock + active payload, mirroring refresh.
+  if (report.shim.status === "managed" && !markerOptedIn) {
+    const active = report.patched.active;
+    if (report.stock && active && !active.broken && active.version) {
+      refreshPatchedLauncher(args, report, { ...options, defaultShim: "1" });
+      console.log("Stamped default-shim opt-in marker on the patched launcher.");
+      return { action: "stamped" };
+    }
+    return { action: "recommend", reason: "cannot stamp opt-in marker: stock or patched payload unavailable" };
+  }
+
+  // Reclaim: the shim drifted off the launcher. Only relink when the opt-in is
+  // proven by the launcher marker — never hijack a user's own `codex`. The
+  // recorded opt-in is what justifies skipping the interactive --force-shim
+  // guard that installDefaultShim enforces for an un-proven foreign shim.
+  if (report.shim.status === "drifted") {
+    if (!markerOptedIn) {
+      return { action: "recommend", reason: "shim drifted but no opt-in marker; not reclaiming" };
+    }
+    let shimStat = null;
+    try {
+      shimStat = fs.lstatSync(shimPath);
+    } catch (_) {
+      shimStat = null;
+    }
+    if (shimStat && !shimStat.isSymbolicLink()) {
+      return { action: "recommend", reason: `refusing to replace non-symlink shim at ${shimPath}` };
+    }
+    if (shimStat) {
+      fs.unlinkSync(shimPath);
+    }
+    fs.mkdirSync(args.prefix, { recursive: true });
+    fs.symlinkSync(launcherPath, shimPath);
+    console.log(`Reclaimed default codex shim: ${shimPath} -> ${launcherPath}`);
+    return { action: "reclaimed" };
+  }
+
+  return { action: "none" };
+}
+
 function syncPatchedRuntime(args, options = {}) {
   const first = checkPatchedRuntime(args, options);
+  // Reconcile the default shim FIRST, independent of payload sync state: the
+  // common hijack is "payload current, bare shim repointed to stock", which the
+  // needsSync early-return below would otherwise skip entirely.
+  const shim = reconcileDefaultShim(args, first.report, options);
+
   if (!first.status.needsSync) {
-    console.log("Patched runtime is current; nothing to do.");
-    return { action: "none", status: first.status };
+    if (shim.action === "reclaimed" || shim.action === "stamped") {
+      console.log(`Patched runtime is current; default shim ${shim.action}.`);
+    } else {
+      console.log("Patched runtime is current; nothing to do.");
+    }
+    return { action: "none", status: first.status, shim };
   }
   if (!first.status.canFix) {
     throw new Error(`Cannot sync patched runtime: ${first.status.reason}`);
@@ -1677,7 +1792,7 @@ function syncPatchedRuntime(args, options = {}) {
     if (afterRefresh.status.needsSync) {
       throw new Error(`Patched launcher refresh did not clear sync state: ${afterRefresh.status.reason}`);
     }
-    return { action: "refreshed", status: afterRefresh.status };
+    return { action: "refreshed", status: afterRefresh.status, shim };
   }
 
   const installPatched = options.runPatchedInstall || runPatchedInstall;
@@ -1688,7 +1803,7 @@ function syncPatchedRuntime(args, options = {}) {
   if (afterRebuild.status.needsSync) {
     throw new Error(`Patched runtime rebuild did not clear sync state: ${afterRebuild.status.reason}`);
   }
-  return { action: "rebuilt", status: afterRebuild.status };
+  return { action: "rebuilt", status: afterRebuild.status, shim };
 }
 
 function printDoctorReport(report) {
@@ -1778,6 +1893,7 @@ function runStockInstall(args) {
     stockVersion: stock.version,
     renderer: renderer.kind,
     builtAt: new Date().toISOString(),
+    defaultShim: args.makeDefault ? "1" : undefined,
   });
   console.log(`Installed stock-delegating HUD launcher: ${launcher}`);
   console.log("Codex updates are picked up automatically; no rebuild needed.");
@@ -1856,6 +1972,7 @@ function runPatchedInstall(args) {
     statusLineCommand,
     renderer: renderer.kind,
     builtAt: new Date().toISOString(),
+    defaultShim: args.makeDefault ? "1" : undefined,
   });
   const pruned = pruneVersionDirs(args);
 
@@ -1950,6 +2067,7 @@ module.exports = {
   patchedRuntimeStatus,
   patchSource,
   pruneVersionDirs,
+  reconcileDefaultShim,
   renderLauncherScript,
   rendererBinaryName,
   resolveRenderer,
