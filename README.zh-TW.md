@@ -49,6 +49,18 @@ Codex HUD 是一個本機 Codex 外掛，會為 OpenAI Codex CLI 工作階段呈
 
 ## 快速開始
 
+### 一行安裝
+
+最快的途徑。它會從原始碼建置，因此需要在你的 `PATH` 上具備 `git`、`node` 以及 Rust 工具鏈（`cargo`），外加一個可用的 `codex`：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
+```
+
+這會複製一個固定版本的 release、建置 `codex-hud` 渲染器、安裝委派原生模式的啟動器，並註冊該外掛——它**不會**動到你既有的 `codex` 命令。若要同時讓 `codex` 解析到 HUD 啟動器，請把旗標傳給執行腳本的 shell：`curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`。若要在不改動任何東西的情況下預覽，請執行 `bash install.sh --dry-run`（或設定 `CODEX_HUD_DRY_RUN=1`）。若要在執行前先稽核，請以 `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` 下載、讀過內容，然後執行 `bash install.sh`。
+
+沒有 Rust 工具鏈，或偏好手動掌控？請改用下方的逐步設定。
+
 複製此儲存庫，然後將其安裝為本機 Codex 外掛：
 
 ```bash
@@ -305,14 +317,11 @@ codex-hud/
 - 若 Codex 為外掛公開穩定的本機 session-state API，則加入更豐富的工作階段逐字稿摘要。
 - Keep `codex-hud` covered by the golden fixtures (`npm run test:rust` verifies the Rust renderer against them).
 - 追蹤上游 OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827)。截至 2026-06-10，原版 Codex 仍只有內建的 `[tui].status_line` 項目，沒有命令驅動或外掛擁有的渲染器；只有在受支援的自訂渲染器發布後才退役這條修補路徑。
+- 發布附帶 SHA-256 校驗和的預建 `codex-hud` release 二進位檔，讓一行安裝程式可以略過本機的 Rust 建置。
 
 ## 貢獻
 
-歡迎提出 issue 與 pull request。變更 HUD 輸出後，請執行 `npm test` 與 Codex 外掛驗證器。變更 manifest 版本或發布 release 後，請以 `codex plugin add brandonwie@codex-hud` 重新整理本機外掛快取以進行手動測試，然後啟動新的 Codex thread 載入更新後的 skill metadata。
-
-### 維護者腳本
-
-常用維護命令：`npm test`、`npm run test:rust`、`npm run check:i18n`、`npm run doctor`、`npm run sync:version`、`npm run measure:rust`（回報 release 二進位檔大小（約 574 KB），並將 Rust 渲染器的延遲與舊版 Node 渲染器相比較）。
+歡迎提出 issue 與 pull request。貢獻流程與完整的維護者腳本參考請見 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 授權
 

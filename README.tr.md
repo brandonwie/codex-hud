@@ -49,6 +49,18 @@ Varsayılan durum satırı oluşturucusu `codex-hud`'dur: küçük, yerel (nativ
 
 ## Hızlı Başlangıç
 
+### Tek satırlık kurulum
+
+En hızlı yol. Kaynaktan derlediği için `PATH` üzerinde `git`, `node` ve bir Rust araç zinciri (`cargo`) ile çalışan bir `codex` gerektirir:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
+```
+
+Bu, sabitlenmiş bir release'i klonlar, `codex-hud` oluşturucusunu derler, stok delegasyon başlatıcısını kurar ve eklentiyi kaydeder — mevcut `codex` komutunuza **dokunmaz**. `codex` komutunun da HUD başlatıcısına çözümlenmesini istiyorsanız, bayrağı betiği çalıştıran kabuğa geçirin: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. Hiçbir şeyi değiştirmeden önizlemek için `bash install.sh --dry-run` çalıştırın (veya `CODEX_HUD_DRY_RUN=1` ayarlayın). Çalıştırmadan önce denetlemek için `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` ile indirin, okuyun, ardından `bash install.sh` çalıştırın.
+
+Rust araç zinciri yok mu ya da manuel kontrol mü tercih edersiniz? Aşağıdaki adım adım kurulumu kullanın.
+
 Depoyu klonlayın, ardından bunu yerel bir Codex eklentisi olarak kurun:
 
 ```bash
@@ -305,14 +317,11 @@ codex-hud/
 - Codex, eklentiler için kararlı bir yerel oturum durumu API'si sunarsa daha zengin oturum dökümü özetleri eklemek.
 - Keep `codex-hud` covered by the golden fixtures (`npm run test:rust` verifies the Rust renderer against them).
 - Yukarı akış OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827) takip edilsin. 2026-06-10 itibarıyla stok Codex yerleşik `[tui].status_line` öğelerine sahip, ancak komut destekli veya eklentiye ait bir oluşturucu yok; yamayı yalnızca desteklenen özel bir oluşturucu yayınlandığında emekliye ayırın.
+- SHA-256 sağlama toplamlarıyla birlikte önceden derlenmiş `codex-hud` release ikilileri yayınlanarak tek satırlık kurulum aracının yerel Rust derlemesini atlayabilmesi sağlansın.
 
 ## Katkıda Bulunma
 
-Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. HUD çıktısını değiştirdikten sonra `npm test` ve Codex eklenti doğrulayıcısını çalıştırın. Manifest sürümünü değiştirdikten veya release aldıktan sonra manuel test için yerel eklenti önbelleğini `codex plugin add brandonwie@codex-hud` ile yenileyin, ardından güncellenmiş skill metadatasının yüklenmesi için yeni bir Codex thread başlatın.
-
-### Bakımcı betikleri
-
-Yaygın bakım komutları: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`, `npm run measure:rust` (release ikilisi boyutunu (~574 KB) bildirir ve Rust oluşturucusunun gecikmesini eski Node oluşturucusuyla karşılaştırır).
+Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. Katkı iş akışı ve tam bakımcı betikleri referansı için bkz. [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Lisans
 

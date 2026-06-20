@@ -49,6 +49,18 @@ O renderizador padrão da linha de status é o `codex-hud`, um pequeno binário 
 
 ## Início Rápido
 
+### Instalação em uma linha
+
+O caminho mais rápido. Ele compila a partir do código-fonte, então precisa de `git`, `node` e uma toolchain Rust (`cargo`) no seu `PATH`, além de um `codex` funcional:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
+```
+
+Isso clona uma release fixada, compila o renderizador `codex-hud`, instala o launcher com delegação ao Codex original e registra o plugin — ele **não** mexe no seu comando `codex` existente. Para também fazer o `codex` resolver para o launcher do HUD, passe a flag para o shell que executa o script: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. Para visualizar sem alterar nada, execute `bash install.sh --dry-run` (ou defina `CODEX_HUD_DRY_RUN=1`). Para auditar antes de executar, baixe com `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`, leia-o e então execute `bash install.sh`.
+
+Sem toolchain Rust, ou prefere controle manual? Use a configuração passo a passo abaixo.
+
 Clone o repositório e instale-o como um plugin local do Codex:
 
 ```bash
@@ -305,14 +317,11 @@ codex-hud/
 - Adicionar resumos mais ricos de transcrições de sessão se o Codex expor uma API local estável de estado de sessão para plugins.
 - Keep `codex-hud` covered by the golden fixtures (`npm run test:rust` verifies the Rust renderer against them).
 - Acompanhar a issue upstream do OpenAI Codex [#17827](https://github.com/openai/codex/issues/17827). Em 2026-06-10, o Codex padrao ainda tem itens embutidos em `[tui].status_line`, mas nao um renderizador baseado em comando ou pertencente a plugin; aposente o patch apenas quando um renderizador customizado suportado for lançado.
+- Distribuir binários de release pré-compilados do `codex-hud` com checksums SHA-256, para que o instalador de uma linha possa pular a compilação Rust local.
 
 ## Contribuindo
 
-Issues e pull requests são bem-vindos. Após alterar a saída do HUD, execute `npm test` e o validador de plugins do Codex. Após alterar a versão do manifesto ou publicar uma release, atualize o cache do plugin local para teste manual com `codex plugin add brandonwie@codex-hud` e inicie uma nova thread do Codex para carregar os metadados atualizados da skill.
-
-### Scripts de mantenedor
-
-Comandos comuns de manutenção: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run measure:rust` (reporta o tamanho do binário de release (~574 KB) e compara a latência do renderizador em Rust com a do antigo renderizador em Node), `npm run sync:version`.
+Issues e pull requests são bem-vindos. Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para o fluxo de contribuição e a referência completa de scripts de mantenedor.
 
 ## Licença
 

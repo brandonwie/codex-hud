@@ -49,6 +49,18 @@ Codex HUD는 OpenAI Codex CLI 세션을 위한 멀티라인 워크스페이스 H
 
 ## 빠른 시작
 
+### 한 줄 설치
+
+가장 빠른 방법입니다. 소스에서 빌드하므로 `PATH`에 `git`, `node`, Rust 툴체인(`cargo`)이 있어야 하고, 동작하는 `codex`도 필요합니다:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
+```
+
+이 명령은 고정된 릴리스를 클론하고, `codex-hud` 렌더러를 빌드하며, 스톡 위임 런처를 설치하고, 플러그인을 등록합니다 — 기존 `codex` 명령은 건드리지 **않습니다**. `codex`까지 HUD 런처로 해석되게 하려면 스크립트를 실행하는 셸에 플래그를 전달하세요: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. 아무것도 변경하지 않고 미리 보려면 `bash install.sh --dry-run`을 실행하세요(또는 `CODEX_HUD_DRY_RUN=1`을 설정하세요). 실행 전에 내용을 검토하려면 `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`로 내려받아 읽어 본 다음 `bash install.sh`를 실행하세요.
+
+Rust 툴체인이 없거나 수동으로 직접 제어하고 싶다면 아래의 단계별 설치를 사용하세요.
+
 저장소를 클론한 다음, 로컬 Codex 플러그인으로 설치합니다.
 
 ```bash
@@ -305,14 +317,11 @@ codex-hud/
 - Codex가 플러그인을 위한 안정적인 로컬 세션 상태 API를 노출하면 더 풍부한 세션 트랜스크립트 요약을 추가합니다.
 - Keep `codex-hud` covered by the golden fixtures (`npm run test:rust` verifies the Rust renderer against them).
 - 업스트림 OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827)를 추적합니다. 2026-06-10 기준 기본 Codex에는 내장 `[tui].status_line` 항목이 있지만 명령 기반 또는 플러그인 소유 렌더러는 없습니다. 지원되는 커스텀 렌더러가 출시된 경우에만 이 패치를 폐기하세요.
+- 한 줄 설치기가 로컬 Rust 빌드를 건너뛸 수 있도록 SHA-256 체크섬과 함께 사전 빌드된 `codex-hud` 릴리스 바이너리를 배포합니다.
 
 ## 기여하기
 
-이슈와 풀 리퀘스트를 환영합니다. HUD 출력을 변경한 후에는 `npm test`와 Codex 플러그인 검증기를 실행하세요. 매니페스트 버전을 변경하거나 릴리스한 후에는 수동 테스트를 위해 `codex plugin add brandonwie@codex-hud`로 로컬 플러그인 캐시를 새로고침하고, 업데이트된 스킬 메타데이터를 불러오도록 새 Codex 스레드를 시작하세요.
-
-### 메인테이너 스크립트
-
-주요 메인테이너 명령: `npm test`, `npm run test:rust`, `npm run check:i18n`, `npm run doctor`, `npm run sync:version`, `npm run measure:rust`(릴리스 바이너리 크기(약 574 KB)를 보고하고 Rust 렌더러의 지연 시간을 레거시 Node 렌더러와 비교합니다).
+이슈와 풀 리퀘스트를 환영합니다. 기여 워크플로와 전체 메인테이너 스크립트 레퍼런스는 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요.
 
 ## 라이선스
 
