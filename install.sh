@@ -156,12 +156,31 @@ register_plugin() {
     return 0
   fi
   info "Registering the Codex plugin…"
-  if ! codex plugin marketplace add "$SRC"; then
-    warn "could not add the local marketplace (already registered?) — if this is a fresh install, run: codex plugin marketplace add \"$SRC\""
+  run_codex_plugin_command "local plugin marketplace" codex plugin marketplace add "$SRC"
+  run_codex_plugin_command "codex-hud plugin" codex plugin add "$PLUGIN_NAME"
+}
+
+is_idempotent_plugin_error() {
+  printf '%s\n' "$1" | grep -Eiq 'already|exists|duplicate'
+}
+
+run_codex_plugin_command() {
+  local description="$1"
+  shift
+  local output status
+  set +e
+  output="$("$@" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
+    [ -n "$output" ] && printf '%s\n' "$output"
+    return 0
   fi
-  if ! codex plugin add "$PLUGIN_NAME"; then
-    warn "could not add the plugin (already added?) — if this is a fresh install, run: codex plugin add $PLUGIN_NAME"
+  if is_idempotent_plugin_error "$output"; then
+    warn "$description already present"
+    return 0
   fi
+  err "$description registration failed: ${output:-command exited with status $status}"
 }
 
 print_plan() {
