@@ -1564,13 +1564,7 @@ function doctor(args, options = {}) {
   // qualifies as drift — a regular-file `codex` is the user's own entry and is
   // never reclassified or touched.
   if (report.launcher.mode === "patched" && report.shim.status === "foreign") {
-    let driftStat = null;
-    try {
-      driftStat = fs.lstatSync(shimPath);
-    } catch (_) {
-      driftStat = null;
-    }
-    if (driftStat && driftStat.isSymbolicLink()) {
+    if (shimStat && shimStat.isSymbolicLink()) {
       report.shim.status = "drifted";
       const optedIn = Boolean(report.launcher.metadata && report.launcher.metadata.defaultShim === "1");
       if (optedIn) {
@@ -1678,9 +1672,14 @@ function printPatchedRuntimeStatus(status) {
   }
 }
 
-function checkPatchedRuntime(args, options = {}) {
+function readPatchedRuntimeState(args, options = {}) {
   const report = doctor(args, options);
   const status = patchedRuntimeStatus(report);
+  return { report, status };
+}
+
+function checkPatchedRuntime(args, options = {}) {
+  const { report, status } = readPatchedRuntimeState(args, options);
   printPatchedRuntimeStatus(status);
   return { report, status };
 }
@@ -1778,7 +1777,7 @@ function syncPatchedRuntime(args, options = {}) {
     let status = first.status;
     if (shim.action === "reclaimed" || shim.action === "stamped") {
       console.log(`Patched runtime is current; default shim ${shim.action}.`);
-      status = checkPatchedRuntime(args, options).status;
+      status = readPatchedRuntimeState(args, options).status;
     } else {
       console.log("Patched runtime is current; nothing to do.");
     }
@@ -1797,7 +1796,7 @@ function syncPatchedRuntime(args, options = {}) {
     const afterRefreshShim = reconcileDefaultShim(args, afterRefresh.report, options);
     let finalStatus = afterRefresh.status;
     if (afterRefreshShim.action === "reclaimed" || afterRefreshShim.action === "stamped") {
-      finalStatus = checkPatchedRuntime(args, options).status;
+      finalStatus = readPatchedRuntimeState(args, options).status;
     }
     return { action: "refreshed", status: finalStatus, shim: afterRefreshShim };
   }
@@ -1813,7 +1812,7 @@ function syncPatchedRuntime(args, options = {}) {
   const afterRebuildShim = reconcileDefaultShim(args, afterRebuild.report, options);
   let finalStatus = afterRebuild.status;
   if (afterRebuildShim.action === "reclaimed" || afterRebuildShim.action === "stamped") {
-    finalStatus = checkPatchedRuntime(args, options).status;
+    finalStatus = readPatchedRuntimeState(args, options).status;
   }
   return {
     action: "rebuilt",

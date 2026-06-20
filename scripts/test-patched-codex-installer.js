@@ -55,6 +55,19 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function captureConsoleLog(fn) {
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (...args) => {
+    logs.push(args.join(" "));
+  };
+  try {
+    return { result: fn(), logs };
+  } finally {
+    console.log = originalLog;
+  }
+}
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-patch-test-"));
 const repoPackageVersion = require("../package.json").version;
 
@@ -986,10 +999,16 @@ assert(
 const driftStatus = patchedRuntimeStatus(driftReport);
 assert.strictEqual(driftStatus.shimDrifted, true);
 assert.strictEqual(driftStatus.shimOptedIn, true);
-const reclaimSync = syncPatchedRuntime(optIn.args, patchedSyncOptions(optIn.root));
+const reclaimCapture = captureConsoleLog(() => syncPatchedRuntime(optIn.args, patchedSyncOptions(optIn.root)));
+const reclaimSync = reclaimCapture.result;
 assert.strictEqual(reclaimSync.shim.action, "reclaimed");
 assert.strictEqual(reclaimSync.action, "none", "payload is current, so the top-level sync action stays 'none'");
 assert.strictEqual(reclaimSync.status.shimDrifted, false, "sync must return the fresh post-reclaim shim status");
+assert.strictEqual(
+  reclaimCapture.logs.filter((line) => line.startsWith("patched sync mode:")).length,
+  1,
+  "post-reclaim status refresh must not print a second status table",
+);
 assert.strictEqual(isManagedDefaultShim(optInShim, optIn.launcher), true, "after reclaim the shim points at the launcher");
 
 // Rebuild-needed drift must not reclaim the user-facing shim until the payload
@@ -1021,7 +1040,7 @@ const rebuildDriftPayload = path.join(rebuildDrift.root, "codex-hud-codex.d", "0
 fs.symlinkSync(doctorFakeStock, rebuildDriftShim);
 writeExecutable(rebuildDriftPayload, "#!/usr/bin/env bash\nexit 42\n");
 let rebuildDriftRebuilt = false;
-const rebuildDriftSync = syncPatchedRuntime(rebuildDrift.args, {
+const rebuildDriftCapture = captureConsoleLog(() => syncPatchedRuntime(rebuildDrift.args, {
   ...patchedSyncOptions(rebuildDrift.root),
   runCommand: (command) => {
     if (command === path.join(rebuildDrift.root, "codex-hud-codex") && !rebuildDriftRebuilt) {
@@ -1044,10 +1063,16 @@ const rebuildDriftSync = syncPatchedRuntime(rebuildDrift.args, {
     });
     rebuildDriftRebuilt = true;
   },
-});
+}));
+const rebuildDriftSync = rebuildDriftCapture.result;
 assert.strictEqual(rebuildDriftSync.action, "rebuilt");
 assert.strictEqual(rebuildDriftSync.shim.action, "reclaimed");
 assert.strictEqual(rebuildDriftSync.status.shimDrifted, false, "rebuild sync must return the fresh post-reclaim shim status");
+assert.strictEqual(
+  rebuildDriftCapture.logs.filter((line) => line.startsWith("patched sync mode:")).length,
+  2,
+  "post-rebuild shim reconciliation must not print a third status table",
+);
 assert.strictEqual(isManagedDefaultShim(rebuildDriftShim, rebuildDrift.launcher), true, "successful rebuild then reclaims the shim");
 
 // (3) Non-opted-in foreign symlink -> recommendation only, never relinked.
@@ -1084,9 +1109,15 @@ const migrateShim = path.join(migrate.root, "codex");
 fs.symlinkSync(migrate.launcher, migrateShim); // currently managed, but launcher has no marker
 assert.strictEqual(isManagedDefaultShim(migrateShim, migrate.launcher), true);
 assert.strictEqual(parseLauncherMetadata(fs.readFileSync(migrate.launcher, "utf8")).defaultShim, undefined);
-const migrateSync = syncPatchedRuntime(migrate.args, patchedSyncOptions(migrate.root));
+const migrateCapture = captureConsoleLog(() => syncPatchedRuntime(migrate.args, patchedSyncOptions(migrate.root)));
+const migrateSync = migrateCapture.result;
 assert.strictEqual(migrateSync.shim.action, "stamped");
 assert.strictEqual(migrateSync.status.shimOptedIn, true, "sync must return the fresh post-stamp opt-in status");
+assert.strictEqual(
+  migrateCapture.logs.filter((line) => line.startsWith("patched sync mode:")).length,
+  1,
+  "post-stamp status refresh must not print a second status table",
+);
 assert.strictEqual(
   parseLauncherMetadata(fs.readFileSync(migrate.launcher, "utf8")).defaultShim,
   "1",
@@ -1104,7 +1135,7 @@ fs.symlinkSync(rebuildMigrate.launcher, rebuildMigrateShim);
 const rebuildMigratePayload = path.join(rebuildMigrate.root, "codex-hud-codex.d", "0.139.0", "codex");
 writeExecutable(rebuildMigratePayload, "#!/usr/bin/env bash\nexit 42\n");
 let rebuildMigrateRebuilt = false;
-const rebuildMigrateSync = syncPatchedRuntime(rebuildMigrate.args, {
+const rebuildMigrateCapture = captureConsoleLog(() => syncPatchedRuntime(rebuildMigrate.args, {
   ...patchedSyncOptions(rebuildMigrate.root),
   runCommand: (command) => {
     if (command === path.join(rebuildMigrate.root, "codex-hud-codex") && !rebuildMigrateRebuilt) {
@@ -1127,10 +1158,16 @@ const rebuildMigrateSync = syncPatchedRuntime(rebuildMigrate.args, {
     });
     rebuildMigrateRebuilt = true;
   },
-});
+}));
+const rebuildMigrateSync = rebuildMigrateCapture.result;
 assert.strictEqual(rebuildMigrateSync.action, "rebuilt");
 assert.strictEqual(rebuildMigrateSync.shim.action, "stamped");
 assert.strictEqual(rebuildMigrateSync.status.shimOptedIn, true, "rebuild sync must return the fresh post-stamp opt-in status");
+assert.strictEqual(
+  rebuildMigrateCapture.logs.filter((line) => line.startsWith("patched sync mode:")).length,
+  2,
+  "post-rebuild stamp refresh must not print a third status table",
+);
 assert.strictEqual(
   parseLauncherMetadata(fs.readFileSync(rebuildMigrate.launcher, "utf8")).defaultShim,
   "1",
