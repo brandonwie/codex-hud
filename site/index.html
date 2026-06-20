@@ -172,8 +172,8 @@
             <a class="button primary" href="#try">Try settings</a>
             <a class="button" href="https://github.com/brandonwie/codex-hud">View source</a>
           </div>
-          <div class="install-strip" role="group" aria-label="Repo marketplace install commands">
-            <code id="install-command">codex plugin marketplace add brandonwie/codex-hud &amp;&amp; codex plugin add brandonwie@codex-hud</code>
+          <div class="install-strip" role="group" aria-label="Installer command">
+            <code id="install-command">curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash</code>
             <button
               class="install-copy-button"
               type="button"
@@ -514,19 +514,19 @@
       <section class="split-section" id="install" aria-labelledby="install-title">
         <div>
           <p class="eyebrow">Install path</p>
-          <h2 id="install-title">Plugin first. Patched footer when you want it.</h2>
+          <h2 id="install-title">One command. Patched footer when you want it.</h2>
         </div>
         <div class="steps">
           <article>
-            <h3>1. Add the repo marketplace</h3>
+            <h3>1. Run the installer</h3>
             <div class="command-copy-row">
-              <code id="install-step-marketplace">codex plugin marketplace add brandonwie/codex-hud</code>
+              <code id="install-step-installer">curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash</code>
               <button
                 class="install-copy-button"
                 type="button"
-                data-copy-target="install-step-marketplace"
-                data-copy-status="install-step-marketplace-status"
-                aria-label="Copy repo marketplace command"
+                data-copy-target="install-step-installer"
+                data-copy-status="install-step-installer-status"
+                aria-label="Copy installer command"
                 title="Copy command"
               >
                 <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -535,30 +535,10 @@
                 </svg>
               </button>
             </div>
-            <p class="command-copy-status" id="install-step-marketplace-status" role="status" aria-live="polite"></p>
+            <p class="command-copy-status" id="install-step-installer-status" role="status" aria-live="polite"></p>
           </article>
           <article>
-            <h3>2. Add the plugin</h3>
-            <div class="command-copy-row">
-              <code id="install-step-plugin">codex plugin add brandonwie@codex-hud</code>
-              <button
-                class="install-copy-button"
-                type="button"
-                data-copy-target="install-step-plugin"
-                data-copy-status="install-step-plugin-status"
-                aria-label="Copy plugin add command"
-                title="Copy command"
-              >
-                <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
-                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
-                </svg>
-              </button>
-            </div>
-            <p class="command-copy-status" id="install-step-plugin-status" role="status" aria-live="polite"></p>
-          </article>
-          <article>
-            <h3>3. Preview the line</h3>
+            <h3>2. Preview the line</h3>
             <div class="command-copy-row">
               <code id="install-step-preview">codex-hud --line --color</code>
               <button
@@ -578,7 +558,7 @@
             <p class="command-copy-status" id="install-step-preview-status" role="status" aria-live="polite"></p>
           </article>
           <article>
-            <h3>4. Scaffold config</h3>
+            <h3>3. Scaffold config</h3>
             <div class="command-copy-row">
               <code id="install-step-config">codex-hud --init-config</code>
               <button
