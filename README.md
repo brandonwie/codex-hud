@@ -53,6 +53,18 @@ The default status-line renderer is `codex-hud`, a small native Rust binary (edi
 
 ## Quick Start
 
+### One-line install
+
+The fastest path. It builds from source, so it needs `git`, `node`, and a Rust toolchain (`cargo`) on your `PATH`, plus a working `codex`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
+```
+
+This clones a pinned release, builds the `codex-hud` renderer, installs the stock-delegation launcher, and registers the plugin — it does **not** touch your existing `codex` command. To also make `codex` resolve to the HUD launcher, pass the flag to the shell that runs the script: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. To audit before running, download with `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`, read it, then run `bash install.sh`.
+
+No Rust toolchain, or prefer manual control? Use the step-by-step setup below.
+
 Clone the repo, then install it as a local Codex plugin:
 
 ```bash
@@ -322,31 +334,11 @@ codex-hud/
 - Add richer session transcript summaries if Codex exposes a stable local session-state API for plugins.
 - Keep `codex-hud` covered by the golden fixtures (`npm run test:rust` verifies the Rust renderer against them).
 - Watch upstream OpenAI Codex issue [#17827](https://github.com/openai/codex/issues/17827). As of 2026-06-10, stock Codex still has built-in `[tui].status_line` items but no command-backed or plugin-owned renderer; retire the patch only when a supported custom renderer ships.
+- Ship prebuilt `codex-hud` release binaries with SHA-256 checksums so the one-line installer can skip the local Rust build.
 
 ## Contributing
 
-Issues and pull requests are welcome. After changing HUD output, run `npm test` and the Codex plugin validator. After changing the manifest version or cutting a release, refresh the local plugin cache for manual testing with `codex plugin add brandonwie@codex-hud`, then start a new Codex thread so the refreshed skill metadata is loaded.
-
-### Maintainer Scripts
-
-| Command | Purpose |
-| ------- | ------- |
-| `npm test` | Build `codex-hud` and run config, installer, version, golden, README, and site checks. |
-| `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
-| `npm run check:i18n` | Check localized README heading and code-block skeletons against `README.md`. |
-| `npm run hud` | Run the built Rust HUD renderer directly. |
-| `npm run build:rust` | Build the release Rust renderer. |
-| `npm run measure:rust` | Report the real release-binary size (~574 KB) and `--line` latency, and compare the Rust renderer against the recovered legacy Node renderer. The Rust binary's own startup/render is effectively instant; end-to-end `--line` latency is bounded by the git subprocesses it shells out to, not Rust execution. |
-| `npm run golden:update` | Refresh golden fixtures after an intentional output grammar change. |
-| `npm run sync:version` | Fan out `package.json` version changes to lockfile, plugin manifest, Rust, and site metadata. |
-| `npm run install:launcher` | Install the stock-delegating HUD launcher. |
-| `npm run patch:codex` | Build and install the experimental patched Codex footer payload. |
-| `npm run patch:codex:dry-run` | Preview the patched Codex build/install flow. |
-| `npm run codex:check` | Print focused stock-vs-patched Codex drift state. |
-| `npm run codex:sync` | Check patched drift and repair it with a metadata refresh or staged rebuild. |
-| `npm run doctor` | Print launch-chain diagnostics. |
-| `npm run release:dry-run` | Preview semantic-release output. |
-| `npm run release` | Run semantic-release in CI. |
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and the full maintainer-scripts reference.
 
 ## License
 
