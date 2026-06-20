@@ -1769,18 +1769,20 @@ function reconcileDefaultShim(args, report, options = {}) {
 
 function syncPatchedRuntime(args, options = {}) {
   const first = checkPatchedRuntime(args, options);
-  // Reconcile the default shim FIRST, independent of payload sync state: the
-  // common hijack is "payload current, bare shim repointed to stock", which the
-  // needsSync early-return below would otherwise skip entirely.
-  const shim = reconcileDefaultShim(args, first.report, options);
 
   if (!first.status.needsSync) {
+    // Payload is already healthy, so shim drift can be safely repaired before
+    // returning. When payload sync is still needed, repair the payload first so
+    // a failed rebuild cannot leave `codex` pointing at a broken launcher.
+    const shim = reconcileDefaultShim(args, first.report, options);
+    let status = first.status;
     if (shim.action === "reclaimed" || shim.action === "stamped") {
       console.log(`Patched runtime is current; default shim ${shim.action}.`);
+      status = checkPatchedRuntime(args, options).status;
     } else {
       console.log("Patched runtime is current; nothing to do.");
     }
-    return { action: "none", status: first.status, shim };
+    return { action: "none", status, shim };
   }
   if (!first.status.canFix) {
     throw new Error(`Cannot sync patched runtime: ${first.status.reason}`);
@@ -1792,7 +1794,12 @@ function syncPatchedRuntime(args, options = {}) {
     if (afterRefresh.status.needsSync) {
       throw new Error(`Patched launcher refresh did not clear sync state: ${afterRefresh.status.reason}`);
     }
-    return { action: "refreshed", status: afterRefresh.status, shim };
+    const afterRefreshShim = reconcileDefaultShim(args, afterRefresh.report, options);
+    let finalStatus = afterRefresh.status;
+    if (afterRefreshShim.action === "reclaimed" || afterRefreshShim.action === "stamped") {
+      finalStatus = checkPatchedRuntime(args, options).status;
+    }
+    return { action: "refreshed", status: finalStatus, shim: afterRefreshShim };
   }
 
   const installPatched = options.runPatchedInstall || runPatchedInstall;
@@ -1803,7 +1810,16 @@ function syncPatchedRuntime(args, options = {}) {
   if (afterRebuild.status.needsSync) {
     throw new Error(`Patched runtime rebuild did not clear sync state: ${afterRebuild.status.reason}`);
   }
-  return { action: "rebuilt", status: afterRebuild.status, shim };
+  const afterRebuildShim = reconcileDefaultShim(args, afterRebuild.report, options);
+  let finalStatus = afterRebuild.status;
+  if (afterRebuildShim.action === "reclaimed" || afterRebuildShim.action === "stamped") {
+    finalStatus = checkPatchedRuntime(args, options).status;
+  }
+  return {
+    action: "rebuilt",
+    status: finalStatus,
+    shim: afterRebuildShim,
+  };
 }
 
 function printDoctorReport(report) {

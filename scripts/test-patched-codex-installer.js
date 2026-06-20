@@ -989,7 +989,66 @@ assert.strictEqual(driftStatus.shimOptedIn, true);
 const reclaimSync = syncPatchedRuntime(optIn.args, patchedSyncOptions(optIn.root));
 assert.strictEqual(reclaimSync.shim.action, "reclaimed");
 assert.strictEqual(reclaimSync.action, "none", "payload is current, so the top-level sync action stays 'none'");
+assert.strictEqual(reclaimSync.status.shimDrifted, false, "sync must return the fresh post-reclaim shim status");
 assert.strictEqual(isManagedDefaultShim(optInShim, optIn.launcher), true, "after reclaim the shim points at the launcher");
+
+// Rebuild-needed drift must not reclaim the user-facing shim until the payload
+// is actually repaired. A failed rebuild leaves `codex` on stock.
+const failedDrift = buildPatchedInstall("default-shim-failed-rebuild-test", { defaultShim: "1" });
+const failedDriftShim = path.join(failedDrift.root, "codex");
+fs.symlinkSync(doctorFakeStock, failedDriftShim);
+writeExecutable(path.join(failedDrift.root, "codex-hud-codex.d", "0.139.0", "codex"), "#!/usr/bin/env bash\nexit 42\n");
+assert.throws(
+  () => syncPatchedRuntime(failedDrift.args, {
+    ...patchedSyncOptions(failedDrift.root),
+    runCommand: (command) => {
+      if (command === path.join(failedDrift.root, "codex-hud-codex")) {
+        throw new Error("patched payload is broken");
+      }
+      return command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n";
+    },
+    runPatchedInstall() {
+      throw new Error("rebuild failed");
+    },
+  }),
+  /rebuild failed/,
+);
+assert.strictEqual(fs.readlinkSync(failedDriftShim), doctorFakeStock, "failed rebuild must not reclaim the default shim");
+
+const rebuildDrift = buildPatchedInstall("default-shim-rebuild-reclaim-test", { defaultShim: "1" });
+const rebuildDriftShim = path.join(rebuildDrift.root, "codex");
+const rebuildDriftPayload = path.join(rebuildDrift.root, "codex-hud-codex.d", "0.139.0", "codex");
+fs.symlinkSync(doctorFakeStock, rebuildDriftShim);
+writeExecutable(rebuildDriftPayload, "#!/usr/bin/env bash\nexit 42\n");
+let rebuildDriftRebuilt = false;
+const rebuildDriftSync = syncPatchedRuntime(rebuildDrift.args, {
+  ...patchedSyncOptions(rebuildDrift.root),
+  runCommand: (command) => {
+    if (command === path.join(rebuildDrift.root, "codex-hud-codex") && !rebuildDriftRebuilt) {
+      throw new Error("patched payload is broken");
+    }
+    return command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n";
+  },
+  runPatchedInstall(installArgs) {
+    assert.strictEqual(installArgs.version, "0.139.0");
+    writeExecutable(rebuildDriftPayload, fakeCodexScript("0.139.0"));
+    installLauncher(rebuildDrift.args, {
+      mode: "patched",
+      patchedBinary: path.join(rebuildDrift.root, "codex-hud-codex"),
+      patchedVersion: "0.139.0",
+      stockPath: doctorFakeStock,
+      stockRealpath: doctorFakeStockRealpath,
+      stockVersion: "0.139.0",
+      statusLineCommand: `'${path.join(rebuildDrift.root, "codex-hud")}' --line --color`,
+      renderer: "rust",
+    });
+    rebuildDriftRebuilt = true;
+  },
+});
+assert.strictEqual(rebuildDriftSync.action, "rebuilt");
+assert.strictEqual(rebuildDriftSync.shim.action, "reclaimed");
+assert.strictEqual(rebuildDriftSync.status.shimDrifted, false, "rebuild sync must return the fresh post-reclaim shim status");
+assert.strictEqual(isManagedDefaultShim(rebuildDriftShim, rebuildDrift.launcher), true, "successful rebuild then reclaims the shim");
 
 // (3) Non-opted-in foreign symlink -> recommendation only, never relinked.
 const noOptIn = buildPatchedInstall("default-shim-no-optin-test");
@@ -1027,6 +1086,7 @@ assert.strictEqual(isManagedDefaultShim(migrateShim, migrate.launcher), true);
 assert.strictEqual(parseLauncherMetadata(fs.readFileSync(migrate.launcher, "utf8")).defaultShim, undefined);
 const migrateSync = syncPatchedRuntime(migrate.args, patchedSyncOptions(migrate.root));
 assert.strictEqual(migrateSync.shim.action, "stamped");
+assert.strictEqual(migrateSync.status.shimOptedIn, true, "sync must return the fresh post-stamp opt-in status");
 assert.strictEqual(
   parseLauncherMetadata(fs.readFileSync(migrate.launcher, "utf8")).defaultShim,
   "1",
@@ -1035,6 +1095,48 @@ assert.strictEqual(
 assert.strictEqual(isManagedDefaultShim(migrateShim, migrate.launcher), true, "migration must leave the managed shim untouched");
 const migrateSync2 = syncPatchedRuntime(migrate.args, patchedSyncOptions(migrate.root));
 assert.strictEqual(migrateSync2.shim.action, "none", "a second sync with the marker present is a no-op");
+
+// (4b) Migration still stamps the managed shim after a rebuild repairs a broken
+// payload. Before the rebuild there is no healthy payload to re-render with.
+const rebuildMigrate = buildPatchedInstall("default-shim-rebuild-migrate-test");
+const rebuildMigrateShim = path.join(rebuildMigrate.root, "codex");
+fs.symlinkSync(rebuildMigrate.launcher, rebuildMigrateShim);
+const rebuildMigratePayload = path.join(rebuildMigrate.root, "codex-hud-codex.d", "0.139.0", "codex");
+writeExecutable(rebuildMigratePayload, "#!/usr/bin/env bash\nexit 42\n");
+let rebuildMigrateRebuilt = false;
+const rebuildMigrateSync = syncPatchedRuntime(rebuildMigrate.args, {
+  ...patchedSyncOptions(rebuildMigrate.root),
+  runCommand: (command) => {
+    if (command === path.join(rebuildMigrate.root, "codex-hud-codex") && !rebuildMigrateRebuilt) {
+      throw new Error("patched payload is broken");
+    }
+    return command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n";
+  },
+  runPatchedInstall(installArgs) {
+    assert.strictEqual(installArgs.version, "0.139.0");
+    writeExecutable(rebuildMigratePayload, fakeCodexScript("0.139.0"));
+    installLauncher(rebuildMigrate.args, {
+      mode: "patched",
+      patchedBinary: path.join(rebuildMigrate.root, "codex-hud-codex"),
+      patchedVersion: "0.139.0",
+      stockPath: doctorFakeStock,
+      stockRealpath: doctorFakeStockRealpath,
+      stockVersion: "0.139.0",
+      statusLineCommand: `'${path.join(rebuildMigrate.root, "codex-hud")}' --line --color`,
+      renderer: "rust",
+    });
+    rebuildMigrateRebuilt = true;
+  },
+});
+assert.strictEqual(rebuildMigrateSync.action, "rebuilt");
+assert.strictEqual(rebuildMigrateSync.shim.action, "stamped");
+assert.strictEqual(rebuildMigrateSync.status.shimOptedIn, true, "rebuild sync must return the fresh post-stamp opt-in status");
+assert.strictEqual(
+  parseLauncherMetadata(fs.readFileSync(rebuildMigrate.launcher, "utf8")).defaultShim,
+  "1",
+  "migration must stamp default_shim=1 after the rebuild makes the payload healthy",
+);
+assert.strictEqual(isManagedDefaultShim(rebuildMigrateShim, rebuildMigrate.launcher), true);
 
 // (5) A regular-file `codex` is the user's own; it stays 'foreign' and is never
 // reclassified or overwritten, even on an opted-in install.
