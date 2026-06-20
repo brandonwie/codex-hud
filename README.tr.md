@@ -57,7 +57,7 @@ En hızlı yol. Kaynaktan derlediği için `PATH` üzerinde `git`, `node` ve bir
 curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
 ```
 
-Bu, sabitlenmiş bir release'i klonlar, `codex-hud` oluşturucusunu derler, stok delegasyon başlatıcısını kurar ve eklentiyi kaydeder — mevcut `codex` komutunuza **dokunmaz**. `codex` komutunun da HUD başlatıcısına çözümlenmesini istiyorsanız, bayrağı betiği çalıştıran kabuğa geçirin: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. Çalıştırmadan önce denetlemek için `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` ile indirin, okuyun, ardından `bash install.sh` çalıştırın.
+Bu, sabitlenmiş bir release'i klonlar, `codex-hud` oluşturucusunu derler, stok delegasyon başlatıcısını kurar ve eklentiyi kaydeder — mevcut `codex` komutunuza **dokunmaz**. `codex` komutunun da HUD başlatıcısına çözümlenmesini istiyorsanız, bayrağı betiği çalıştıran kabuğa geçirin: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. Hiçbir şeyi değiştirmeden önizlemek için `bash install.sh --dry-run` çalıştırın (veya `CODEX_HUD_DRY_RUN=1` ayarlayın). Çalıştırmadan önce denetlemek için `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` ile indirin, okuyun, ardından `bash install.sh` çalıştırın.
 
 Rust araç zinciri yok mu ya da manuel kontrol mü tercih edersiniz? Aşağıdaki adım adım kurulumu kullanın.
 

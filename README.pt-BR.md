@@ -57,7 +57,7 @@ O caminho mais rápido. Ele compila a partir do código-fonte, então precisa de
 curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
 ```
 
-Isso clona uma release fixada, compila o renderizador `codex-hud`, instala o launcher com delegação ao Codex original e registra o plugin — ele **não** mexe no seu comando `codex` existente. Para também fazer o `codex` resolver para o launcher do HUD, passe a flag para o shell que executa o script: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. Para auditar antes de executar, baixe com `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`, leia-o e então execute `bash install.sh`.
+Isso clona uma release fixada, compila o renderizador `codex-hud`, instala o launcher com delegação ao Codex original e registra o plugin — ele **não** mexe no seu comando `codex` existente. Para também fazer o `codex` resolver para o launcher do HUD, passe a flag para o shell que executa o script: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. Para visualizar sem alterar nada, execute `bash install.sh --dry-run` (ou defina `CODEX_HUD_DRY_RUN=1`). Para auditar antes de executar, baixe com `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`, leia-o e então execute `bash install.sh`.
 
 Sem toolchain Rust, ou prefere controle manual? Use a configuração passo a passo abaixo.
 

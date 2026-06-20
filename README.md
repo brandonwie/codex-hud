@@ -61,7 +61,7 @@ The fastest path. It builds from source, so it needs `git`, `node`, and a Rust t
 curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
 ```
 
-This clones a pinned release, builds the `codex-hud` renderer, installs the stock-delegation launcher, and registers the plugin — it does **not** touch your existing `codex` command. To also make `codex` resolve to the HUD launcher, pass the flag to the shell that runs the script: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. To audit before running, download with `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`, read it, then run `bash install.sh`.
+This clones a pinned release, builds the `codex-hud` renderer, installs the stock-delegation launcher, and registers the plugin — it does **not** touch your existing `codex` command. To also make `codex` resolve to the HUD launcher, pass the flag to the shell that runs the script: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. To preview without changing anything, run `bash install.sh --dry-run` (or set `CODEX_HUD_DRY_RUN=1`). To audit before running, download with `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`, read it, then run `bash install.sh`.
 
 No Rust toolchain, or prefer manual control? Use the step-by-step setup below.
 

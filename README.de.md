@@ -57,7 +57,7 @@ Der schnellste Weg. Es baut aus dem Quellcode, benötigt also `git`, `node` und 
 curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
 ```
 
-Das klont ein gepinntes Release, baut den `codex-hud`-Renderer, installiert den Stock-Delegations-Launcher und registriert das Plugin — dein bestehendes `codex`-Kommando wird dabei **nicht** angetastet. Damit `codex` zusätzlich auf den HUD-Launcher auflöst, übergib das Flag an die Shell, die das Skript ausführt: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. Zum Prüfen vor dem Ausführen lade es mit `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` herunter, lies es und führe dann `bash install.sh` aus.
+Das klont ein gepinntes Release, baut den `codex-hud`-Renderer, installiert den Stock-Delegations-Launcher und registriert das Plugin — dein bestehendes `codex`-Kommando wird dabei **nicht** angetastet. Damit `codex` zusätzlich auf den HUD-Launcher auflöst, übergib das Flag an die Shell, die das Skript ausführt: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. Um eine Vorschau zu sehen, ohne etwas zu ändern, führe `bash install.sh --dry-run` aus (oder setze `CODEX_HUD_DRY_RUN=1`). Zum Prüfen vor dem Ausführen lade es mit `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` herunter, lies es und führe dann `bash install.sh` aus.
 
 Keine Rust-Toolchain oder lieber manuelle Kontrolle? Nutze die schrittweise Einrichtung weiter unten.
 

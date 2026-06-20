@@ -57,7 +57,7 @@ Codex HUD 是一個本機 Codex 外掛，會為 OpenAI Codex CLI 工作階段呈
 curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
 ```
 
-這會複製一個固定版本的 release、建置 `codex-hud` 渲染器、安裝委派原生模式的啟動器，並註冊該外掛——它**不會**動到你既有的 `codex` 命令。若要同時讓 `codex` 解析到 HUD 啟動器，請把旗標傳給執行腳本的 shell：`curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`。若要在執行前先稽核，請以 `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` 下載、讀過內容，然後執行 `bash install.sh`。
+這會複製一個固定版本的 release、建置 `codex-hud` 渲染器、安裝委派原生模式的啟動器，並註冊該外掛——它**不會**動到你既有的 `codex` 命令。若要同時讓 `codex` 解析到 HUD 啟動器，請把旗標傳給執行腳本的 shell：`curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`。若要在不改動任何東西的情況下預覽，請執行 `bash install.sh --dry-run`（或設定 `CODEX_HUD_DRY_RUN=1`）。若要在執行前先稽核，請以 `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` 下載、讀過內容，然後執行 `bash install.sh`。
 
 沒有 Rust 工具鏈，或偏好手動掌控？請改用下方的逐步設定。
 

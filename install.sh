@@ -95,13 +95,17 @@ resolve_ref() {
     printf '%s' "$CODEX_HUD_REF"
     return 0
   fi
+  # Portable "latest semver tag": strip the v, numeric-sort by major/minor/patch
+  # (BSD + GNU sort both support -t/-k -n), then re-add the v. Avoids `sort -V`,
+  # which is a GNU-only extension absent from stock macOS BSD sort.
   local tag
   tag="$(git ls-remote --tags --refs "$REPO" 2>/dev/null \
     | awk -F/ '{print $NF}' \
     | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-    | sort -V | tail -n1)" || true
+    | sed 's/^v//' \
+    | sort -t. -k1,1n -k2,2n -k3,3n | tail -n1)" || true
   if [ -n "$tag" ]; then
-    printf '%s' "$tag"
+    printf 'v%s' "$tag"
   else
     warn "no release tags found; falling back to 'main'"
     printf 'main'
@@ -173,8 +177,13 @@ print_plan() {
   printf '\nWould run:\n'
   printf '  git clone --depth 1 --branch %s %s %s\n' "$ref" "$REPO" "$SRC"
   printf '  cargo build --release --manifest-path %s/rust/Cargo.toml\n' "$SRC"
-  printf '  node %s/scripts/install-patched-codex.js --mode stock%s\n' "$SRC" \
-    "$([ "${CODEX_HUD_MAKE_DEFAULT:-0}" = "1" ] && echo ' --make-default')"
+  local plan_flags=""
+  [ -n "${CODEX_HUD_PREFIX:-}" ] && plan_flags=" --prefix $CODEX_HUD_PREFIX"
+  if [ "${CODEX_HUD_MAKE_DEFAULT:-0}" = "1" ]; then
+    plan_flags="$plan_flags --make-default"
+    [ "${CODEX_HUD_FORCE_SHIM:-0}" = "1" ] && plan_flags="$plan_flags --force-shim"
+  fi
+  printf '  node %s/scripts/install-patched-codex.js --mode stock%s\n' "$SRC" "$plan_flags"
   printf '  codex plugin marketplace add %s\n' "$SRC"
   printf '  codex plugin add %s\n' "$PLUGIN_NAME"
 }

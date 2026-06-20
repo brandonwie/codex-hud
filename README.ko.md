@@ -57,7 +57,7 @@ Codex HUD는 OpenAI Codex CLI 세션을 위한 멀티라인 워크스페이스 H
 curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
 ```
 
-이 명령은 고정된 릴리스를 클론하고, `codex-hud` 렌더러를 빌드하며, 스톡 위임 런처를 설치하고, 플러그인을 등록합니다 — 기존 `codex` 명령은 건드리지 **않습니다**. `codex`까지 HUD 런처로 해석되게 하려면 스크립트를 실행하는 셸에 플래그를 전달하세요: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. 실행 전에 내용을 검토하려면 `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`로 내려받아 읽어 본 다음 `bash install.sh`를 실행하세요.
+이 명령은 고정된 릴리스를 클론하고, `codex-hud` 렌더러를 빌드하며, 스톡 위임 런처를 설치하고, 플러그인을 등록합니다 — 기존 `codex` 명령은 건드리지 **않습니다**. `codex`까지 HUD 런처로 해석되게 하려면 스크립트를 실행하는 셸에 플래그를 전달하세요: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. 아무것도 변경하지 않고 미리 보려면 `bash install.sh --dry-run`을 실행하세요(또는 `CODEX_HUD_DRY_RUN=1`을 설정하세요). 실행 전에 내용을 검토하려면 `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`로 내려받아 읽어 본 다음 `bash install.sh`를 실행하세요.
 
 Rust 툴체인이 없거나 수동으로 직접 제어하고 싶다면 아래의 단계별 설치를 사용하세요.
 

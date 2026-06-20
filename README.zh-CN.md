@@ -57,7 +57,7 @@ Codex HUD 是一个本地 Codex 插件，为 OpenAI Codex CLI 会话渲染多行
 curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
 ```
 
-这会克隆一个固定版本的 release，构建 `codex-hud` 渲染器，安装委派原生模式的启动器，并注册插件 —— 它**不会**改动你现有的 `codex` 命令。若想同时让 `codex` 解析到该 HUD 启动器，请把标志传给运行脚本的 shell：`curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`。若想在运行前先审查，可用 `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` 下载，读过之后再运行 `bash install.sh`。
+这会克隆一个固定版本的 release，构建 `codex-hud` 渲染器，安装委派原生模式的启动器，并注册插件 —— 它**不会**改动你现有的 `codex` 命令。若想同时让 `codex` 解析到该 HUD 启动器，请把标志传给运行脚本的 shell：`curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`。若想在不改动任何内容的情况下预览，请运行 `bash install.sh --dry-run`（或设置 `CODEX_HUD_DRY_RUN=1`）。若想在运行前先审查，可用 `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh` 下载，读过之后再运行 `bash install.sh`。
 
 没有 Rust 工具链，或者更喜欢手动掌控？请使用下文的分步安装。
 
