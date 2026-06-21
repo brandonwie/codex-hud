@@ -29,6 +29,7 @@
     tokenUsage: byId("show-token-usage"),
     shortModel: byId("short-model"),
     shortEffort: byId("short-effort"),
+    fastMode: byId("fast-mode"),
     percentRound: byId("percent-round"),
     tokenUnits: byId("token-units"),
     pace: byId("show-pace"),
@@ -257,6 +258,10 @@
   const renderSegment = (line, segment, state) => {
     if (segment === "model") {
       append(line, `${state.modelText}${state.effortText}`, "model", state, "model");
+      if (state.fastMode) {
+        appendSeparator(line, state);
+        append(line, "f", "model", state, "model");
+      }
       return true;
     }
     if (segment === "project") {
@@ -338,6 +343,7 @@
     `pacePrefix = ${state.pacePrefix}`,
     `modelShort = ${state.shortModel}`,
     `effortShort = ${state.shortEffort}`,
+    `fastMode = ${state.fastMode}`,
     `paceSlowPrefix = ${tomlString(state.paceSlowPrefix)}`,
     `paceNormalPrefix = ${tomlString(state.paceNormalPrefix)}`,
     `paceFastPrefix = ${tomlString(state.paceFastPrefix)}`,
@@ -394,6 +400,7 @@
       pacePrefix: readBool(field.pacePrefix, true),
       shortModel: shortModelEnabled,
       shortEffort: shortEffortEnabled,
+      fastMode: readBool(field.fastMode, false),
       paceSlowPrefix: readText(field.paceSlowPrefix, "🐢"),
       paceNormalPrefix: readText(field.paceNormalPrefix, "👾"),
       paceFastPrefix: readText(field.paceFastPrefix, "🔥"),

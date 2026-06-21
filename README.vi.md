@@ -185,6 +185,7 @@ pace = true     # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> ẩn biểu tượng pace (🐢/👾/🔥), giữ lại %
 modelShort = true # false -> gpt-5.5 thay vì 5.5
 effortShort = false # true -> xh thay vì xhigh
+fastMode = false
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"

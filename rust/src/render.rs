@@ -748,6 +748,12 @@ pub fn render_footer(data: &Value, config: &Value, color: bool) -> String {
         // standalone pipe-delimited segment.
         let joiner = if id == "runtime" { Some(" ") } else { None };
         pieces.push(Piece { text, joiner });
+        if id == "model" && compat::truthy(compat::get(config.get("format"), "fastMode")) {
+            pieces.push(Piece {
+                text: colorize("f", colors.get(id).cloned().as_deref(), color_enabled),
+                joiner: None,
+            });
+        }
     }
 
     if pieces.is_empty() {
@@ -997,6 +1003,27 @@ mod tests {
             status_model_with_format(&data, Some(&format), " "),
             Some("gpt-5.5 xh".to_string())
         );
+    }
+
+    #[test]
+    fn render_footer_inserts_fast_mode_marker_after_model() {
+        let data = json!({
+            "config": {
+                "model": "gpt-5.5",
+                "reasoning": "xhigh"
+            },
+            "project": {
+                "package": {
+                    "name": "codex-hud"
+                }
+            }
+        });
+        let mut config = hudcfg::default_config();
+        config["segments"] = json!(["model", "project"]);
+        config["format"]["effortShort"] = json!(true);
+        config["format"]["fastMode"] = json!(true);
+
+        assert_eq!(render_footer(&data, &config, false), "5.5xh|f|codex-hud");
     }
 
     #[test]

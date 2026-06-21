@@ -140,6 +140,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `pacePrefix`   | `true`  | `false` → hide the pace icon (🐢/👾/🔥), keep the `%`.   |
 | `modelShort`   | `true`  | `false` → keep full model names such as `gpt-5.5`.      |
 | `effortShort`  | `false` | `true` → `xh` instead of `xhigh`.                        |
+| `fastMode`     | `false` | `true` → insert `f` immediately after the model segment. |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
 | `paceNormalPrefix` | `"👾"` | Prefix when usage is within `±pace.crit` of pace.     |
 | `paceFastPrefix` | `"🔥"` | Prefix when usage is more than `pace.crit` ahead of pace. |
@@ -161,7 +162,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
   format: {
     percentRound: true, tokenUnits: true, tokenUsage: true, pace: true, pacePrefix: true,
-    modelShort: true, effortShort: false,
+    modelShort: true, effortShort: false, fastMode: false,
     paceSlowPrefix: "🐢", paceNormalPrefix: "👾", paceFastPrefix: "🔥",
   },
 }

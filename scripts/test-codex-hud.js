@@ -138,14 +138,14 @@ try {
   const formatCfg = path.join(tmpCodexHome, "format.toml");
   fs.writeFileSync(
     formatCfg,
-    '[format]\neffortShort = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n',
+    '[format]\neffortShort = true\nfastMode = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n',
     "utf8"
   );
   const shortLine = run(["--line"], { env: { ...fixtureEnv, CODEX_HUD_CONFIG: formatCfg } });
   assert.strictEqual(shortLine.status, 0, shortLine.stderr);
   assert.match(
     shortLine.stdout.trim(),
-    /^5\.5xh\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,slow-100%\)\|7d:16%\(5\.1d,ok-27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
+    /^5\.5xh\|f\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,slow-100%\)\|7d:16%\(5\.1d,ok-27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
   );
 
   const spacedCfg = path.join(tmpCodexHome, "spaced.toml");
