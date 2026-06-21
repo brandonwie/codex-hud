@@ -295,6 +295,7 @@ const runInteractiveSmoke = () => {
     "hud-form": createElement("hud-form"),
     model: createElement("model", { value: "gpt-5.5" }),
     effort: createElement("effort", { value: "xhigh" }),
+    "service-tier": createElement("service-tier", { value: "standard" }),
     project: createElement("project", { value: "codex-hud" }),
     branch: createElement("branch", { value: "main*" }),
     "show-color": createElement("show-color", { checked: true }),
@@ -347,6 +348,7 @@ const runInteractiveSmoke = () => {
   const settingIds = [
     "model",
     "effort",
+    "service-tier",
     "project",
     "branch",
     "show-color",
@@ -490,6 +492,20 @@ const runInteractiveSmoke = () => {
   }
   elements["fast-mode"].checked = false;
   elements.effort.dispatchEvent({ type: "input" });
+  elements["short-effort"].checked = false;
+  elements.effort.dispatchEvent({ type: "input" });
+
+  // Auto-detect: service_tier = "fast" renders the f marker without the manual override.
+  elements["short-effort"].checked = true;
+  elements["service-tier"].value = "fast";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5xh|f|codex-hud")) {
+    fail.push("service_tier=fast must auto-render f after the model segment");
+  }
+  if (!elements["config-code"].textContent.includes("fastMode = false")) {
+    fail.push("service_tier auto-detect must not flip the manual fastMode override in config");
+  }
+  elements["service-tier"].value = "standard";
   elements["short-effort"].checked = false;
   elements.effort.dispatchEvent({ type: "input" });
 

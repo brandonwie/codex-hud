@@ -262,6 +262,30 @@ try {
     assert.ok(data.hud && data.hud.config, "json should expose hud.config");
     assert.ok(Array.isArray(data.hud.config.segments));
   }
+
+  // 12. Codex service_tier flows into collected config.serviceTier; absent -> null.
+  {
+    const tierHome = tmpdir();
+    writeConfig(tierHome, "config.toml", 'service_tier = "fast"\n');
+    const withTier = run(["--json"], { CODEX_HOME: tierHome });
+    assert.strictEqual(withTier.status, 0, withTier.stderr);
+    assert.strictEqual(
+      JSON.parse(withTier.stdout).config.serviceTier,
+      "fast",
+      "service_tier=fast must surface as config.serviceTier",
+    );
+
+    const plainHome = tmpdir();
+    const withoutTier = run(["--json"], { CODEX_HOME: plainHome });
+    assert.strictEqual(withoutTier.status, 0, withoutTier.stderr);
+    assert.strictEqual(
+      JSON.parse(withoutTier.stdout).config.serviceTier,
+      null,
+      "absent service_tier -> config.serviceTier null",
+    );
+    fs.rmSync(tierHome, { recursive: true, force: true });
+    fs.rmSync(plainHome, { recursive: true, force: true });
+  }
 } finally {
   fs.rmSync(home, { recursive: true, force: true });
 }

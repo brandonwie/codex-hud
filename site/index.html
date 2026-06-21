@@ -307,6 +307,14 @@
               </select>
             </label>
             <label>
+              Service tier
+              <select id="service-tier" data-setting>
+                <option value="standard">standard</option>
+                <option value="flex">flex</option>
+                <option value="fast">fast</option>
+              </select>
+            </label>
+            <label>
               Project
               <input id="project" data-setting type="text" value="codex-hud" maxlength="24" autocomplete="off">
             </label>
@@ -471,7 +479,7 @@
             </label>
             <label class="toggle">
               <input id="fast-mode" data-setting type="checkbox">
-              <span>Fast mode</span>
+              <span>Fast marker (override)</span>
             </label>
             <div class="compact-grid three">
               <label>
@@ -639,6 +647,6 @@
     <noscript>
       <p class="noscript-note">Codex HUD install steps and repository links are available on this page. The interactive footer preview and generated config require JavaScript.</p>
     </noscript>
-    <script src="app.js?v=20260621-fast-mode" defer></script>
+    <script src="app.js?v=20260621-service-tier" defer></script>
   </body>
 </html>

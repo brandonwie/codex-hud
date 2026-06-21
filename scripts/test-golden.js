@@ -189,6 +189,8 @@ const LINE_CASES = [
   { name: "reasoning-low", over: { config: { reasoning: "low" } } },
   { name: "reasoning-medium", over: { config: { reasoning: "medium" } } },
   { name: "reasoning-high", over: { config: { reasoning: "high" } } },
+  { name: "fast-mode-service-tier", over: { config: { serviceTier: "fast" } } },
+  { name: "fast-mode-override", over: { hud: { config: { format: { fastMode: true } } } } },
 ];
 
 // Multiline cases (formatText has no color dimension).

@@ -490,6 +490,7 @@ pub fn collect() -> Value {
             "projectPath": configs.project_config.as_ref().map(|p| Value::String(p.display().to_string())).unwrap_or(Value::Null),
             "model": opt_string(hudcfg::merged_config_value(&configs, "model")),
             "reasoning": opt_string(hudcfg::merged_config_value(&configs, "model_reasoning_effort")),
+            "serviceTier": opt_string(hudcfg::merged_config_value(&configs, "service_tier")),
             "sandbox": opt_string(hudcfg::merged_config_value(&configs, "sandbox_mode")),
             "approval": opt_string(hudcfg::merged_config_value(&configs, "approval_policy")),
             "nativeStatusItems": status_items,
