@@ -61,15 +61,60 @@ function sipsResize(srcPath, size, outPath) {
   execFileSync("sips", ["-z", String(size), String(size), srcPath, "--out", outPath], { stdio: "ignore" });
 }
 
-// --- Open Graph hero: 1200x630, big cat left, wordmark + tagline right. ---
+// --- Shared: stylize the card mascot (illustrated, not raw photo). ---
+// Card SVGs only (NOT iconSvg): slight desaturation + gentle posterize + warm
+// bias + a soft accent rim-glow. Every primitive is verified to render cleanly
+// in the installed librsvg (2.62.3 / cairo 1.18.4).
+function catStyleFilter() {
+  return `<filter id="catStyle" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feColorMatrix in="SourceGraphic" type="saturate" values="0.7" result="desat"/>
+      <feComponentTransfer in="desat" result="post">
+        <feFuncR type="discrete" tableValues="0.05 0.24 0.43 0.62 0.81 1"/>
+        <feFuncG type="discrete" tableValues="0.05 0.24 0.43 0.62 0.81 1"/>
+        <feFuncB type="discrete" tableValues="0.05 0.24 0.43 0.62 0.81 1"/>
+      </feComponentTransfer>
+      <feColorMatrix in="post" type="matrix" values="1.06 0.02 0 0 0.015  0.01 1.01 0 0 0.005  0 0 0.9 0 0  0 0 0 1 0" result="tinted"/>
+      <feMorphology in="SourceAlpha" operator="dilate" radius="2" result="sil"/>
+      <feFlood flood-color="${C.accent}" flood-opacity="0.85" result="rim"/>
+      <feComposite in="rim" in2="sil" operator="in" result="rimSolid"/>
+      <feGaussianBlur in="rimSolid" stdDeviation="3.5" result="glowEdge"/>
+      <feMerge>
+        <feMergeNode in="glowEdge"/>
+        <feMergeNode in="tinted"/>
+      </feMerge>
+    </filter>`;
+}
+
+// --- Shared: the real compact HUD sample, two lines, no emoji (librsvg-safe). ---
+// Mirrors the documented output shape (pipe segments, ":" labels, Tkn segment);
+// pace shown without 🐢/👾 because rsvg-convert color-emoji is unreliable.
+function hudSampleText(x, y, fs) {
+  const lh = Math.round(fs * 1.55);
+  const sep = `<tspan fill="${C.muted}">|</tspan>`;
+  const line1 =
+    `<tspan fill="${C.ink}">5.5xh</tspan>${sep}<tspan fill="${C.warn}">f</tspan>${sep}` +
+    `<tspan fill="${C.accent}">codex-hud</tspan>${sep}` +
+    `<tspan fill="${C.muted}">git(</tspan><tspan fill="${C.ink}">main</tspan><tspan fill="${C.muted}">)</tspan>${sep}` +
+    `<tspan fill="${C.muted}">Ctx:</tspan><tspan fill="${C.ok}">28%</tspan>`;
+  const line2 =
+    `<tspan fill="${C.muted}">5h:</tspan><tspan fill="${C.ok}">24%</tspan><tspan fill="${C.muted}">(1.9h,63%)</tspan>${sep}` +
+    `<tspan fill="${C.muted}">7d:</tspan><tspan fill="${C.ok}">34%</tspan><tspan fill="${C.muted}">(5.6d,20%)</tspan>${sep}` +
+    `<tspan fill="${C.muted}">Tkn:</tspan><tspan fill="${C.ink}">478k</tspan><tspan fill="${C.muted}">(I:285k,O:5k)</tspan>`;
+  return `<text x="${x}" y="${y}" font-family="${MONO}" font-weight="600" font-size="${fs}">${line1}</text>
+  <text x="${x}" y="${y + lh}" font-family="${MONO}" font-weight="600" font-size="${fs}">${line2}</text>`;
+}
+
+// --- Open Graph hero: 1200x630, stylized cat left, wordmark + real sample. ---
 function ogSvg() {
   const W = 1200;
   const H = 630;
-  const catH = 562;
-  const catW = Math.round(catH * CAT_RATIO); // 479
-  const catX = 58;
-  const catY = 38;
-  const tx = 578; // text column left edge
+  const catH = 281; // ~half the old 562 so the mascot no longer dominates
+  const catW = Math.round(catH * CAT_RATIO); // ~240
+  const catX = 70;
+  const catY = Math.round((H - catH) / 2); // 175 (vertically centered)
+  const tx = 344; // text column left edge (cat is smaller, so text moves left)
+  const cx = catX + Math.round(catW / 2);
+  const cy = catY + Math.round(catH / 2);
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <defs>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
@@ -80,18 +125,19 @@ function ogSvg() {
       <stop offset="0%" stop-color="#0a1122"/>
       <stop offset="100%" stop-color="#070b15"/>
     </linearGradient>
+    ${catStyleFilter()}
   </defs>
   <rect width="${W}" height="${H}" fill="${C.bg}"/>
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
   <rect x="14" y="14" width="${W - 28}" height="${H - 28}" rx="26" fill="none" stroke="${C.line}" stroke-width="2"/>
-  <ellipse cx="300" cy="318" rx="312" ry="312" fill="url(#glow)"/>
-  <image xlink:href="${catHref}" x="${catX}" y="${catY}" width="${catW}" height="${catH}" preserveAspectRatio="xMidYMid meet"/>
-  <text x="${tx}" y="252" font-family="${MONO}" font-weight="800" font-size="80" fill="${C.ink}"><tspan fill="${C.ok}">&gt;</tspan> codex-hud</text>
-  <rect x="${tx + 2}" y="280" width="132" height="6" rx="3" fill="${C.accent}"/>
-  <text x="${tx}" y="336" font-family="${MONO}" font-weight="500" font-size="30" fill="${C.muted}">Rust Codex CLI status footer</text>
-  <line x1="${tx}" y1="398" x2="1140" y2="398" stroke="${C.line}" stroke-width="1"/>
-  <text x="${tx}" y="450" font-family="${MONO}" font-weight="600" font-size="26"><tspan fill="${C.ink}">gpt-5</tspan><tspan fill="${C.muted}"> · </tspan><tspan fill="${C.accent}">main</tspan><tspan fill="${C.muted}"> · Ctx </tspan><tspan fill="${C.ok}">42%</tspan><tspan fill="${C.muted}"> · 5h </tspan><tspan fill="${C.ok}">12%</tspan><tspan fill="${C.muted}"> · 7d </tspan><tspan fill="${C.warn}">68%</tspan></text>
-  <text x="${tx}" y="556" font-family="${MONO}" font-weight="500" font-size="22" fill="${C.muted}">github.com/brandonwie/codex-hud</text>
+  <ellipse cx="${cx}" cy="${cy}" rx="250" ry="250" fill="url(#glow)"/>
+  <image xlink:href="${catHref}" x="${catX}" y="${catY}" width="${catW}" height="${catH}" preserveAspectRatio="xMidYMid meet" filter="url(#catStyle)"/>
+  <text x="${tx}" y="250" font-family="${MONO}" font-weight="800" font-size="80" fill="${C.ink}"><tspan fill="${C.ok}">&gt;</tspan> codex-hud</text>
+  <rect x="${tx + 2}" y="278" width="132" height="6" rx="3" fill="${C.accent}"/>
+  <text x="${tx}" y="332" font-family="${MONO}" font-weight="500" font-size="30" fill="${C.muted}">Rust Codex CLI status footer</text>
+  <line x1="${tx}" y1="390" x2="1140" y2="390" stroke="${C.line}" stroke-width="1"/>
+  ${hudSampleText(tx, 436, 22)}
+  <text x="${tx}" y="560" font-family="${MONO}" font-weight="500" font-size="22" fill="${C.muted}">github.com/brandonwie/codex-hud</text>
 </svg>`;
 }
 
@@ -122,11 +168,13 @@ function iconSvg(size) {
 function githubSocialSvg() {
   const W = 1280;
   const H = 640;
-  const catH = 571;
-  const catW = Math.round(catH * CAT_RATIO); // 487
-  const catX = 62;
-  const catY = 34;
-  const tx = 617; // text column left edge
+  const catH = 286; // ~half the old 571 so the mascot no longer dominates
+  const catW = Math.round(catH * CAT_RATIO); // ~244
+  const catX = 74;
+  const catY = Math.round((H - catH) / 2); // 177 (vertically centered)
+  const tx = 360; // text column left edge (cat is smaller, so text moves left)
+  const cx = catX + Math.round(catW / 2);
+  const cy = catY + Math.round(catH / 2);
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <defs>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
@@ -137,18 +185,19 @@ function githubSocialSvg() {
       <stop offset="0%" stop-color="#0a1122"/>
       <stop offset="100%" stop-color="#070b15"/>
     </linearGradient>
+    ${catStyleFilter()}
   </defs>
   <rect width="${W}" height="${H}" fill="${C.bg}"/>
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
   <rect x="14" y="14" width="${W - 28}" height="${H - 28}" rx="26" fill="none" stroke="${C.line}" stroke-width="2"/>
-  <ellipse cx="320" cy="323" rx="317" ry="317" fill="url(#glow)"/>
-  <image xlink:href="${catHref}" x="${catX}" y="${catY}" width="${catW}" height="${catH}" preserveAspectRatio="xMidYMid meet"/>
-  <text x="${tx}" y="256" font-family="${MONO}" font-weight="800" font-size="80" fill="${C.ink}"><tspan fill="${C.ok}">&gt;</tspan> codex-hud</text>
-  <rect x="${tx + 2}" y="284" width="141" height="6" rx="3" fill="${C.accent}"/>
-  <text x="${tx}" y="341" font-family="${MONO}" font-weight="500" font-size="30" fill="${C.muted}">Rust Codex CLI status footer</text>
-  <line x1="${tx}" y1="404" x2="1216" y2="404" stroke="${C.line}" stroke-width="1"/>
-  <text x="${tx}" y="457" font-family="${MONO}" font-weight="600" font-size="26"><tspan fill="${C.ink}">gpt-5</tspan><tspan fill="${C.muted}"> · </tspan><tspan fill="${C.accent}">main</tspan><tspan fill="${C.muted}"> · Ctx </tspan><tspan fill="${C.ok}">42%</tspan><tspan fill="${C.muted}"> · 5h </tspan><tspan fill="${C.ok}">12%</tspan><tspan fill="${C.muted}"> · 7d </tspan><tspan fill="${C.warn}">68%</tspan></text>
-  <text x="${tx}" y="565" font-family="${MONO}" font-weight="500" font-size="22" fill="${C.muted}">github.com/brandonwie/codex-hud</text>
+  <ellipse cx="${cx}" cy="${cy}" rx="255" ry="255" fill="url(#glow)"/>
+  <image xlink:href="${catHref}" x="${catX}" y="${catY}" width="${catW}" height="${catH}" preserveAspectRatio="xMidYMid meet" filter="url(#catStyle)"/>
+  <text x="${tx}" y="254" font-family="${MONO}" font-weight="800" font-size="80" fill="${C.ink}"><tspan fill="${C.ok}">&gt;</tspan> codex-hud</text>
+  <rect x="${tx + 2}" y="282" width="141" height="6" rx="3" fill="${C.accent}"/>
+  <text x="${tx}" y="336" font-family="${MONO}" font-weight="500" font-size="30" fill="${C.muted}">Rust Codex CLI status footer</text>
+  <line x1="${tx}" y1="394" x2="1216" y2="394" stroke="${C.line}" stroke-width="1"/>
+  ${hudSampleText(tx, 440, 22)}
+  <text x="${tx}" y="566" font-family="${MONO}" font-weight="500" font-size="22" fill="${C.muted}">github.com/brandonwie/codex-hud</text>
 </svg>`;
 }
 

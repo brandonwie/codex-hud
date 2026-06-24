@@ -20,6 +20,8 @@ const requiredFiles = [
   "site/favicon.svg",
   "assets/codex-hud-screenshot.png",
   "site/assets/codex-hud-screenshot.png",
+  "site/assets/og-image.png",
+  "assets/github-social-preview.png",
   ".github/workflows/pages.yml",
 ];
 
@@ -29,6 +31,36 @@ const fail = [];
 
 for (const file of requiredFiles) {
   if (!exists(file)) fail.push(`missing ${file}`);
+}
+
+// Generated social cards (scripts/generate-images.mjs) must keep their target
+// dimensions and carry the real, non-stale HUD sample. PNG IHDR width/height are
+// big-endian uint32 at byte offsets 16 and 20 — no decoder/rsvg needed.
+const pngSize = (relativePath) => {
+  const buf = fs.readFileSync(path.join(root, relativePath));
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+};
+const cardAssets = [
+  { file: "site/assets/og-image.png", width: 1200, height: 630 },
+  { file: "assets/github-social-preview.png", width: 1280, height: 640 },
+];
+for (const { file, width, height } of cardAssets) {
+  if (!exists(file)) continue; // already reported by the requiredFiles loop
+  const dim = pngSize(file);
+  if (dim.width !== width || dim.height !== height) {
+    fail.push(`${file} must be ${width}x${height}, found ${dim.width}x${dim.height}`);
+  }
+}
+const imageGen = exists("scripts/generate-images.mjs") ? read("scripts/generate-images.mjs") : "";
+if (!imageGen) {
+  fail.push("missing scripts/generate-images.mjs (source of the social cards)");
+} else {
+  if (/gpt-5\b/.test(imageGen) || imageGen.includes(" · Ctx ")) {
+    fail.push("social-card generator still bakes the stale sample footer (gpt-5 · Ctx …); update the HUD sample");
+  }
+  if (!imageGen.includes("Tkn:") || !imageGen.includes("codex-hud")) {
+    fail.push("social-card generator must bake the real HUD sample (pipe segments incl. Tkn:)");
+  }
 }
 
 const html = exists("site/index.html") ? read("site/index.html") : "";
