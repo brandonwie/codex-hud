@@ -9,6 +9,9 @@ on:
       - scripts/check-site.js
       - package.json
       - .github/workflows/pages.yml
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 permissions:
@@ -21,7 +24,9 @@ concurrency:
 jobs:
   publish:
     name: Publish gh-pages
-    if: github.repository == 'brandonwie/codex-hud' && github.ref == 'refs/heads/main'
+    if: >-
+      github.repository == 'brandonwie/codex-hud' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -50,6 +55,12 @@ jobs:
           git -C "$publish_dir" rm -r -q . || true
           rsync -a --exclude CNAME site/ "$publish_dir"/
           touch "$publish_dir/.nojekyll"
+          source_version="$(node -p "require('./package.json').version")"
+          published_version="$(node -e 'const fs = require("fs"); const html = fs.readFileSync(process.argv[1], "utf8"); const match = html.match(/"softwareVersion":\s*"([^"]+)"/); if (!match) { console.error("missing softwareVersion"); process.exit(1); } console.log(match[1]);' "$publish_dir/index.html")"
+          if [ "$published_version" != "$source_version" ]; then
+            echo "Published softwareVersion $published_version does not match package.json $source_version" >&2
+            exit 1
+          fi
           git -C "$publish_dir" add -A
           if git -C "$publish_dir" diff --cached --quiet; then
             echo "No site changes to publish."
