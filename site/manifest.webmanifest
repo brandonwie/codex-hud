@@ -1,0 +1,14 @@
+{
+  "name": "Codex HUD",
+  "short_name": "Codex HUD",
+  "description": "A configurable Codex CLI status footer rendered by a tiny native Rust binary.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#080d18",
+  "theme_color": "#080d18",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
