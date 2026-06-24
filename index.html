@@ -79,7 +79,7 @@
             "identifier": "brandonwie/codex-hud",
             "applicationCategory": "DeveloperApplication",
             "operatingSystem": "macOS, Linux",
-            "softwareVersion": "0.0.2",
+            "softwareVersion": "0.1.0",
             "description": "The brandonwie/codex-hud repository provides a local Codex plugin and patched TUI footer that renders model, effort, git branch, context usage, and rolling usage budgets in one line.",
             "url": "https://brandonwie.github.io/codex-hud/",
             "downloadUrl": "https://github.com/brandonwie/codex-hud",
@@ -307,6 +307,14 @@
               </select>
             </label>
             <label>
+              Service tier
+              <select id="service-tier" data-setting>
+                <option value="standard">standard</option>
+                <option value="flex">flex</option>
+                <option value="fast">fast</option>
+              </select>
+            </label>
+            <label>
               Project
               <input id="project" data-setting type="text" value="codex-hud" maxlength="24" autocomplete="off">
             </label>
@@ -468,6 +476,10 @@
             <label class="toggle">
               <input id="short-effort" data-setting type="checkbox">
               <span>Short effort</span>
+            </label>
+            <label class="toggle">
+              <input id="fast-mode" data-setting type="checkbox">
+              <span>Fast marker (override)</span>
             </label>
             <div class="compact-grid three">
               <label>
@@ -635,6 +647,6 @@
     <noscript>
       <p class="noscript-note">Codex HUD install steps and repository links are available on this page. The interactive footer preview and generated config require JavaScript.</p>
     </noscript>
-    <script src="app.js?v=20260618-copy-controls" defer></script>
+    <script src="app.js?v=20260621-service-tier" defer></script>
   </body>
 </html>
