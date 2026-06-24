@@ -185,6 +185,7 @@ pace = true     # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> hız simgesini (🐢/👾/🔥) gizle, %'yi koru
 modelShort = true # false -> 5.5 yerine gpt-5.5
 effortShort = false # true -> xhigh yerine xh
+fastMode = false
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"

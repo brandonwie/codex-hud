@@ -37,7 +37,7 @@ The compact status line, printed by `--line` (rendered as an in-TUI footer only 
 5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
-> The segments, labels, colors, and thresholds in that line are all configurable — see [Configuration](#configuration).
+> The segments, labels, colors, thresholds, and fast-mode marker in that line are all configurable — see [Configuration](#configuration). The fast-mode marker — `f` after the model — appears automatically when Codex runs in fast mode (`service_tier = "fast"`).
 
 The default status-line renderer is `codex-hud`, a small native Rust binary (edition 2021, MIT): a single self-contained executable with no interpreter on the rendering path, a minimal dependency footprint (just `serde_json` and `toml`), zero `unsafe` code, and a size-optimized release build that comes in around 574 KB. For clarity, two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the separate in-repo status-line renderer.
 
@@ -191,10 +191,13 @@ pace = true         # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> hide the pace icon (🐢/👾/🔥), keep the %
 modelShort = true # false -> gpt-5.5 instead of 5.5
 effortShort = false # true -> xh instead of xhigh
+fastMode = false # force f after the model; auto-shown when service_tier="fast"
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"
 ```
+
+The `f` after the model is a fast-mode marker: it appears automatically when Codex's resolved `service_tier` is `fast`, and `fastMode = true` above forces it on as a manual override.
 
 Pace markers compare usage against even burn rate: slow is more than `thresholds.pace.crit` behind pace, fast is more than `thresholds.pace.crit` ahead, and the middle band is normal. Run `codex-hud --print-config` to see the full resolved option set.
 

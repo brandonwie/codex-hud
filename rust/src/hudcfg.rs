@@ -42,6 +42,7 @@ pub fn default_config() -> Value {
             "pacePrefix": true,
             "modelShort": true,
             "effortShort": false,
+            "fastMode": false,
             "paceSlowPrefix": "🐢",
             "paceNormalPrefix": "👾",
             "paceFastPrefix": "🔥"
@@ -479,7 +480,13 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                     .to_string(),
             );
         }
-        for key in ["percentRound", "tokenUnits", "modelShort", "pacePrefix"] {
+        for key in [
+            "percentRound",
+            "tokenUnits",
+            "modelShort",
+            "pacePrefix",
+            "fastMode",
+        ] {
             match format.get(key) {
                 Some(Value::Bool(b)) => {
                     coerced.insert(key.into(), Value::Bool(*b));
@@ -643,6 +650,7 @@ pace = true           # false -> hide the pace % in 5h/7d
 pacePrefix = true     # false -> hide the pace state icon, keep the %
 modelShort = true     # false -> gpt-5.5 instead of 5.5
 effortShort = false   # true -> xh instead of xhigh
+fastMode = false      # true -> insert f after the model segment
 paceSlowPrefix = "🐢"   # used more than thresholds.pace.crit behind pace
 paceNormalPrefix = "👾" # within +/- thresholds.pace.crit of pace
 paceFastPrefix = "🔥"   # used more than thresholds.pace.crit ahead of pace

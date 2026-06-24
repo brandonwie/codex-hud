@@ -129,6 +129,7 @@ const readmeConfigControls = [
   ["format.pacePrefix", "pace-prefix"],
   ["format.modelShort", "short-model"],
   ["format.effortShort", "short-effort"],
+  ["format.fastMode", "fast-mode"],
   ["format.paceSlowPrefix", "pace-slow-prefix"],
   ["format.paceNormalPrefix", "pace-normal-prefix"],
   ["format.paceFastPrefix", "pace-fast-prefix"],
@@ -294,6 +295,7 @@ const runInteractiveSmoke = () => {
     "hud-form": createElement("hud-form"),
     model: createElement("model", { value: "gpt-5.5" }),
     effort: createElement("effort", { value: "xhigh" }),
+    "service-tier": createElement("service-tier", { value: "standard" }),
     project: createElement("project", { value: "codex-hud" }),
     branch: createElement("branch", { value: "main*" }),
     "show-color": createElement("show-color", { checked: true }),
@@ -318,6 +320,7 @@ const runInteractiveSmoke = () => {
     "show-token-usage": createElement("show-token-usage", { checked: true }),
     "short-model": createElement("short-model", { checked: true }),
     "short-effort": createElement("short-effort"),
+    "fast-mode": createElement("fast-mode"),
     "percent-round": createElement("percent-round", { checked: true }),
     "token-units": createElement("token-units", { checked: true }),
     "show-pace": createElement("show-pace", { checked: true }),
@@ -345,6 +348,7 @@ const runInteractiveSmoke = () => {
   const settingIds = [
     "model",
     "effort",
+    "service-tier",
     "project",
     "branch",
     "show-color",
@@ -369,6 +373,7 @@ const runInteractiveSmoke = () => {
     "show-token-usage",
     "short-model",
     "short-effort",
+    "fast-mode",
     "percent-round",
     "token-units",
     "show-pace",
@@ -480,6 +485,27 @@ const runInteractiveSmoke = () => {
   if (!elements["hud-line"].textContent.includes("5.5xh")) {
     fail.push("xhigh effort must abbreviate to xh when effortShort is true");
   }
+  elements["fast-mode"].checked = true;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5xh|f|codex-hud")) {
+    fail.push("fast mode must render f immediately after the model segment");
+  }
+  elements["fast-mode"].checked = false;
+  elements.effort.dispatchEvent({ type: "input" });
+  elements["short-effort"].checked = false;
+  elements.effort.dispatchEvent({ type: "input" });
+
+  // Auto-detect: service_tier = "fast" renders the f marker without the manual override.
+  elements["short-effort"].checked = true;
+  elements["service-tier"].value = "fast";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.5xh|f|codex-hud")) {
+    fail.push("service_tier=fast must auto-render f after the model segment");
+  }
+  if (!elements["config-code"].textContent.includes("fastMode = false")) {
+    fail.push("service_tier auto-detect must not flip the manual fastMode override in config");
+  }
+  elements["service-tier"].value = "standard";
   elements["short-effort"].checked = false;
   elements.effort.dispatchEvent({ type: "input" });
 
@@ -541,6 +567,7 @@ const runInteractiveSmoke = () => {
   elements["show-pace"].checked = false;
   elements["short-model"].checked = false;
   elements["short-effort"].checked = true;
+  elements["fast-mode"].checked = true;
   elements["pace-slow-prefix"].value = "S";
   elements["pace-normal-prefix"].value = "N";
   elements["pace-fast-prefix"].value = "F";
@@ -555,10 +582,10 @@ const runInteractiveSmoke = () => {
   if (customLine.includes("node v24")) {
     fail.push("runtime segment must be removable with its checkbox");
   }
-  if (!customLine.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88%")) {
+  if (!customLine.includes("gpt-5.5xh · f · codex-hud · git(main*) · CTX: 88%")) {
     fail.push("interactive preview must apply spacing, separator, labels, percent precision, and short effort controls");
   }
-  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · codex-hud · git(main*) · CTX: 88%")) {
+  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · f · codex-hud · git(main*) · CTX: 88%")) {
     fail.push("hero preview must apply the same panel settings as the result preview");
   }
   if (!customLine.includes("5h: 6%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
@@ -582,6 +609,7 @@ const runInteractiveSmoke = () => {
     "pace = false",
     "modelShort = false",
     "effortShort = true",
+    "fastMode = true",
     'paceSlowPrefix = "S"',
     'paceNormalPrefix = "N"',
     'paceFastPrefix = "F"',

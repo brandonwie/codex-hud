@@ -140,9 +140,12 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `pacePrefix`   | `true`  | `false` → hide the pace icon (🐢/👾/🔥), keep the `%`.   |
 | `modelShort`   | `true`  | `false` → keep full model names such as `gpt-5.5`.      |
 | `effortShort`  | `false` | `true` → `xh` instead of `xhigh`.                        |
+| `fastMode`     | `false` | `true` → force `f` after the model (manual override; `f` auto-shows when Codex `service_tier = "fast"`). |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
 | `paceNormalPrefix` | `"👾"` | Prefix when usage is within `±pace.crit` of pace.     |
 | `paceFastPrefix` | `"🔥"` | Prefix when usage is more than `pace.crit` ahead of pace. |
+
+**Fast-mode marker.** The `f` after the model segment is driven by Codex's `service_tier`: it appears automatically when the resolved tier is `fast`. `format.fastMode` is a manual override that forces the marker on regardless of tier. `service_tier` is read from Codex's `config.toml` (the same path as `model` / `model_reasoning_effort`), not a `codex-hud.toml` key — so the persisted default or active profile is reflected, not live `/fast on|off` toggles.
 
 ## Defaults (`DEFAULT_CONFIG`, verbatim)
 
@@ -161,7 +164,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
   format: {
     percentRound: true, tokenUnits: true, tokenUsage: true, pace: true, pacePrefix: true,
-    modelShort: true, effortShort: false,
+    modelShort: true, effortShort: false, fastMode: false,
     paceSlowPrefix: "🐢", paceNormalPrefix: "👾", paceFastPrefix: "🔥",
   },
 }

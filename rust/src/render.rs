@@ -708,6 +708,14 @@ pub fn render_footer(data: &Value, config: &Value, color: bool) -> String {
     let separators = effective_separators(config);
     let separator = colorize(&separators.segment, sep_color.as_deref(), color_enabled);
 
+    // Fast-mode marker after the model: auto-detect Codex `service_tier = "fast"`,
+    // with the manual `format.fastMode` flag kept as an explicit override.
+    let fast_active = compat::get(data.get("config"), "serviceTier")
+        .and_then(|v| v.as_str())
+        .map(|s| s == "fast")
+        .unwrap_or(false)
+        || compat::truthy(compat::get(config.get("format"), "fastMode"));
+
     let empty_segments = Vec::new();
     let segment_ids = config
         .get("segments")
@@ -748,6 +756,12 @@ pub fn render_footer(data: &Value, config: &Value, color: bool) -> String {
         // standalone pipe-delimited segment.
         let joiner = if id == "runtime" { Some(" ") } else { None };
         pieces.push(Piece { text, joiner });
+        if id == "model" && fast_active {
+            pieces.push(Piece {
+                text: colorize("f", colors.get(id).cloned().as_deref(), color_enabled),
+                joiner: None,
+            });
+        }
     }
 
     if pieces.is_empty() {
@@ -997,6 +1011,48 @@ mod tests {
             status_model_with_format(&data, Some(&format), " "),
             Some("gpt-5.5 xh".to_string())
         );
+    }
+
+    #[test]
+    fn render_footer_inserts_fast_mode_marker_after_model() {
+        let data = json!({
+            "config": {
+                "model": "gpt-5.5",
+                "reasoning": "xhigh"
+            },
+            "project": {
+                "package": {
+                    "name": "codex-hud"
+                }
+            }
+        });
+        let mut config = hudcfg::default_config();
+        config["segments"] = json!(["model", "project"]);
+        config["format"]["effortShort"] = json!(true);
+        config["format"]["fastMode"] = json!(true);
+
+        assert_eq!(render_footer(&data, &config, false), "5.5xh|f|codex-hud");
+    }
+
+    #[test]
+    fn render_footer_inserts_fast_mode_marker_from_service_tier() {
+        let data = json!({
+            "config": {
+                "model": "gpt-5.5",
+                "reasoning": "xhigh",
+                "serviceTier": "fast"
+            },
+            "project": {
+                "package": {
+                    "name": "codex-hud"
+                }
+            }
+        });
+        let mut config = hudcfg::default_config();
+        config["segments"] = json!(["model", "project"]);
+        config["format"]["effortShort"] = json!(true);
+
+        assert_eq!(render_footer(&data, &config, false), "5.5xh|f|codex-hud");
     }
 
     #[test]
