@@ -1270,12 +1270,13 @@ assert.strictEqual(rendererInstalledReport.renderer.version, repoPackageVersion)
 assert(!rendererInstalledReport.recommendations.some((entry) => entry.includes("codex-hud")));
 
 // (3) installed codex-hud behind the repo version: staleness recommendation.
+const staleRendererVersion = repoPackageVersion === "0.0.0" ? "0.0.1" : "0.0.0";
 const rendererStaleReport = doctor(doctorRendererPatchedArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? "codex-hud 0.1.0\n" : "codex-cli 0.139.0\n"),
+  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${staleRendererVersion}\n` : "codex-cli 0.139.0\n"),
 });
 assert.strictEqual(rendererStaleReport.renderer.installed, true);
-assert.strictEqual(rendererStaleReport.renderer.version, "0.1.0");
+assert.strictEqual(rendererStaleReport.renderer.version, staleRendererVersion);
 assert(
   rendererStaleReport.recommendations.some((entry) => entry.includes("codex-hud") && /rebuild/.test(entry)),
   "stale renderer must recommend a rebuild",
