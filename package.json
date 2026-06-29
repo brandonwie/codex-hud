@@ -19,6 +19,7 @@
     "codex:sync": "node scripts/install-patched-codex.js --sync-patched",
     "patch:codex": "node scripts/install-patched-codex.js --mode patched",
     "patch:codex:dry-run": "node scripts/install-patched-codex.js --mode patched --dry-run",
+    "cache:clean": "node scripts/install-patched-codex.js --prune-cache --apply",
     "prepare": "husky",
     "release": "semantic-release",
     "release:dry-run": "semantic-release --dry-run",

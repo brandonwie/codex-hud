@@ -294,6 +294,9 @@ status_line_command = "/Users/you/.local/bin/codex-hud --line --color"
 ```
 
 Führe `codex-hud-tui` aus, um den kompakten Footer zu sehen. Das gepatchte Binary folgt Stock-Codex-Updates nicht: Ändert sich Stock-Codex nach einem Build, gibt der gepatchte Launcher beim Start eine einzeilige Warnung aus (und führt weiterhin das von dir gewählte gepatchte Binary aus) — baue mit `npm run patch:codex` neu oder wechsle mit `npm run install:launcher` zurück zur Stock-Delegation. Jeder Rebuild wird gestaged, health-gecheckt und atomar aktiviert; die vorherige funktionierende Version bleibt für Rollbacks unter `~/.local/bin/codex-hud-codex.d/`, und `npm run doctor` meldet Veraltung und defekte Payloads. Ist das verwaltete `codex`-Shim aktiv, überspringt der Installer es bei der Erkennung der Basis-Codex-Version und nutzt das nächste echte `codex` auf dem `PATH`; mit `--version <version>` kannst du das Rebuild-Ziel explizit festlegen.
+
+**Build-Cache.** Ein gepatchter Build hinterlässt einen mehrere GB großen Cargo-`target/`-Baum unter `~/.cache/codex-hud/openai-codex-rust-v<version>`. Nach einer erfolgreichen Installation entfernt der Installer diese Build-Bäume standardmäßig — er behält einen flachen Source-Clone für die neuesten `--keep-versions` (Standard 2) und löscht ältere Source-Verzeichnisse vollständig. Rollbacks nutzen die installierten Payloads unter `~/.local/bin/codex-hud-codex.d/`, nicht den Build-Cache, daher ist das Entfernen von `target/` ungefährlich. Mit `--retain-build` (`npm run patch:codex -- --retain-build`) bleiben die vollständigen Bäume zum Debuggen erhalten. Räume bei Bedarf mit `npm run cache:clean` auf oder sieh dir mit `node scripts/install-patched-codex.js --prune-cache` zuerst eine Vorschau an (standardmäßig Dry-Run; `--apply` löscht tatsächlich). `npm run doctor` meldet die Build-Cache-Größe und markiert sie, sobald sie über 10 GB wächst.
+
 ## Projektstruktur
 
 ```text

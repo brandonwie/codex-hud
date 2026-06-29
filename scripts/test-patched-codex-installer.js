@@ -23,6 +23,11 @@ const {
   patchedRuntimeStatus,
   patchSource,
   pruneVersionDirs,
+  pruneBuildCache,
+  buildCacheReport,
+  listSourceCacheDirs,
+  dirSizeBytes,
+  formatBytes,
   renderLauncherScript,
   rendererBinaryName,
   resolveRenderer,
@@ -1343,5 +1348,85 @@ assert(
   rendererDefaultInstalledRun.stdout.includes(`renderer: rust (${path.join(doctorStockRoot, "codex-hud")}, v${repoPackageVersion}`),
   "doctor output must show an installed rust renderer",
 );
+
+// --- build-cache retention (Cargo target/ pruning under ~/.cache/codex-hud) ---
+function makeSourceVersion(cacheDir, version, byteUnit) {
+  const base = path.join(cacheDir, `openai-codex-rust-v${version}`);
+  // shallow source clone bits that MUST be preserved when only target/ is stripped
+  writeFile(base, ".git/config", "[core]\n");
+  writeFile(base, "codex-rs/Cargo.toml", "[package]\n");
+  // multi-GB-equivalent build outputs that MUST be reclaimed
+  writeFile(base, "codex-rs/target/release/codex", "X".repeat(byteUnit));
+  writeFile(base, "codex-rs/target/release/deps/lib.rlib", "Y".repeat(byteUnit));
+  return base;
+}
+
+// helper sanity: byte accounting + cache-dir filtering
+const bcSizeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-size-test-"));
+fs.writeFileSync(path.join(bcSizeRoot, "a"), "12345"); // 5 bytes
+writeFile(bcSizeRoot, "sub/b", "678"); // 3 bytes
+assert.strictEqual(dirSizeBytes(bcSizeRoot), 8, "dirSizeBytes sums nested file bytes");
+assert.strictEqual(formatBytes(0), "0 B");
+assert.strictEqual(formatBytes(1024), "1.0 KB");
+assert.strictEqual(formatBytes(1024 * 1024 * 1024), "1.0 GB");
+
+const bcListRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-list-test-"));
+makeSourceVersion(bcListRoot, "1.2.3", 10);
+fs.mkdirSync(path.join(bcListRoot, "unrelated-dir"), { recursive: true });
+fs.writeFileSync(path.join(bcListRoot, "stray-file"), "z");
+const bcList = listSourceCacheDirs({ cacheDir: bcListRoot });
+assert.strictEqual(bcList.length, 1, "listSourceCacheDirs returns only openai-codex-rust-v* dirs");
+assert.strictEqual(bcList[0].version, "1.2.3");
+assert.strictEqual(listSourceCacheDirs({ cacheDir: "/no/such/codex-hud/dir" }).length, 0, "missing cacheDir yields empty list");
+
+// dry-run is a strict no-op (plan only, zero filesystem changes)
+const bcDryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-dry-test-"));
+for (const v of ["0.140.0", "0.141.0", "0.142.0"]) makeSourceVersion(bcDryRoot, v, 64);
+const bcDryPlan = pruneBuildCache({ cacheDir: bcDryRoot, keepVersions: 2 }, { dryRun: true });
+assert.strictEqual(bcDryPlan.dryRun, true);
+assert.strictEqual(bcDryPlan.strippedTargets.length, 2, "dry-run plans to strip target/ from the 2 kept versions");
+assert.strictEqual(bcDryPlan.removedDirs.length, 1, "dry-run plans to remove the 1 stale version dir");
+assert(bcDryPlan.freedBytes > 0, "dry-run reports reclaimable bytes");
+for (const v of ["0.140.0", "0.141.0", "0.142.0"]) {
+  assert(fs.existsSync(path.join(bcDryRoot, `openai-codex-rust-v${v}`)), `dry-run must not delete ${v}`);
+  assert(fs.existsSync(path.join(bcDryRoot, `openai-codex-rust-v${v}`, "codex-rs", "target")), `dry-run must not strip target/ for ${v}`);
+}
+
+// apply: strip target/ from kept (preserve shallow clone), remove whole stale dir beyond keep-versions
+const bcApplyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-apply-test-"));
+for (const v of ["0.140.0", "0.141.0", "0.142.0"]) makeSourceVersion(bcApplyRoot, v, 64);
+const bcApplyPlan = pruneBuildCache({ cacheDir: bcApplyRoot, keepVersions: 2 }, { dryRun: false });
+assert.strictEqual(bcApplyPlan.strippedTargets.length, 2);
+assert.strictEqual(bcApplyPlan.removedDirs.length, 1);
+for (const v of ["0.141.0", "0.142.0"]) {
+  const base = path.join(bcApplyRoot, `openai-codex-rust-v${v}`);
+  assert(fs.existsSync(base), `kept version ${v} dir must remain`);
+  assert(!fs.existsSync(path.join(base, "codex-rs", "target")), `target/ must be stripped for kept ${v}`);
+  assert(fs.existsSync(path.join(base, ".git", "config")), `shallow clone .git must be preserved for ${v}`);
+  assert(fs.existsSync(path.join(base, "codex-rs", "Cargo.toml")), `source must be preserved for ${v}`);
+}
+assert(!fs.existsSync(path.join(bcApplyRoot, "openai-codex-rust-v0.140.0")), "stale version dir beyond keep-versions must be removed entirely");
+
+// buildCacheReport totals + sub-threshold flag
+const bcReportRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-report-test-"));
+makeSourceVersion(bcReportRoot, "0.142.0", 100);
+makeSourceVersion(bcReportRoot, "0.141.0", 100);
+const bcReport = buildCacheReport({ cacheDir: bcReportRoot });
+assert.strictEqual(bcReport.dirs.length, 2);
+assert(bcReport.total > 0);
+assert.strictEqual(bcReport.overThreshold, false, "small fixture is under the warn threshold");
+assert.strictEqual(bcReport.total, bcReport.dirs.reduce((sum, d) => sum + d.bytes, 0), "report total equals sum of per-dir bytes");
+
+// doctor surfaces the build-cache report
+const bcDoctorPrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-doctor-test-"));
+const bcDoctorCache = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-doctor-cache-test-"));
+makeSourceVersion(bcDoctorCache, "0.142.0", 50);
+const bcDoctorReport = doctor(
+  { prefix: bcDoctorPrefix, binName: "codex-hud-codex", launcherName: "codex-hud", renderer: "auto", cacheDir: bcDoctorCache },
+  { env: { PATH: "" }, runCommand: () => "codex-cli 0.142.0\n" },
+);
+assert(bcDoctorReport.buildCache, "doctor report includes a buildCache section");
+assert.strictEqual(bcDoctorReport.buildCache.dirs.length, 1);
+assert(bcDoctorReport.buildCache.total > 0);
 
 console.log("patched Codex installer tests passed");
