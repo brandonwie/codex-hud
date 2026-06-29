@@ -1066,6 +1066,14 @@ function listSourceCacheDirs(args) {
     }))
     .filter((dir) => {
       try {
+        validateCodexVersion(dir.version, "source cache directory");
+        return true;
+      } catch (_) {
+        return false;
+      }
+    })
+    .filter((dir) => {
+      try {
         return fs.statSync(dir.path).isDirectory();
       } catch (_) {
         return false;
@@ -1131,9 +1139,9 @@ function buildCacheReport(args) {
 // on the installed payloads under <prefix>/<bin>.d (see pruneVersionDirs), NOT
 // on these multi-GB Cargo build trees, so by default we strip codex-rs/target
 // from the kept shallow source clones and delete whole source dirs beyond
-// --keep-versions. --retain-build opts out. Safe by construction: runPatchedInstall
-// only calls this after a successful health check (it throws earlier on a failed
-// build), so an in-progress or failed build is never pruned.
+// --keep-versions. --retain-build opts out. In the install flow,
+// runPatchedInstall only calls this after a successful health check. Avoid
+// running standalone --prune-cache --apply concurrently with an active build.
 function pruneBuildCache(args, options = {}) {
   const { dryRun = false } = options;
   const keep = args.keepVersions || 2;
@@ -1164,6 +1172,32 @@ function pruneBuildCache(args, options = {}) {
     }
   }
   return plan;
+}
+
+function pruneBuildCacheAfterInstall(args, options = {}) {
+  const log = options.log || console.log;
+  const warn = options.warn || console.warn;
+  const prune = options.pruneBuildCache || pruneBuildCache;
+
+  if (args.retainBuild) {
+    log("Retained full build trees (--retain-build); source cache not pruned.");
+    return { skipped: true, plan: null, error: null };
+  }
+
+  try {
+    const cachePlan = prune(args, { dryRun: false });
+    if (cachePlan.freedBytes > 0) {
+      log(
+        `Pruned build cache: freed ${formatBytes(cachePlan.freedBytes)} from ${args.cacheDir} ` +
+          `(kept ${args.keepVersions} shallow source clone(s); --retain-build to keep full trees).`,
+      );
+    }
+    return { skipped: false, plan: cachePlan, error: null };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    warn(`Warning: build cache pruning failed; install completed but cache was retained: ${message}`);
+    return { skipped: false, plan: null, error: message };
+  }
 }
 
 function printBuildCachePlan(plan, args) {
@@ -2157,17 +2191,7 @@ function runPatchedInstall(args) {
   if (pruned.length) {
     console.log(`Pruned old payloads: ${pruned.join(", ")}`);
   }
-  if (args.retainBuild) {
-    console.log("Retained full build trees (--retain-build); source cache not pruned.");
-  } else {
-    const cachePlan = pruneBuildCache(args, { dryRun: false });
-    if (cachePlan.freedBytes > 0) {
-      console.log(
-        `Pruned build cache: freed ${formatBytes(cachePlan.freedBytes)} from ${args.cacheDir} ` +
-          `(kept ${args.keepVersions} shallow source clone(s); --retain-build to keep full trees).`,
-      );
-    }
-  }
+  pruneBuildCacheAfterInstall(args);
   installShimIfRequested(launcher, args);
   console.log("Add this under your existing [tui] table:");
   console.log(`status_line_command = ${JSON.stringify(statusLineCommand)}`);
@@ -2260,6 +2284,7 @@ module.exports = {
   patchSource,
   pruneVersionDirs,
   pruneBuildCache,
+  pruneBuildCacheAfterInstall,
   buildCacheReport,
   listSourceCacheDirs,
   dirSizeBytes,

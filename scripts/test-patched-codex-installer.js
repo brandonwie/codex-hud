@@ -24,6 +24,7 @@ const {
   patchSource,
   pruneVersionDirs,
   pruneBuildCache,
+  pruneBuildCacheAfterInstall,
   buildCacheReport,
   listSourceCacheDirs,
   dirSizeBytes,
@@ -1372,10 +1373,12 @@ assert.strictEqual(formatBytes(1024 * 1024 * 1024), "1.0 GB");
 
 const bcListRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-list-test-"));
 makeSourceVersion(bcListRoot, "1.2.3", 10);
+fs.mkdirSync(path.join(bcListRoot, "openai-codex-rust-vnot-a-version"), { recursive: true });
+fs.mkdirSync(path.join(bcListRoot, "openai-codex-rust-v1.2.x"), { recursive: true });
 fs.mkdirSync(path.join(bcListRoot, "unrelated-dir"), { recursive: true });
 fs.writeFileSync(path.join(bcListRoot, "stray-file"), "z");
 const bcList = listSourceCacheDirs({ cacheDir: bcListRoot });
-assert.strictEqual(bcList.length, 1, "listSourceCacheDirs returns only openai-codex-rust-v* dirs");
+assert.strictEqual(bcList.length, 1, "listSourceCacheDirs returns only valid openai-codex-rust-v<semver> dirs");
 assert.strictEqual(bcList[0].version, "1.2.3");
 assert.strictEqual(listSourceCacheDirs({ cacheDir: "/no/such/codex-hud/dir" }).length, 0, "missing cacheDir yields empty list");
 
@@ -1428,5 +1431,27 @@ const bcDoctorReport = doctor(
 assert(bcDoctorReport.buildCache, "doctor report includes a buildCache section");
 assert.strictEqual(bcDoctorReport.buildCache.dirs.length, 1);
 assert(bcDoctorReport.buildCache.total > 0);
+
+// install-flow cache pruning is best-effort: a cleanup failure must not abort a
+// completed install before --make-default can finish.
+const bcPostInstallLogs = [];
+const bcPostInstallWarnings = [];
+const bcPostInstallResult = pruneBuildCacheAfterInstall(
+  { cacheDir: "/tmp/codex-hud-buildcache-failure-test", keepVersions: 2 },
+  {
+    pruneBuildCache() {
+      throw new Error("permission denied");
+    },
+    log: (line) => bcPostInstallLogs.push(line),
+    warn: (line) => bcPostInstallWarnings.push(line),
+  },
+);
+assert.strictEqual(bcPostInstallResult.error, "permission denied");
+assert.strictEqual(bcPostInstallLogs.length, 0, "failed pruning must not log success");
+assert.strictEqual(bcPostInstallWarnings.length, 1, "failed pruning must emit one warning");
+assert(
+  bcPostInstallWarnings[0].includes("install completed but cache was retained"),
+  "warning must say install completed and cache was retained",
+);
 
 console.log("patched Codex installer tests passed");
