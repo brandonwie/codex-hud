@@ -50,6 +50,11 @@ Options:
   --repo <url>              Upstream source repo. Defaults to ${OPENAI_CODEX_REPO}.
   --cache-dir <dir>         Source cache directory. Defaults to ~/.cache/codex-hud.
   --keep-versions <n>       Patched payload versions to retain. Defaults to 2.
+  --retain-build, --keep-build
+                            Keep full Cargo build trees (codex-rs/target) in the source cache.
+                            Default strips them after a successful install.
+  --prune-cache             Report reclaimable build-cache space and exit (dry-run by default).
+  --apply                   With --prune-cache, delete instead of dry-run.
   --dry-run                 Clone/check out and patch source, but do not build or install.
   --make-default            Symlink ~/.local/bin/codex to the HUD launcher after install.
   --force-shim              Replace an existing ~/.local/bin/codex when used with --make-default.
@@ -207,6 +212,9 @@ function parseArgs(argv) {
     mode: "stock",
     renderer: "auto",
     keepVersions: 2,
+    retainBuild: false,
+    pruneCache: false,
+    apply: false,
     doctor: false,
     checkPatched: false,
     syncPatched: false,
@@ -224,6 +232,12 @@ function parseArgs(argv) {
       args.help = true;
     } else if (arg === "--doctor") {
       args.doctor = true;
+    } else if (arg === "--retain-build" || arg === "--keep-build") {
+      args.retainBuild = true;
+    } else if (arg === "--prune-cache") {
+      args.pruneCache = true;
+    } else if (arg === "--apply") {
+      args.apply = true;
     } else if (arg === "--check-patched") {
       args.checkPatched = true;
     } else if (arg === "--sync-patched") {
@@ -1034,6 +1048,175 @@ function pruneVersionDirs(args, keep = args.keepVersions || 2) {
   return removed;
 }
 
+const BUILD_CACHE_WARN_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB — doctor warns above this
+
+function listSourceCacheDirs(args) {
+  const prefix = "openai-codex-rust-v";
+  let entries;
+  try {
+    entries = fs.readdirSync(args.cacheDir);
+  } catch (_) {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.startsWith(prefix))
+    .map((entry) => ({
+      name: entry,
+      version: entry.slice(prefix.length),
+      path: path.join(args.cacheDir, entry),
+    }))
+    .filter((dir) => {
+      try {
+        validateCodexVersion(dir.version, "source cache directory");
+        return true;
+      } catch (_) {
+        return false;
+      }
+    })
+    .filter((dir) => {
+      try {
+        return fs.statSync(dir.path).isDirectory();
+      } catch (_) {
+        return false;
+      }
+    });
+}
+
+function dirSizeBytes(target) {
+  let total = 0;
+  const stack = [target];
+  while (stack.length) {
+    const current = stack.pop();
+    let stat;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (_) {
+      continue;
+    }
+    if (stat.isSymbolicLink()) {
+      total += stat.size;
+    } else if (stat.isDirectory()) {
+      let children;
+      try {
+        children = fs.readdirSync(current);
+      } catch (_) {
+        continue;
+      }
+      for (const child of children) {
+        stack.push(path.join(current, child));
+      }
+    } else {
+      total += stat.size;
+    }
+  }
+  return total;
+}
+
+function formatBytes(bytes) {
+  const gb = 1024 * 1024 * 1024;
+  const mb = 1024 * 1024;
+  const kb = 1024;
+  if (bytes >= gb) return `${(bytes / gb).toFixed(1)} GB`;
+  if (bytes >= mb) return `${(bytes / mb).toFixed(1)} MB`;
+  if (bytes >= kb) return `${(bytes / kb).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
+function buildCacheReport(args) {
+  const dirs = listSourceCacheDirs(args)
+    .map((dir) => ({ ...dir, bytes: dirSizeBytes(dir.path) }))
+    .sort((a, b) => compareVersionsDesc(a.version, b.version));
+  const total = dirs.reduce((sum, dir) => sum + dir.bytes, 0);
+  return {
+    cacheDir: args.cacheDir,
+    dirs,
+    total,
+    threshold: BUILD_CACHE_WARN_BYTES,
+    overThreshold: total > BUILD_CACHE_WARN_BYTES,
+  };
+}
+
+// Bounds ~/.cache/codex-hud after a successful patched install. Rollback rides
+// on the installed payloads under <prefix>/<bin>.d (see pruneVersionDirs), NOT
+// on these multi-GB Cargo build trees, so by default we strip codex-rs/target
+// from the kept shallow source clones and delete whole source dirs beyond
+// --keep-versions. --retain-build opts out. In the install flow,
+// runPatchedInstall only calls this after a successful health check. Avoid
+// running standalone --prune-cache --apply concurrently with an active build.
+function pruneBuildCache(args, options = {}) {
+  const { dryRun = false } = options;
+  const keep = args.keepVersions;
+  const dirs = listSourceCacheDirs(args).sort((a, b) =>
+    compareVersionsDesc(a.version, b.version),
+  );
+  const keepNames = new Set(dirs.slice(0, keep).map((dir) => dir.name));
+  const plan = { strippedTargets: [], removedDirs: [], freedBytes: 0, dryRun };
+
+  for (const dir of dirs) {
+    if (keepNames.has(dir.name)) {
+      const targetDir = path.join(dir.path, "codex-rs", "target");
+      if (fs.existsSync(targetDir)) {
+        const bytes = dirSizeBytes(targetDir);
+        plan.strippedTargets.push({ dir: dir.name, path: targetDir, bytes });
+        plan.freedBytes += bytes;
+        if (!dryRun) {
+          fs.rmSync(targetDir, { recursive: true, force: true });
+        }
+      }
+    } else {
+      const bytes = dirSizeBytes(dir.path);
+      plan.removedDirs.push({ dir: dir.name, path: dir.path, bytes });
+      plan.freedBytes += bytes;
+      if (!dryRun) {
+        fs.rmSync(dir.path, { recursive: true, force: true });
+      }
+    }
+  }
+  return plan;
+}
+
+function pruneBuildCacheAfterInstall(args, options = {}) {
+  const log = options.log || console.log;
+  const warn = options.warn || console.warn;
+  const prune = options.pruneBuildCache || pruneBuildCache;
+
+  if (args.retainBuild) {
+    log("Retained full build trees (--retain-build); source cache not pruned.");
+    return { skipped: true, plan: null, error: null };
+  }
+
+  try {
+    const cachePlan = prune(args, { dryRun: false });
+    if (cachePlan.freedBytes > 0) {
+      log(
+        `Pruned build cache: freed ${formatBytes(cachePlan.freedBytes)} from ${args.cacheDir} ` +
+          `(kept ${args.keepVersions} shallow source clone(s); --retain-build to keep full trees).`,
+      );
+    }
+    return { skipped: false, plan: cachePlan, error: null };
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    warn(`Warning: build cache pruning failed; install completed but cache was retained: ${message}`);
+    return { skipped: false, plan: null, error: message };
+  }
+}
+
+function printBuildCachePlan(plan, args) {
+  if (!plan.strippedTargets.length && !plan.removedDirs.length) {
+    console.log(`Build cache clean: nothing to prune in ${args.cacheDir}`);
+    return;
+  }
+  for (const entry of plan.strippedTargets) {
+    console.log(`  strip target/  ${entry.dir}  (${formatBytes(entry.bytes)})`);
+  }
+  for (const entry of plan.removedDirs) {
+    console.log(`  remove dir     ${entry.dir}  (${formatBytes(entry.bytes)})`);
+  }
+  const action = plan.dryRun ? "Would free" : "Freed";
+  const suffix = plan.dryRun ? "  (run with --apply to delete)" : "";
+  console.log(`${action} ${formatBytes(plan.freedBytes)} from ${args.cacheDir}${suffix}`);
+}
+
 function renderLauncherScript(opts) {
   const mode = opts.mode;
   if (mode !== "stock" && mode !== "patched") {
@@ -1368,6 +1551,7 @@ function doctor(args, options = {}) {
     renderer: { configured: null, binPath: path.join(args.prefix, rendererBinaryName()), installed: false, broken: false, version: null },
     anomalies: [],
     recommendations: [],
+    buildCache: null,
     healthy: true,
   };
 
@@ -1579,6 +1763,8 @@ function doctor(args, options = {}) {
       }
     }
   }
+
+  report.buildCache = buildCacheReport(args);
 
   return report;
 }
@@ -1860,6 +2046,15 @@ function printDoctorReport(report) {
   } else {
     lines.push("patched command: (none)");
   }
+  if (report.buildCache) {
+    const bc = report.buildCache;
+    lines.push(
+      `source build cache: ${formatBytes(bc.total)} in ${bc.cacheDir} (${bc.dirs.length} version dir(s))` +
+        (bc.overThreshold
+          ? ` [OVER ${formatBytes(bc.threshold)}] -> reclaim: npm run cache:clean`
+          : ""),
+    );
+  }
   for (const anomaly of report.anomalies) {
     lines.push(`anomaly: ${anomaly}`);
   }
@@ -1997,6 +2192,7 @@ function runPatchedInstall(args) {
   if (pruned.length) {
     console.log(`Pruned old payloads: ${pruned.join(", ")}`);
   }
+  pruneBuildCacheAfterInstall(args);
   installShimIfRequested(launcher, args);
   console.log("Add this under your existing [tui] table:");
   console.log(`status_line_command = ${JSON.stringify(statusLineCommand)}`);
@@ -2030,6 +2226,16 @@ function main() {
     if (!report.healthy) {
       process.exitCode = 1;
     }
+    return;
+  }
+
+  if (args.pruneCache) {
+    if (args.retainBuild) {
+      console.log("Skipped: --retain-build is set; pass without --retain-build to prune.");
+      return;
+    }
+    const plan = pruneBuildCache(args, { dryRun: !args.apply });
+    printBuildCachePlan(plan, args);
     return;
   }
 
@@ -2082,6 +2288,13 @@ module.exports = {
   patchedRuntimeStatus,
   patchSource,
   pruneVersionDirs,
+  pruneBuildCache,
+  pruneBuildCacheAfterInstall,
+  buildCacheReport,
+  listSourceCacheDirs,
+  dirSizeBytes,
+  formatBytes,
+  printBuildCachePlan,
   reconcileDefaultShim,
   renderLauncherScript,
   rendererBinaryName,
