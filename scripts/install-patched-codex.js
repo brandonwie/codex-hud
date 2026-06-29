@@ -50,7 +50,8 @@ Options:
   --repo <url>              Upstream source repo. Defaults to ${OPENAI_CODEX_REPO}.
   --cache-dir <dir>         Source cache directory. Defaults to ~/.cache/codex-hud.
   --keep-versions <n>       Patched payload versions to retain. Defaults to 2.
-  --retain-build            Keep full Cargo build trees (codex-rs/target) in the source cache.
+  --retain-build, --keep-build
+                            Keep full Cargo build trees (codex-rs/target) in the source cache.
                             Default strips them after a successful install.
   --prune-cache             Report reclaimable build-cache space and exit (dry-run by default).
   --apply                   With --prune-cache, delete instead of dry-run.
@@ -1144,7 +1145,7 @@ function buildCacheReport(args) {
 // running standalone --prune-cache --apply concurrently with an active build.
 function pruneBuildCache(args, options = {}) {
   const { dryRun = false } = options;
-  const keep = args.keepVersions || 2;
+  const keep = args.keepVersions;
   const dirs = listSourceCacheDirs(args).sort((a, b) =>
     compareVersionsDesc(a.version, b.version),
   );
@@ -2229,6 +2230,10 @@ function main() {
   }
 
   if (args.pruneCache) {
+    if (args.retainBuild) {
+      console.log("Skipped: --retain-build is set; pass without --retain-build to prune.");
+      return;
+    }
     const plan = pruneBuildCache(args, { dryRun: !args.apply });
     printBuildCachePlan(plan, args);
     return;

@@ -1454,4 +1454,50 @@ assert(
   "warning must say install completed and cache was retained",
 );
 
+const bcPostInstallRetainLogs = [];
+const bcPostInstallRetain = pruneBuildCacheAfterInstall(
+  { cacheDir: "/tmp/codex-hud-buildcache-retain-test", keepVersions: 2, retainBuild: true },
+  { log: (line) => bcPostInstallRetainLogs.push(line) },
+);
+assert.strictEqual(bcPostInstallRetain.skipped, true);
+assert.strictEqual(bcPostInstallRetain.plan, null);
+assert.strictEqual(bcPostInstallRetain.error, null);
+assert.strictEqual(bcPostInstallRetainLogs.length, 1, "retainBuild should log one retained-cache message");
+
+const bcPostInstallSuccessLogs = [];
+const bcPostInstallSuccess = pruneBuildCacheAfterInstall(
+  { cacheDir: "/tmp/codex-hud-buildcache-success-test", keepVersions: 2 },
+  {
+    pruneBuildCache() {
+      return { freedBytes: 2048, strippedTargets: [], removedDirs: [], dryRun: false };
+    },
+    log: (line) => bcPostInstallSuccessLogs.push(line),
+  },
+);
+assert.strictEqual(bcPostInstallSuccess.error, null);
+assert.strictEqual(bcPostInstallSuccess.plan.freedBytes, 2048);
+assert.strictEqual(bcPostInstallSuccessLogs.length, 1, "successful pruning should log reclaimed bytes");
+assert(bcPostInstallSuccessLogs[0].includes("Pruned build cache: freed 2.0 KB"));
+
+const bcCliRetainRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-buildcache-cli-retain-test-"));
+makeSourceVersion(bcCliRetainRoot, "0.142.0", 64);
+const bcCliRetainRun = spawnSync(
+  process.execPath,
+  [
+    path.join(__dirname, "install-patched-codex.js"),
+    "--prune-cache",
+    "--apply",
+    "--retain-build",
+    "--cache-dir",
+    bcCliRetainRoot,
+  ],
+  { encoding: "utf8" },
+);
+assert.strictEqual(bcCliRetainRun.status, 0);
+assert(bcCliRetainRun.stdout.includes("Skipped: --retain-build is set"));
+assert(
+  fs.existsSync(path.join(bcCliRetainRoot, "openai-codex-rust-v0.142.0", "codex-rs", "target")),
+  "--prune-cache --apply --retain-build must not delete target/",
+);
+
 console.log("patched Codex installer tests passed");
