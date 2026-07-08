@@ -18,8 +18,11 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { spawnSync } = require("node:child_process");
 
-const binary = process.argv[2] || "rust/target/release/codex-hud";
 const root = path.resolve(__dirname, "..");
+const binaryArg = process.argv[2];
+const binary = binaryArg
+  ? path.resolve(process.cwd(), binaryArg)
+  : path.join(root, "rust/target/release/codex-hud");
 const fail = [];
 
 // --- 1. Load the site's pure helpers via a permissive DOM mock -------------
@@ -151,7 +154,12 @@ const requests = [
 ];
 
 const stdin = requests.map((r) => JSON.stringify(r)).join("\n") + "\n";
-const result = spawnSync(binary, ["--render-json"], { input: stdin, encoding: "utf8" });
+const result = spawnSync(binary, ["--render-json"], { input: stdin, encoding: "utf8", cwd: root });
+if (result.error) {
+  console.error("parity check failed:");
+  console.error(`- failed to spawn ${binary}: ${result.error.message}`);
+  process.exit(1);
+}
 if (result.status !== 0) {
   console.error("parity check failed:");
   console.error(`- --render-json exited ${result.status}: ${result.stderr || "(no stderr)"}`);
@@ -170,7 +178,9 @@ const outputs = result.stdout
   });
 
 if (outputs.length !== requests.length) {
-  fail.push(`expected ${requests.length} render-json outputs, got ${outputs.length}`);
+  console.error("parity check failed:");
+  console.error(`- expected ${requests.length} render-json outputs, got ${outputs.length}`);
+  process.exit(1);
 }
 
 // --- 4. Compare both engines against the table and each other --------------
