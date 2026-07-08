@@ -11,7 +11,7 @@
     "hud": "rust/target/release/codex-hud",
     "golden:update": "npm run build:rust && node scripts/test-golden.js rust/target/release/codex-hud --update && node scripts/test-parsing-golden.js rust/target/release/codex-hud --update",
     "build:rust": "cargo build --release --manifest-path rust/Cargo.toml",
-    "test:rust": "npm run build:rust && node scripts/test-golden.js rust/target/release/codex-hud && node scripts/test-parsing-golden.js rust/target/release/codex-hud && node scripts/test-rust-cli.js rust/target/release/codex-hud",
+    "test:rust": "cargo test --manifest-path rust/Cargo.toml && npm run build:rust && node scripts/test-golden.js rust/target/release/codex-hud && node scripts/test-parsing-golden.js rust/target/release/codex-hud && node scripts/test-rust-cli.js rust/target/release/codex-hud && node scripts/test-parity.js rust/target/release/codex-hud",
     "measure:rust": "node scripts/measure-rust-hud.js",
     "install:launcher": "node scripts/install-patched-codex.js --mode stock",
     "doctor": "node scripts/install-patched-codex.js --doctor",
