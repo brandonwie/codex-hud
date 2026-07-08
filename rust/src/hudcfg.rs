@@ -160,36 +160,56 @@ pub fn toml_boolean(config: &str, section: &str, key: &str) -> Option<bool> {
     None
 }
 
-/// Port of tomlStringArray(): single-line `key = ["a", "b"]` inside a section.
+/// Port of tomlStringArray(): `key = ["a", "b"]` inside a section. Handles both
+/// single-line arrays and multi-line arrays (the `]` may sit on a later line),
+/// which are common in a real `~/.codex/config.toml` `[tui].status_line`.
 pub fn toml_string_array(config: &str, section: &str, key: &str) -> Vec<String> {
     let Some(body) = toml_section(config, section) else {
         return Vec::new();
     };
-    for line in body.split('\n') {
-        if let Some(rest) = line.strip_prefix(key) {
-            let rest = rest.trim_start();
-            if let Some(rest) = rest.strip_prefix('=') {
-                let rest = rest.trim_start();
-                if let Some(rest) = rest.strip_prefix('[') {
-                    if let Some(end) = rest.find(']') {
-                        let inner = &rest[..end];
-                        let mut values = Vec::new();
-                        let mut remaining = inner;
-                        while let Some(start) = remaining.find('"') {
-                            let after = &remaining[start + 1..];
-                            match after.find('"') {
-                                Some(close) => {
-                                    values.push(after[..close].to_string());
-                                    remaining = &after[close + 1..];
-                                }
-                                None => break,
-                            }
-                        }
-                        return values;
-                    }
-                }
+    let mut lines = body.split('\n');
+    while let Some(line) = lines.next() {
+        let Some(rest) = line.strip_prefix(key) else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(rest) = rest.strip_prefix('=') else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(mut rest) = rest.strip_prefix('[') else {
+            continue;
+        };
+
+        // Accumulate the array body from the opening `[` across as many lines as
+        // needed until the closing `]`. An unterminated array parses what exists.
+        let mut inner = String::new();
+        loop {
+            if let Some(end) = rest.find(']') {
+                inner.push_str(&rest[..end]);
+                break;
+            }
+            inner.push_str(rest);
+            inner.push('\n');
+            match lines.next() {
+                Some(next) => rest = next,
+                None => break,
             }
         }
+
+        let mut values = Vec::new();
+        let mut remaining = inner.as_str();
+        while let Some(start) = remaining.find('"') {
+            let after = &remaining[start + 1..];
+            match after.find('"') {
+                Some(close) => {
+                    values.push(after[..close].to_string());
+                    remaining = &after[close + 1..];
+                }
+                None => break,
+            }
+        }
+        return values;
     }
     Vec::new()
 }
@@ -754,5 +774,25 @@ mod tests {
         assert!(!format.contains_key("modelStyle"));
         assert!(warnings.iter().any(|warning| warning
             == "test.toml: format.modelStyle is ignored; use format.modelShort = false for full model names"));
+    }
+
+    #[test]
+    fn toml_string_array_parses_multiline_and_single_line_arrays() {
+        // Multi-line array (the `]` sits on a later line) — common in a real
+        // ~/.codex/config.toml. Previously returned an empty Vec.
+        let multiline = "[tui]\nstatus_line = [\n  \"model\",\n  \"branch\",\n]\n";
+        assert_eq!(
+            toml_string_array(multiline, "tui", "status_line"),
+            vec!["model".to_string(), "branch".to_string()]
+        );
+        // Single-line array still parses (no regression).
+        let single = "[tui]\nstatus_line = [\"model\", \"branch\"]\n";
+        assert_eq!(
+            toml_string_array(single, "tui", "status_line"),
+            vec!["model".to_string(), "branch".to_string()]
+        );
+        // Empty array yields an empty Vec.
+        let empty = "[tui]\nstatus_line = []\n";
+        assert!(toml_string_array(empty, "tui", "status_line").is_empty());
     }
 }

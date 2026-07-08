@@ -179,6 +179,11 @@ pub fn list_session_files(codex_home: &Path) -> Vec<PathBuf> {
     let sessions_root = codex_home.join("sessions");
     let mut files: Vec<PathBuf> = Vec::new();
 
+    // Codex stores rollouts under sessions/YYYY/MM/DD/. Walk directories in
+    // DESCENDING name order (zero-padded numeric names sort chronologically), so
+    // the 3000-entry cap drops the OLDEST sessions — never the newest. An
+    // unordered walk could hit the cap before reaching a newer, not-yet-walked
+    // directory and silently return stale usage.
     fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
         if files.len() > 3000 {
             return;
@@ -186,15 +191,23 @@ pub fn list_session_files(codex_home: &Path) -> Vec<PathBuf> {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
         };
+        let mut subdirs: Vec<PathBuf> = Vec::new();
         for entry in entries.flatten() {
             let full_path = entry.path();
             if full_path.is_dir() {
-                walk(&full_path, files);
+                subdirs.push(full_path);
             } else if let Some(name) = full_path.file_name().and_then(|n| n.to_str()) {
                 if name.starts_with("rollout-") && name.ends_with(".jsonl") {
                     files.push(full_path);
                 }
             }
+        }
+        subdirs.sort_unstable_by(|a, b| b.file_name().cmp(&a.file_name()));
+        for sub in subdirs {
+            if files.len() > 3000 {
+                break;
+            }
+            walk(&sub, files);
         }
     }
 
@@ -576,5 +589,26 @@ mod tests {
 
         assert!(native_status_items(&configs).is_empty());
         assert_eq!(native_status_colors(&configs), Value::Bool(false));
+    }
+
+    #[test]
+    fn list_session_files_finds_rollouts_across_nested_date_dirs() {
+        let codex_home = temp_dir("list-sessions");
+        for day in ["sessions/2024/12/31", "sessions/2025/01/02"] {
+            let dir = codex_home.join(day);
+            fs::create_dir_all(&dir).expect("create session dir");
+            fs::write(dir.join("rollout-x.jsonl"), "{}\n").expect("write rollout");
+            fs::write(dir.join("ignore.txt"), "x").expect("write noise");
+        }
+
+        let files = list_session_files(&codex_home);
+        assert_eq!(files.len(), 2, "should find both nested rollout files");
+        assert!(files.iter().all(|f| f
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n.starts_with("rollout-") && n.ends_with(".jsonl"))
+            .unwrap_or(false)));
+
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
     }
 }
