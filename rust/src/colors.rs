@@ -29,27 +29,41 @@ pub fn resolve_color(input: Option<&Value>, fallback: Option<String>) -> Option<
         None | Some(Value::Null) => return fallback,
         Some(v) => v,
     };
-    if let Value::String(s) = input {
+    // String inputs are trimmed to match the site (resolveColor does
+    // String(value).trim() before matching), so " mint" / " 45" resolve the
+    // same in both engines.
+    let trimmed: Option<&str> = match input {
+        Value::String(s) => Some(s.trim()),
+        _ => None,
+    };
+    if let Some(s) = trimmed {
         if let Some(seq) = palette(s) {
             return Some(seq.to_string());
         }
     }
-    let numeric_string = matches!(input, Value::String(s)
+    let numeric_string = matches!(trimmed, Some(s)
         if (1..=3).contains(&s.len()) && s.chars().all(|c| c.is_ascii_digit()));
     if input.is_number() || numeric_string {
-        let n = compat::js_number(Some(input));
+        let n = match trimmed {
+            Some(s) => s.parse::<f64>().unwrap_or(f64::NAN),
+            None => compat::js_number(Some(input)),
+        };
         if n.is_finite() && n == n.trunc() && (0.0..=255.0).contains(&n) {
             return Some(format!("\x1b[38;5;{}m", n as i64));
         }
         return fallback;
     }
-    if let Value::String(s) = input {
-        let hex = s.strip_prefix('#').unwrap_or(s);
-        if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
-            let r = u8::from_str_radix(&hex[0..2], 16).expect("guarded: 6 ascii hex digits");
-            let g = u8::from_str_radix(&hex[2..4], 16).expect("guarded: 6 ascii hex digits");
-            let b = u8::from_str_radix(&hex[4..6], 16).expect("guarded: 6 ascii hex digits");
-            return Some(format!("\x1b[38;5;{}m", nearest_xterm256(r, g, b)));
+    // Hex requires a leading '#', matching the documented `#rrggbb` contract
+    // (spec/config-schema.md § Colors) and the site's /^#[0-9a-f]{6}$/i. A bare
+    // 6-hex string like "5fafff" is NOT a valid color in either engine.
+    if let Some(s) = trimmed {
+        if let Some(hex) = s.strip_prefix('#') {
+            if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                let r = u8::from_str_radix(&hex[0..2], 16).expect("guarded: 6 ascii hex digits");
+                let g = u8::from_str_radix(&hex[2..4], 16).expect("guarded: 6 ascii hex digits");
+                let b = u8::from_str_radix(&hex[4..6], 16).expect("guarded: 6 ascii hex digits");
+                return Some(format!("\x1b[38;5;{}m", nearest_xterm256(r, g, b)));
+            }
         }
     }
     fallback
@@ -150,6 +164,40 @@ mod tests {
         );
         assert_eq!(
             resolve_color(Some(&json!("#5fafff")), None),
+            Some(format!("\x1b[38;5;{}m", nearest_xterm256(0x5f, 0xaf, 0xff)))
+        );
+    }
+
+    #[test]
+    fn resolve_color_rejects_bare_hex_to_match_site_and_schema() {
+        // Bare 6-hex (no leading '#') is NOT a valid color; the site rejects it
+        // and spec/config-schema.md documents `#rrggbb` only.
+        let fallback = Some("fallback".to_string());
+        assert_eq!(
+            resolve_color(Some(&json!("5fafff")), fallback.clone()),
+            fallback
+        );
+        // The `#`-prefixed form still resolves.
+        assert_eq!(
+            resolve_color(Some(&json!("#5fafff")), None),
+            Some(format!("\x1b[38;5;{}m", nearest_xterm256(0x5f, 0xaf, 0xff)))
+        );
+    }
+
+    #[test]
+    fn resolve_color_trims_whitespace_like_the_site() {
+        // The site trims before matching; Rust must too, or the HUD and the
+        // playground diverge on padded config values.
+        assert_eq!(
+            resolve_color(Some(&json!(" mint")), None),
+            palette("mint").map(str::to_string)
+        );
+        assert_eq!(
+            resolve_color(Some(&json!("  45  ")), None),
+            Some("\x1b[38;5;45m".to_string())
+        );
+        assert_eq!(
+            resolve_color(Some(&json!(" #5fafff ")), None),
             Some(format!("\x1b[38;5;{}m", nearest_xterm256(0x5f, 0xaf, 0xff)))
         );
     }

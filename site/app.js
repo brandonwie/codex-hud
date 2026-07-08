@@ -117,7 +117,9 @@
 
   const readBool = (element, fallback) => (element ? Boolean(element.checked) : fallback);
 
-  const shortModel = (value) => value.replace(/^gpt-/, "");
+  // Case-insensitive to match the Rust renderer (format_model_name uses
+  // eq_ignore_ascii_case("gpt-")), so "GPT-5.5" and "gpt-5.5" both shorten.
+  const shortModel = (value) => value.replace(/^gpt-/i, "");
 
   const clean = (value, fallback) => {
     const next = String(value || "").trim().replace(/\s+/g, "-");
@@ -480,6 +482,14 @@
       button.addEventListener("click", () => copyText(target.textContent || "", status));
     });
   };
+
+  // Test hook: expose the pure render helpers to the Node parity harness
+  // (scripts/test-parity.js) when it opts in via a global sentinel. Never active
+  // in the browser — nothing sets this global there — so runtime is unaffected.
+  if (typeof globalThis !== "undefined" && globalThis.__CODEX_HUD_TEST__) {
+    globalThis.__CODEX_HUD_TEST__.resolveColor = resolveColor;
+    globalThis.__CODEX_HUD_TEST__.shortModel = shortModel;
+  }
 
   document.querySelectorAll("[data-setting]").forEach((element) => {
     element.addEventListener("input", render);
