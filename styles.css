@@ -536,6 +536,65 @@ output {
   accent-color: var(--accent);
 }
 
+.format-choice {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.format-choice-label {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.segmented-option {
+  position: relative;
+  display: block;
+  margin: 0;
+  cursor: pointer;
+}
+
+.segmented-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.segmented-option span {
+  display: grid;
+  min-height: 34px;
+  place-items: center;
+  padding: 6px 10px;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.segmented-option input:checked + span {
+  color: var(--bg);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.segmented-option input:focus-visible + span {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .compact-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

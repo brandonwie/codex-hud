@@ -27,8 +27,7 @@
     thresholdWarn: byId("threshold-warn"),
     thresholdCrit: byId("threshold-crit"),
     tokenUsage: byId("show-token-usage"),
-    shortModel: byId("short-model"),
-    shortEffort: byId("short-effort"),
+    identityShort: byId("identity-short"),
     fastMode: byId("fast-mode"),
     serviceTier: byId("service-tier"),
     percentRound: byId("percent-round"),
@@ -63,15 +62,23 @@
     installCopyStatus: byId("install-copy-status"),
   };
 
-  // Mirror rust/src/render.rs format_reasoning_effort():
-  // effortShort abbreviates only xhigh; high/medium/low always render High/Med/Low.
+  // Mirror rust/src/render.rs format_reasoning_effort().
   const formatEffort = (value, short) => {
     if (!value) return null;
     const normalized = String(value).trim();
     if (/^x[-_ ]?high$/i.test(normalized)) return short ? "xh" : "xhigh";
-    if (/^high$/i.test(normalized)) return "High";
-    if (/^medium$/i.test(normalized)) return "Med";
-    if (/^low$/i.test(normalized)) return "Low";
+    if (/^high$/i.test(normalized)) return short ? "h" : "high";
+    if (/^medium$/i.test(normalized)) return short ? "m" : "medium";
+    if (/^low$/i.test(normalized)) return short ? "l" : "low";
+    if (/^minimal$/i.test(normalized)) return short ? "min" : "minimal";
+    return normalized;
+  };
+
+  const formatServiceTier = (value, short) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized || normalized === "default" || normalized === "standard") return null;
+    if (short && normalized === "fast") return "f";
+    if (short && normalized === "flex") return "fl";
     return normalized;
   };
 
@@ -260,10 +267,13 @@
 
   const renderSegment = (line, segment, state) => {
     if (segment === "model") {
-      append(line, `${state.modelText}${state.effortText}`, "model", state, "model");
-      if (state.fastActive) {
-        appendSeparator(line, state);
-        append(line, "f", "model", state, "model");
+      const identity = [state.modelText, state.effortText, state.serviceTierText].filter(Boolean);
+      identity.forEach((part, index) => {
+        if (index > 0) appendSeparator(line, state);
+        append(line, part, "model", state, "model");
+      });
+      if (identity.length === 0) {
+        return false;
       }
       return true;
     }
@@ -344,8 +354,7 @@
     `tokenUsage = ${state.tokenUsage}`,
     `pace = ${state.pace}`,
     `pacePrefix = ${state.pacePrefix}`,
-    `modelShort = ${state.shortModel}`,
-    `effortShort = ${state.shortEffort}`,
+    `identityShort = ${state.identityShort}`,
     `fastMode = ${state.fastMode}`,
     `paceSlowPrefix = ${tomlString(state.paceSlowPrefix)}`,
     `paceNormalPrefix = ${tomlString(state.paceNormalPrefix)}`,
@@ -353,13 +362,11 @@
   ].join("\n");
 
   const readState = () => {
-    const model = readText(field.model, "gpt-5.5");
-    const effort = readText(field.effort, "xhigh");
-    const shortModelEnabled = readBool(field.shortModel, true);
-    const shortEffortEnabled = readBool(field.shortEffort, false);
-    // Fast marker: Codex service_tier="fast" auto-detect, OR the manual fastMode override.
+    const model = readText(field.model, "gpt-5.6-sol");
+    const effort = readText(field.effort, "high");
+    const identityShort = readBool(field.identityShort, true);
     const fastModeOverride = readBool(field.fastMode, false);
-    const fastActive = readText(field.serviceTier, "standard") === "fast" || fastModeOverride;
+    const serviceTier = fastModeOverride ? "fast" : readText(field.serviceTier, "default");
     const configColors = {
       model: readText(field.colorModel, "neonViolet"),
       branch: readText(field.colorBranch, "neonViolet"),
@@ -370,8 +377,9 @@
     return {
       model,
       effort,
-      modelText: shortModelEnabled ? shortModel(model) : model,
-      effortText: formatEffort(effort, shortEffortEnabled),
+      modelText: identityShort ? shortModel(model) : model,
+      effortText: formatEffort(effort, identityShort),
+      serviceTierText: formatServiceTier(serviceTier, identityShort),
       project: clean(field.project && field.project.value, "codex-hud"),
       branch: clean(field.branch && field.branch.value, "main"),
       color: readBool(field.color, true),
@@ -404,10 +412,8 @@
       tokenUsage: readBool(field.tokenUsage, true),
       pace: readBool(field.pace, true),
       pacePrefix: readBool(field.pacePrefix, true),
-      shortModel: shortModelEnabled,
-      shortEffort: shortEffortEnabled,
+      identityShort,
       fastMode: fastModeOverride,
-      fastActive,
       paceSlowPrefix: readText(field.paceSlowPrefix, "🐢"),
       paceNormalPrefix: readText(field.paceNormalPrefix, "👾"),
       paceFastPrefix: readText(field.paceFastPrefix, "🔥"),
