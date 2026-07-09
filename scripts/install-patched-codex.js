@@ -447,7 +447,15 @@ function statusLineCommandFor(renderer) {
 function detectStockCodex(options = {}) {
   const runCommand = options.runCommand || run;
   const env = options.env || process.env;
-  const candidates = findCodexCandidates(env, { includeKnownPaths: options.includeKnownPaths });
+  const preferredCandidates = Array.isArray(options.preferredCandidates)
+    ? options.preferredCandidates
+        .filter((candidate) => typeof candidate === "string" && executableExists(candidate))
+        .map((candidate) => path.resolve(candidate))
+    : [];
+  const candidates = uniquePaths([
+    ...preferredCandidates,
+    ...findCodexCandidates(env, { includeKnownPaths: options.includeKnownPaths }),
+  ]);
   let attemptedRealCandidate = false;
   let lastError = null;
 
@@ -1299,7 +1307,8 @@ STOCK_REALPATH_AT_INSTALL=${shellQuote(opts.stockRealpath || "")}
 
 if [ -n "$STOCK_PATH" ] && [ -e "$STOCK_PATH" ] && [ -n "$STOCK_REALPATH_AT_INSTALL" ] && command -v realpath >/dev/null 2>&1; then
   current_stock="$(realpath "$STOCK_PATH" 2>/dev/null || true)"
-  if [ -n "$current_stock" ] && [ "$current_stock" != "$STOCK_REALPATH_AT_INSTALL" ]; then
+  current_launcher="$(realpath "$0" 2>/dev/null || true)"
+  if [ -n "$current_stock" ] && [ "$current_stock" != "$current_launcher" ] && [ "$current_stock" != "$STOCK_REALPATH_AT_INSTALL" ]; then
     echo ${shellQuote(staleWarning)} >&2
   fi
 fi
@@ -1611,8 +1620,17 @@ function doctor(args, options = {}) {
     }
   }
 
+  const metadataStockCandidates = report.shim.status === "managed" && report.launcher.metadata
+    ? [report.launcher.metadata.stockRealpath, report.launcher.metadata.stockPath]
+    : [];
   try {
-    report.stock = detectStockCodex({ runCommand, env });
+    const detectedStock = detectStockCodex({ runCommand, env });
+    const metadataStock = metadataStockCandidates.length
+      ? detectStockCodex({ runCommand, env, preferredCandidates: metadataStockCandidates })
+      : null;
+    report.stock = metadataStock && (!detectedStock || metadataStock.realpath !== detectedStock.realpath)
+      ? metadataStock
+      : detectedStock;
   } catch (error) {
     report.anomalies.push(`stock codex --version failed: ${error.message}`);
   }
@@ -1881,11 +1899,14 @@ function refreshPatchedLauncher(args, report, options = {}) {
   const resolveRendererImpl = options.resolveRenderer || resolveRenderer;
   const renderer = resolveRendererImpl(args);
   const statusLineCommand = statusLineCommandFor(renderer);
+  const trackedStockPath = report.shim.status === "managed" && report.launcher.metadata && report.launcher.metadata.stockPath
+    ? report.launcher.metadata.stockPath
+    : report.stock.path;
   const launcher = installLauncher(args, {
     mode: "patched",
     patchedBinary: active.path,
     patchedVersion: active.version,
-    stockPath: report.stock.path,
+    stockPath: trackedStockPath,
     stockRealpath: report.stock.realpath,
     stockVersion: report.stock.version,
     statusLineCommand,

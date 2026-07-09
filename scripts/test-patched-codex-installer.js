@@ -415,6 +415,39 @@ assert.strictEqual(fallbackRun.status, 0, `fallback wrapper failed: ${fallbackRu
 assert.match(fallbackRun.stdout, /STOCK-RAN again/);
 assert(!fs.existsSync(sentinel), "fallback discovery must never execute a HUD-managed payload");
 
+// patched launcher: a managed stock path resolves back to this launcher and
+// must not look stale; a later updater takeover must still trigger the warning.
+const patchedWrapperRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-patched-wrapper-test-"));
+const patchedWrapperPayload = path.join(patchedWrapperRoot, "codex-hud-codex");
+const patchedWrapperStock = path.join(patchedWrapperRoot, "codex");
+const patchedWrapperOriginalStock = path.join(patchedWrapperRoot, "stock-0.144.0");
+const patchedWrapperUpdatedStock = path.join(patchedWrapperRoot, "stock-0.145.0");
+writeExecutable(patchedWrapperPayload, fakeCodexScript("0.144.0"));
+writeExecutable(patchedWrapperOriginalStock, fakeCodexScript("0.144.0"));
+writeExecutable(patchedWrapperUpdatedStock, fakeCodexScript("0.145.0"));
+const patchedWrapperPath = installLauncher(
+  { prefix: patchedWrapperRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" },
+  {
+    mode: "patched",
+    patchedBinary: patchedWrapperPayload,
+    patchedVersion: "0.144.0",
+    stockPath: patchedWrapperStock,
+    stockRealpath: patchedWrapperOriginalStock,
+    stockVersion: "0.144.0",
+    statusLineCommand: `'${path.join(patchedWrapperRoot, "codex-hud")}' --line --color`,
+    renderer: "rust",
+  },
+);
+fs.symlinkSync(patchedWrapperPath, patchedWrapperStock);
+const managedPatchedRun = spawnSync("bash", [patchedWrapperPath, "--version"], { encoding: "utf8" });
+assert.strictEqual(managedPatchedRun.status, 0, `patched wrapper failed: ${managedPatchedRun.stderr}`);
+assert(!managedPatchedRun.stderr.includes("stock Codex changed"), "managed shim must not trigger a stale warning");
+fs.unlinkSync(patchedWrapperStock);
+fs.symlinkSync(patchedWrapperUpdatedStock, patchedWrapperStock);
+const updatedPatchedRun = spawnSync("bash", [patchedWrapperPath, "--version"], { encoding: "utf8" });
+assert.strictEqual(updatedPatchedRun.status, 0, `updated patched wrapper failed: ${updatedPatchedRun.stderr}`);
+assert(updatedPatchedRun.stderr.includes("stock Codex changed"), "stock updater takeover must trigger a stale warning");
+
 // --- rust renderer: verify / install / resolve ---
 const rendererRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-renderer-test-"));
 const rendererSource = path.join(rendererRoot, "source", "codex-hud");
@@ -767,6 +800,59 @@ assert.strictEqual(stockReport.shim.status, "managed");
 assert.strictEqual(stockReport.stock.path, doctorFakeStock);
 assert.strictEqual(stockReport.healthy, true);
 assert.deepStrictEqual(stockReport.recommendations, []);
+
+// A managed default shim hides the stock binary that originally occupied the
+// same path. Prefer the launcher's recorded realpath over older PATH fallbacks.
+const doctorRecordedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-recorded-test-"));
+const doctorRecordedStock = path.join(doctorRecordedRoot, "standalone", "codex");
+const doctorFallbackBin = path.join(doctorRecordedRoot, "fallback-bin");
+const doctorFallbackStock = path.join(doctorFallbackBin, "codex");
+writeExecutable(doctorRecordedStock, fakeCodexScript("0.144.0"));
+writeExecutable(doctorFallbackStock, fakeCodexScript("0.143.0"));
+const doctorRecordedArgs = {
+  prefix: path.join(doctorRecordedRoot, "prefix"),
+  binName: "codex-hud-codex",
+  launcherName: "codex-hud-tui",
+};
+writeExecutable(
+  path.join(doctorRecordedArgs.prefix, "codex-hud-codex.d", "0.144.0", "codex"),
+  fakeCodexScript("0.144.0"),
+);
+fs.symlinkSync(
+  path.join(doctorRecordedArgs.prefix, "codex-hud-codex.d", "0.144.0", "codex"),
+  path.join(doctorRecordedArgs.prefix, "codex-hud-codex"),
+);
+const doctorRecordedLauncher = installLauncher(doctorRecordedArgs, {
+  mode: "patched",
+  patchedBinary: path.join(doctorRecordedArgs.prefix, "codex-hud-codex"),
+  patchedVersion: "0.144.0",
+  stockPath: path.join(doctorRecordedArgs.prefix, "codex"),
+  stockRealpath: fs.realpathSync.native(doctorRecordedStock),
+  stockVersion: "0.144.0",
+  statusLineCommand: `'${path.join(doctorRecordedArgs.prefix, "codex-hud")}' --line --color`,
+  renderer: "rust",
+  defaultShim: "1",
+});
+fs.symlinkSync(doctorRecordedLauncher, path.join(doctorRecordedArgs.prefix, "codex"));
+const doctorRecordedReport = doctor(doctorRecordedArgs, {
+  env: { PATH: doctorFallbackBin },
+  runCommand(command) {
+    return command === doctorFallbackStock ? "codex-cli 0.143.0\n" : "codex-cli 0.144.0\n";
+  },
+});
+const doctorRecordedStatus = patchedRuntimeStatus(doctorRecordedReport);
+assert.strictEqual(doctorRecordedReport.stock.path, fs.realpathSync.native(doctorRecordedStock));
+assert.strictEqual(doctorRecordedStatus.stockVersion, "0.144.0");
+assert.strictEqual(doctorRecordedStatus.needsSync, false);
+refreshPatchedLauncher(doctorRecordedArgs, doctorRecordedReport, {
+  resolveRenderer: () => ({ kind: "rust", path: path.join(doctorRecordedArgs.prefix, "codex-hud") }),
+});
+const doctorRecordedMetadata = parseLauncherMetadata(fs.readFileSync(doctorRecordedLauncher, "utf8"));
+assert.strictEqual(
+  doctorRecordedMetadata.stockPath,
+  path.join(doctorRecordedArgs.prefix, "codex"),
+  "refresh must preserve the updater-tracking stock path while the default shim is managed",
+);
 
 const doctorStaleRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-stale-test-"));
 const doctorStaleArgs = { prefix: doctorStaleRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
