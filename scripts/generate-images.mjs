@@ -92,7 +92,7 @@ function hudSampleText(x, y, fs) {
   const lh = Math.round(fs * 1.55);
   const sep = `<tspan fill="${C.muted}">|</tspan>`;
   const line1 =
-    `<tspan fill="${C.ink}">5.5xh</tspan>${sep}<tspan fill="${C.warn}">f</tspan>${sep}` +
+    `<tspan fill="${C.ink}">5.6-sol</tspan>${sep}<tspan fill="${C.ink}">h</tspan>${sep}<tspan fill="${C.warn}">f</tspan>${sep}` +
     `<tspan fill="${C.accent}">codex-hud</tspan>${sep}` +
     `<tspan fill="${C.muted}">git(</tspan><tspan fill="${C.ink}">main</tspan><tspan fill="${C.muted}">)</tspan>${sep}` +
     `<tspan fill="${C.muted}">Ctx:</tspan><tspan fill="${C.ok}">28%</tspan>`;

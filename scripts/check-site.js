@@ -55,8 +55,8 @@ const imageGen = exists("scripts/generate-images.mjs") ? read("scripts/generate-
 if (!imageGen) {
   fail.push("missing scripts/generate-images.mjs (source of the social cards)");
 } else {
-  if (/gpt-5\b/.test(imageGen) || imageGen.includes(" · Ctx ")) {
-    fail.push("social-card generator still bakes the stale sample footer (gpt-5 · Ctx …); update the HUD sample");
+  if (/gpt-5\.5xhigh/.test(imageGen) || imageGen.includes(" · Ctx ")) {
+    fail.push("social-card generator still bakes the stale sample footer; update the HUD sample");
   }
   if (!imageGen.includes("Tkn:") || !imageGen.includes("codex-hud")) {
     fail.push("social-card generator must bake the real HUD sample (pipe segments incl. Tkn:)");
@@ -88,6 +88,10 @@ const mustContain = [
   [html, 'id="hud-line"', "live HUD output"],
   [html, 'aria-label="Generated Codex HUD status line"', "HUD output accessible label"],
   [html, 'id="config-code"', "config output"],
+  [html, 'id="install-step-install"', "install command"],
+  [html, 'id="install-step-update"', "update command"],
+  [html, 'data-copy-target="install-step-install"', "install copy target"],
+  [html, 'data-copy-target="install-step-update"', "update copy target"],
   [html, 'class="skip-link"', "skip link"],
   [html, 'id="main-content"', "main skip target"],
   [html, '<noscript>', "noscript fallback"],
@@ -159,8 +163,7 @@ const readmeConfigControls = [
   ["format.tokenUsage", "show-token-usage"],
   ["format.pace", "show-pace"],
   ["format.pacePrefix", "pace-prefix"],
-  ["format.modelShort", "short-model"],
-  ["format.effortShort", "short-effort"],
+  ["format.identityShort", "identity-short"],
   ["format.fastMode", "fast-mode"],
   ["format.paceSlowPrefix", "pace-slow-prefix"],
   ["format.paceNormalPrefix", "pace-normal-prefix"],
@@ -170,6 +173,12 @@ const readmeConfigControls = [
 for (const [setting, id] of readmeConfigControls) {
   if (!html.includes(`id="${id}"`)) fail.push(`missing site control for ${setting}`);
   if (!js.includes(`byId("${id}")`)) fail.push(`site app does not read ${setting}`);
+}
+
+const installCommand = html.match(/id="install-step-install">([^<]+)</)?.[1];
+const updateCommand = html.match(/id="install-step-update">([^<]+)</)?.[1];
+if (!installCommand || installCommand !== updateCommand) {
+  fail.push("install and update must expose the same copy/paste command in separate blocks");
 }
 
 for (const id of ["five-hour-pace", "seven-day-pace", "five-hour-pace-out", "seven-day-pace-out"]) {
@@ -325,9 +334,9 @@ const createElement = (id, options = {}) => {
 const runInteractiveSmoke = () => {
   const elements = {
     "hud-form": createElement("hud-form"),
-    model: createElement("model", { value: "gpt-5.5" }),
-    effort: createElement("effort", { value: "xhigh" }),
-    "service-tier": createElement("service-tier", { value: "standard" }),
+    model: createElement("model", { value: "gpt-5.6-sol" }),
+    effort: createElement("effort", { value: "high" }),
+    "service-tier": createElement("service-tier", { value: "fast" }),
     project: createElement("project", { value: "codex-hud" }),
     branch: createElement("branch", { value: "main*" }),
     "show-color": createElement("show-color", { checked: true }),
@@ -350,8 +359,8 @@ const runInteractiveSmoke = () => {
     "threshold-warn": createElement("threshold-warn", { value: "70" }),
     "threshold-crit": createElement("threshold-crit", { value: "90" }),
     "show-token-usage": createElement("show-token-usage", { checked: true }),
-    "short-model": createElement("short-model", { checked: true }),
-    "short-effort": createElement("short-effort"),
+    "identity-short": createElement("identity-short", { checked: true }),
+    "identity-full": createElement("identity-full"),
     "fast-mode": createElement("fast-mode"),
     "percent-round": createElement("percent-round", { checked: true }),
     "token-units": createElement("token-units", { checked: true }),
@@ -403,8 +412,8 @@ const runInteractiveSmoke = () => {
     "threshold-warn",
     "threshold-crit",
     "show-token-usage",
-    "short-model",
-    "short-effort",
+    "identity-short",
+    "identity-full",
     "fast-mode",
     "percent-round",
     "token-units",
@@ -444,7 +453,7 @@ const runInteractiveSmoke = () => {
   vm.runInNewContext(js, context, { filename: "site/app.js" });
 
   const initialLine = elements["hud-line"].textContent;
-  if (!/^5\.5xhigh\|codex-hud\|git\(main\*\)\|Ctx:32%\|5h:6%\(4\.7h,👾\d+%\)\|7d:4%\(6\.7d,👾\d+%\)\|Tkn:42k\(I:24k,O:1k,C:17k\)$/.test(initialLine)) {
+  if (!/^5\.6-sol\|h\|f\|codex-hud\|git\(main\*\)\|Ctx:32%\|5h:6%\(4\.7h,👾\d+%\)\|7d:4%\(6\.7d,👾\d+%\)\|Tkn:42k\(I:24k,O:1k,C:17k\)$/.test(initialLine)) {
     fail.push("interactive preview must match dense live HUD grammar");
   }
   if (/\b(?:CTX|5H|7D|TKN):/.test(initialLine)) {
@@ -466,7 +475,7 @@ const runInteractiveSmoke = () => {
   elements.context.value = "88";
   elements.context.dispatchEvent({ type: "input" });
 
-  if (!elements["hud-line"].textContent.includes("5.5xhigh|")) {
+  if (!elements["hud-line"].textContent.includes("5.6-sol|h|f|")) {
     fail.push("interactive preview must keep README model and effort defaults in HUD line");
   }
   if (!elements["hud-line"].textContent.includes("Ctx:88%")) {
@@ -475,70 +484,62 @@ const runInteractiveSmoke = () => {
   if (elements["hud-line"].textContent.includes("CTX:88%")) {
     fail.push("interactive preview must not regress to uppercase context label");
   }
-  if (!elements["config-code"].textContent.includes("effortShort = false")) {
-    fail.push("interactive preview must emit README effortShort default");
+  if (!elements["config-code"].textContent.includes("identityShort = true")) {
+    fail.push("interactive preview must emit the compact identity default");
   }
 
-  // M2: effort preview must mirror formatReasoningEffort (High/Med/Low; xh only for xhigh).
+  // Identity formatting mirrors the Rust renderer for every known effort value.
   elements.effort.value = "medium";
   elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.5Med")) {
-    fail.push("effort preview must render medium as Med like the plugin");
-  }
-  if (
-    elements["hud-line"].textContent.includes("5.5medium") ||
-    elements["hud-line"].textContent.includes("5.5md")
-  ) {
-    fail.push("effort preview must not lowercase or fake-abbreviate non-xhigh efforts");
-  }
-  elements["short-effort"].checked = true;
-  elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.5Med")) {
-    fail.push("effortShort must abbreviate only xhigh, leaving Med unchanged");
-  }
-  elements["short-effort"].checked = false;
-  elements.effort.value = "high";
-  elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.5High") || elements["hud-line"].textContent.includes("5.5hi")) {
-    fail.push("effort preview must render high as High, not lowercase or abbreviated");
+  if (!elements["hud-line"].textContent.includes("5.6-sol|m|f")) {
+    fail.push("compact identity must render medium as m");
   }
   elements.effort.value = "low";
   elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.5Low") || elements["hud-line"].textContent.includes("5.5lo")) {
-    fail.push("effort preview must render low as Low, not lowercase or abbreviated");
+  if (!elements["hud-line"].textContent.includes("5.6-sol|l|f")) {
+    fail.push("compact identity must render low as l");
+  }
+  elements.effort.value = "minimal";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.6-sol|min|f")) {
+    fail.push("compact identity must render minimal as min");
   }
   elements.effort.value = "xhigh";
   elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.5xhigh")) {
-    fail.push("xhigh effort must render as xhigh when effortShort is false");
+  if (!elements["hud-line"].textContent.includes("5.6-sol|xh|f")) {
+    fail.push("compact identity must render xhigh as xh");
   }
-  elements["short-effort"].checked = true;
+  elements["identity-short"].checked = false;
+  elements["identity-full"].checked = true;
   elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.5xh")) {
-    fail.push("xhigh effort must abbreviate to xh when effortShort is true");
+  if (!elements["hud-line"].textContent.includes("gpt-5.6-sol|xhigh|fast")) {
+    fail.push("full identity must preserve the model prefix, effort, and service tier");
   }
-  elements["fast-mode"].checked = true;
-  elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.5xh|f|codex-hud")) {
-    fail.push("fast mode must render f immediately after the model segment");
+  if (!elements["config-code"].textContent.includes("identityShort = false")) {
+    fail.push("full identity must be reflected in generated config");
   }
-  elements["fast-mode"].checked = false;
-  elements.effort.dispatchEvent({ type: "input" });
-  elements["short-effort"].checked = false;
+  elements["identity-short"].checked = true;
+  elements["identity-full"].checked = false;
   elements.effort.dispatchEvent({ type: "input" });
 
-  // Auto-detect: service_tier = "fast" renders the f marker without the manual override.
-  elements["short-effort"].checked = true;
+  elements["service-tier"].value = "default";
+  elements["fast-mode"].checked = true;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.6-sol|xh|f|codex-hud")) {
+    fail.push("fastMode must force the compact fast service-tier atom");
+  }
+  elements["fast-mode"].checked = false;
+
+  // Auto-detect: service_tier = "fast" renders the tier atom without the manual override.
   elements["service-tier"].value = "fast";
   elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.5xh|f|codex-hud")) {
-    fail.push("service_tier=fast must auto-render f after the model segment");
+  if (!elements["hud-line"].textContent.includes("5.6-sol|xh|f|codex-hud")) {
+    fail.push("service_tier=fast must auto-render the compact tier atom");
   }
   if (!elements["config-code"].textContent.includes("fastMode = false")) {
     fail.push("service_tier auto-detect must not flip the manual fastMode override in config");
   }
-  elements["service-tier"].value = "standard";
-  elements["short-effort"].checked = false;
+  elements.effort.value = "high";
   elements.effort.dispatchEvent({ type: "input" });
 
   elements["five-hour"].value = "35";
@@ -597,9 +598,8 @@ const runInteractiveSmoke = () => {
   elements["token-units"].checked = false;
   elements["show-token-usage"].checked = false;
   elements["show-pace"].checked = false;
-  elements["short-model"].checked = false;
-  elements["short-effort"].checked = true;
-  elements["fast-mode"].checked = true;
+  elements["identity-short"].checked = false;
+  elements["identity-full"].checked = true;
   elements["pace-slow-prefix"].value = "S";
   elements["pace-normal-prefix"].value = "N";
   elements["pace-fast-prefix"].value = "F";
@@ -614,10 +614,10 @@ const runInteractiveSmoke = () => {
   if (customLine.includes("node v24")) {
     fail.push("runtime segment must be removable with its checkbox");
   }
-  if (!customLine.includes("gpt-5.5xh · f · codex-hud · git(main*) · CTX: 88%")) {
-    fail.push("interactive preview must apply spacing, separator, labels, percent precision, and short effort controls");
+  if (!customLine.includes("gpt-5.6-sol · high · fast · codex-hud · git(main*) · CTX: 88%")) {
+    fail.push("interactive preview must apply spacing, separator, labels, precision, and full identity");
   }
-  if (!elements["hero-hud-line"].textContent.includes("gpt-5.5xh · f · codex-hud · git(main*) · CTX: 88%")) {
+  if (!elements["hero-hud-line"].textContent.includes("gpt-5.6-sol · high · fast · codex-hud · git(main*) · CTX: 88%")) {
     fail.push("hero preview must apply the same panel settings as the result preview");
   }
   if (!customLine.includes("5h: 6%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
@@ -639,9 +639,8 @@ const runInteractiveSmoke = () => {
     "tokenUnits = false",
     "tokenUsage = false",
     "pace = false",
-    "modelShort = false",
-    "effortShort = true",
-    "fastMode = true",
+    "identityShort = false",
+    "fastMode = false",
     'paceSlowPrefix = "S"',
     'paceNormalPrefix = "N"',
     'paceFastPrefix = "F"',

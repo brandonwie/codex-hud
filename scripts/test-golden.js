@@ -158,8 +158,8 @@ const LINE_CASES = [
   { name: "tokens-round-up", over: { usage: { tokens: { total: 1500, input: 900, output: 100, cache: 500 } } } },
   { name: "tokens-round-down", over: { usage: { tokens: { total: 1499, input: 899, output: 100, cache: 500 } } } },
   { name: "spaced", over: { hud: { config: { space: true } } } },
-  { name: "full-model", over: { hud: { config: { format: { modelShort: false } } } } },
-  { name: "short-model-short-effort", over: { hud: { config: { format: { effortShort: true } } } } },
+  { name: "full-identity", over: { hud: { config: { format: { identityShort: false } } } } },
+  { name: "legacy-mixed-identity", over: { hud: { config: { format: { modelShort: false, effortShort: true } } } } },
   { name: "no-token-usage", over: { hud: { config: { format: { tokenUsage: false } } } } },
   { name: "no-pace", over: {
     hud: { config: { format: { pace: false } } },
@@ -190,6 +190,8 @@ const LINE_CASES = [
   { name: "reasoning-medium", over: { config: { reasoning: "medium" } } },
   { name: "reasoning-high", over: { config: { reasoning: "high" } } },
   { name: "fast-mode-service-tier", over: { config: { serviceTier: "fast" } } },
+  { name: "flex-service-tier", over: { config: { serviceTier: "flex" } } },
+  { name: "default-service-tier-omitted", over: { config: { serviceTier: "default" } } },
   { name: "fast-mode-override", over: { hud: { config: { format: { fastMode: true } } } } },
 ];
 

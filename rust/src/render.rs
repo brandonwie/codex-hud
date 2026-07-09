@@ -115,9 +115,10 @@ pub fn format_reasoning_effort(value: Option<&Value>, effort_short: bool) -> Opt
         "xhigh" | "x-high" | "x_high" | "x high" => {
             Some(if effort_short { "xh" } else { "xhigh" }.to_string())
         }
-        "high" => Some("High".to_string()),
-        "medium" => Some("Med".to_string()),
-        "low" => Some("Low".to_string()),
+        "high" => Some(if effort_short { "h" } else { "high" }.to_string()),
+        "medium" => Some(if effort_short { "m" } else { "medium" }.to_string()),
+        "low" => Some(if effort_short { "l" } else { "low" }.to_string()),
+        "minimal" => Some(if effort_short { "min" } else { "minimal" }.to_string()),
         _ => Some(normalized),
     }
 }
@@ -190,11 +191,24 @@ pub fn status_git_branch(data: &Value) -> Option<String> {
 #[cfg(test)]
 pub fn status_model(data: &Value) -> Option<String> {
     let default = hudcfg::default_config();
-    status_model_with_format(data, default.get("format"), "")
+    let parts = status_identity_parts(data, default.get("format"), false);
+    (!parts.is_empty()).then(|| parts.join("|"))
+}
+
+fn format_override(format: Option<&Value>, key: &str, fallback: bool) -> bool {
+    match compat::get(format, key) {
+        Some(Value::Bool(value)) => *value,
+        _ => fallback,
+    }
+}
+
+fn identity_short(format: Option<&Value>) -> bool {
+    compat::truthy(compat::get(format, "identityShort"))
 }
 
 fn format_model_name(raw: String, format: Option<&Value>) -> String {
-    if !compat::truthy(compat::get(format, "modelShort")) {
+    let short = format_override(format, "modelShort", identity_short(format));
+    if !short {
         return raw;
     }
     // SECURITY: get(..4) avoids a char-boundary panic when an untrusted
@@ -205,11 +219,17 @@ fn format_model_name(raw: String, format: Option<&Value>) -> String {
     }
 }
 
-fn status_model_with_format(
-    data: &Value,
-    format: Option<&Value>,
-    model_effort_separator: &str,
-) -> Option<String> {
+fn format_service_tier(value: &str, short: bool) -> Option<String> {
+    let normalized = value.trim().to_lowercase();
+    match normalized.as_str() {
+        "" | "default" | "standard" => None,
+        "fast" if short => Some("f".to_string()),
+        "flex" if short => Some("fl".to_string()),
+        _ => Some(normalized),
+    }
+}
+
+fn status_identity_parts(data: &Value, format: Option<&Value>, force_fast: bool) -> Vec<String> {
     let config = data.get("config");
     let raw_model = compat::get(config, "model")
         .filter(|m| compat::truthy(Some(m)))
@@ -226,21 +246,22 @@ fn status_model_with_format(
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string())
         });
+    let short = identity_short(format);
     let model = raw_model.map(|m| format_model_name(m, format));
     let reasoning = format_reasoning_effort(
         compat::get(config, "reasoning"),
-        compat::truthy(compat::get(format, "effortShort")),
+        format_override(format, "effortShort", short),
     );
-    let joined: String = [model, reasoning]
+    let service_tier = if force_fast {
+        Some("fast")
+    } else {
+        compat::get(config, "serviceTier").and_then(Value::as_str)
+    };
+    let tier = service_tier.and_then(|value| format_service_tier(value, short));
+    [model, reasoning, tier]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
-        .join(model_effort_separator);
-    if joined.is_empty() {
-        None
-    } else {
-        Some(joined)
-    }
 }
 
 // ── Config-driven footer rendering ───────────────────────────────────────────
@@ -251,7 +272,6 @@ pub struct Separators {
     pub label_value: String,
     pub open: String,
     pub close: String,
-    pub model_effort: String,
 }
 
 struct RenderCtx<'a> {
@@ -564,12 +584,9 @@ fn render_token_usage(label: &str, tokens: Option<&Value>, ctx: &RenderCtx) -> S
 /// Segment registry dispatch (port of SEGMENTS). Returns (text, joinWithPrevious).
 fn render_segment(id: &str, data: &Value, ctx: &RenderCtx) -> Option<String> {
     match id {
-        "model" => status_model_with_format(
-            data,
-            ctx.config.get("format"),
-            ctx.separators.model_effort.as_str(),
-        )
-        .map(|m| colorize(&m, ctx.color.as_deref(), ctx.color_enabled)),
+        // The model id expands to model / effort / service-tier pieces in
+        // render_footer so each identity atom gets the normal segment glue.
+        "model" => None,
         "project" => Some(colorize(
             &status_project_name(data),
             ctx.color.as_deref(),
@@ -680,13 +697,9 @@ pub fn effective_separators(config: &Value) -> Separators {
     let mut label_value = get("labelValue", ":");
     let open = get("open", "(");
     let close = get("close", ")");
-    let model_effort;
     if compat::truthy(config.get("space")) {
         segment = format!(" {} ", segment.trim());
         label_value = format!("{} ", label_value.trim_end());
-        model_effort = " ".to_string();
-    } else {
-        model_effort = String::new();
     }
     Separators {
         segment,
@@ -694,7 +707,6 @@ pub fn effective_separators(config: &Value) -> Separators {
         label_value,
         open,
         close,
-        model_effort,
     }
 }
 
@@ -708,13 +720,8 @@ pub fn render_footer(data: &Value, config: &Value, color: bool) -> String {
     let separators = effective_separators(config);
     let separator = colorize(&separators.segment, sep_color.as_deref(), color_enabled);
 
-    // Fast-mode marker after the model: auto-detect Codex `service_tier = "fast"`,
-    // with the manual `format.fastMode` flag kept as an explicit override.
-    let fast_active = compat::get(data.get("config"), "serviceTier")
-        .and_then(|v| v.as_str())
-        .map(|s| s == "fast")
-        .unwrap_or(false)
-        || compat::truthy(compat::get(config.get("format"), "fastMode"));
+    // Compatibility override: force the service-tier identity atom to `fast`.
+    let force_fast = compat::truthy(compat::get(config.get("format"), "fastMode"));
 
     let empty_segments = Vec::new();
     let segment_ids = config
@@ -732,6 +739,19 @@ pub fn render_footer(data: &Value, config: &Value, color: bool) -> String {
             continue;
         };
         if !hudcfg::KNOWN_SEGMENTS.contains(&id) {
+            continue;
+        }
+        if id == "model" {
+            for part in status_identity_parts(data, config.get("format"), force_fast) {
+                pieces.push(Piece {
+                    text: colorize(
+                        &part,
+                        colors.get("model").cloned().as_deref(),
+                        color_enabled,
+                    ),
+                    joiner: None,
+                });
+            }
             continue;
         }
         let label = match compat::get(config.get("labels"), id) {
@@ -756,12 +776,6 @@ pub fn render_footer(data: &Value, config: &Value, color: bool) -> String {
         // standalone pipe-delimited segment.
         let joiner = if id == "runtime" { Some(" ") } else { None };
         pieces.push(Piece { text, joiner });
-        if id == "model" && fast_active {
-            pieces.push(Piece {
-                text: colorize("f", colors.get(id).cloned().as_deref(), color_enabled),
-                joiner: None,
-            });
-        }
     }
 
     if pieces.is_empty() {
@@ -983,7 +997,7 @@ mod tests {
     }
 
     #[test]
-    fn status_model_uses_short_model_by_default_and_normalizes_reasoning() {
+    fn status_model_uses_compact_identity_by_default() {
         let data = json!({
             "config": {
                 "model": "gpt-5.5",
@@ -991,11 +1005,11 @@ mod tests {
             }
         });
 
-        assert_eq!(status_model(&data), Some("5.5xhigh".to_string()));
+        assert_eq!(status_model(&data), Some("5.5|xh".to_string()));
     }
 
     #[test]
-    fn status_model_supports_full_model_short_effort_and_spacing() {
+    fn status_model_supports_full_identity_and_legacy_overrides() {
         let data = json!({
             "config": {
                 "model": "gpt-5.5",
@@ -1003,18 +1017,19 @@ mod tests {
             }
         });
         let format = json!({
+            "identityShort": true,
             "modelShort": false,
             "effortShort": true
         });
 
         assert_eq!(
-            status_model_with_format(&data, Some(&format), " "),
-            Some("gpt-5.5 xh".to_string())
+            status_identity_parts(&data, Some(&format), false),
+            vec!["gpt-5.5", "xh"]
         );
     }
 
     #[test]
-    fn render_footer_inserts_fast_mode_marker_after_model() {
+    fn render_footer_expands_compact_identity_atoms() {
         let data = json!({
             "config": {
                 "model": "gpt-5.5",
@@ -1028,14 +1043,13 @@ mod tests {
         });
         let mut config = hudcfg::default_config();
         config["segments"] = json!(["model", "project"]);
-        config["format"]["effortShort"] = json!(true);
         config["format"]["fastMode"] = json!(true);
 
-        assert_eq!(render_footer(&data, &config, false), "5.5xh|f|codex-hud");
+        assert_eq!(render_footer(&data, &config, false), "5.5|xh|f|codex-hud");
     }
 
     #[test]
-    fn render_footer_inserts_fast_mode_marker_from_service_tier() {
+    fn render_footer_expands_full_identity_atoms_from_service_tier() {
         let data = json!({
             "config": {
                 "model": "gpt-5.5",
@@ -1050,9 +1064,27 @@ mod tests {
         });
         let mut config = hudcfg::default_config();
         config["segments"] = json!(["model", "project"]);
-        config["format"]["effortShort"] = json!(true);
+        config["format"]["identityShort"] = json!(false);
 
-        assert_eq!(render_footer(&data, &config, false), "5.5xh|f|codex-hud");
+        assert_eq!(
+            render_footer(&data, &config, false),
+            "gpt-5.5|xhigh|fast|codex-hud"
+        );
+    }
+
+    #[test]
+    fn render_footer_omits_default_tier_and_shortens_known_efforts() {
+        let data = json!({
+            "config": {
+                "model": "gpt-5.6-sol",
+                "reasoning": "high",
+                "serviceTier": "default"
+            }
+        });
+        let mut config = hudcfg::default_config();
+        config["segments"] = json!(["model"]);
+
+        assert_eq!(render_footer(&data, &config, false), "5.6-sol|h");
     }
 
     #[test]
@@ -1064,6 +1096,6 @@ mod tests {
             }
         });
 
-        assert_eq!(status_model(&data), Some("codex-cliMed".to_string()));
+        assert_eq!(status_model(&data), Some("codex-cli|m".to_string()));
     }
 }

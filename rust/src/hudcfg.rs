@@ -40,8 +40,7 @@ pub fn default_config() -> Value {
             "tokenUsage": true,
             "pace": true,
             "pacePrefix": true,
-            "modelShort": true,
-            "effortShort": false,
+            "identityShort": true,
             "fastMode": false,
             "paceSlowPrefix": "🐢",
             "paceNormalPrefix": "👾",
@@ -496,14 +495,16 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         if format.contains_key("modelStyle") {
             note(
                 warnings,
-                "format.modelStyle is ignored; use format.modelShort = false for full model names"
+                "format.modelStyle is ignored; use format.identityShort = false for full identity labels"
                     .to_string(),
             );
         }
         for key in [
             "percentRound",
             "tokenUnits",
+            "identityShort",
             "modelShort",
+            "effortShort",
             "pacePrefix",
             "fastMode",
         ] {
@@ -533,16 +534,6 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                 ),
                 None => {}
             }
-        }
-        match format.get("effortShort") {
-            Some(Value::Bool(b)) => {
-                coerced.insert("effortShort".into(), Value::Bool(*b));
-            }
-            Some(_) => note(
-                warnings,
-                "format.effortShort must be a boolean; ignored".to_string(),
-            ),
-            None => {}
         }
         for key in ["paceSlowPrefix", "paceNormalPrefix", "paceFastPrefix"] {
             match format.get(key) {
@@ -668,9 +659,8 @@ tokenUnits = true     # false -> raw integers (no k/M)
 tokenUsage = true     # false -> total only, hide (I:.. O:.. C:..)
 pace = true           # false -> hide the pace % in 5h/7d
 pacePrefix = true     # false -> hide the pace state icon, keep the %
-modelShort = true     # false -> gpt-5.5 instead of 5.5
-effortShort = false   # true -> xh instead of xhigh
-fastMode = false      # true -> insert f after the model segment
+identityShort = true  # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
+fastMode = false      # true -> force the service-tier identity atom to fast/f
 paceSlowPrefix = "🐢"   # used more than thresholds.pace.crit behind pace
 paceNormalPrefix = "👾" # within +/- thresholds.pace.crit of pace
 paceFastPrefix = "🔥"   # used more than thresholds.pace.crit ahead of pace
@@ -773,7 +763,29 @@ mod tests {
 
         assert!(!format.contains_key("modelStyle"));
         assert!(warnings.iter().any(|warning| warning
-            == "test.toml: format.modelStyle is ignored; use format.modelShort = false for full model names"));
+            == "test.toml: format.modelStyle is ignored; use format.identityShort = false for full identity labels"));
+    }
+
+    #[test]
+    fn validate_and_coerce_keeps_legacy_identity_overrides() {
+        let raw = json!({
+            "format": {
+                "identityShort": false,
+                "modelShort": true,
+                "effortShort": true
+            }
+        });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let format = coerced
+            .get("format")
+            .and_then(Value::as_object)
+            .expect("coerced format object");
+
+        assert_eq!(format.get("identityShort"), Some(&json!(false)));
+        assert_eq!(format.get("modelShort"), Some(&json!(true)));
+        assert_eq!(format.get("effortShort"), Some(&json!(true)));
+        assert!(warnings.is_empty());
     }
 
     #[test]

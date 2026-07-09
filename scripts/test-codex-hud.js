@@ -63,7 +63,7 @@ try {
   const nowMs = Date.parse("2026-06-08T00:00:00.000Z");
   fs.writeFileSync(
     path.join(tmpCodexHome, "config.toml"),
-    'model = "gpt-5.5"\nmodel_reasoning_effort = "xhigh"\n',
+    'model = "gpt-5.6-sol"\nmodel_reasoning_effort = "high"\nservice_tier = "fast"\n',
     "utf8"
   );
   const sessionDir = path.join(tmpCodexHome, "sessions", "2026", "06", "08");
@@ -121,7 +121,7 @@ try {
   const line = run(["--line"], { env: fixtureEnv });
   assert.strictEqual(line.status, 0, line.stderr);
   assert.strictEqual(line.stdout.trimEnd().split(/\r?\n/).length, 1, "--line output should stay single-line");
-  assert.match(line.stdout, /5\.5xhigh/);
+  assert.match(line.stdout, /5\.6-sol\|h\|f/);
   assert.doesNotMatch(line.stdout, /git:\(/);
   assert.doesNotMatch(line.stdout, /·/);
   assert.doesNotMatch(line.stdout, /node v/);
@@ -131,28 +131,28 @@ try {
   // loose for the live branch and optional dirty marker.
   assert.match(
     line.stdout.trim(),
-    /^5\.5xhigh\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,🐢100%\)\|7d:16%\(5\.1d,👾27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
+    /^5\.6-sol\|h\|f\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,🐢100%\)\|7d:16%\(5\.1d,👾27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
   );
   assert.doesNotMatch(line.stdout, /now/);
 
   const formatCfg = path.join(tmpCodexHome, "format.toml");
   fs.writeFileSync(
     formatCfg,
-    '[format]\neffortShort = true\nfastMode = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n',
+    '[format]\nidentityShort = false\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n',
     "utf8"
   );
   const shortLine = run(["--line"], { env: { ...fixtureEnv, CODEX_HUD_CONFIG: formatCfg } });
   assert.strictEqual(shortLine.status, 0, shortLine.stderr);
   assert.match(
     shortLine.stdout.trim(),
-    /^5\.5xh\|f\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,slow-100%\)\|7d:16%\(5\.1d,ok-27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
+    /^gpt-5\.6-sol\|high\|fast\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,slow-100%\)\|7d:16%\(5\.1d,ok-27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
   );
 
   const spacedCfg = path.join(tmpCodexHome, "spaced.toml");
   fs.writeFileSync(spacedCfg, "space = true\n", "utf8");
   const spacedLine = run(["--line"], { env: { ...fixtureEnv, CODEX_HUD_CONFIG: spacedCfg } });
   assert.strictEqual(spacedLine.status, 0, spacedLine.stderr);
-  assert.match(spacedLine.stdout, /^5\.5 xhigh \| /);
+  assert.match(spacedLine.stdout, /^5\.6-sol \| h \| f \| /);
 
   const colorLine = run(["--line", "--color"], { env: fixtureEnv });
   assert.strictEqual(colorLine.status, 0, colorLine.stderr);

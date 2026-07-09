@@ -30,7 +30,7 @@ Varsayılan olarak, Codex'in yerel `[tui].status_line` özelliğine eşlik eder;
 `--line` ile yazdırılan kompakt durum satırı (yalnızca yamalı modda TUI içi altbilgi olarak oluşturulur):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.6-sol|h|f|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > Bu satırdaki segmentler, etiketler, renkler ve eşiklerin tümü yapılandırılabilir — bkz. [Yapılandırma](#yapılandırma).
@@ -110,7 +110,7 @@ Kompakt durum satırının (`--line`) terminal yakalaması:
 
 ```text
 $ ./rust/target/release/codex-hud --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.6-sol|h|f|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
@@ -183,8 +183,7 @@ tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> yalnızca toplam, (I:.. O:.. C:..) gizle
 pace = true     # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> hız simgesini (🐢/👾/🔥) gizle, %'yi koru
-modelShort = true # false -> 5.5 yerine gpt-5.5
-effortShort = false # true -> xhigh yerine xh
+identityShort = true # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
 fastMode = false
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"

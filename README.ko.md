@@ -30,7 +30,7 @@ Codex HUD는 OpenAI Codex CLI 세션을 위한 멀티라인 워크스페이스 H
 다음은 `--line`이 출력하는 간결한 상태 라인입니다(TUI 내부 푸터로는 패치 모드에서만 렌더링됩니다):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.6-sol|h|f|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > 해당 라인의 세그먼트, 라벨, 색상, 임계값은 모두 설정할 수 있습니다 — [설정](#설정)을 참고하세요.
@@ -110,7 +110,7 @@ npm test
 
 ```text
 $ ./rust/target/release/codex-hud --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.6-sol|h|f|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
@@ -183,8 +183,7 @@ tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> 합계만, (I:.. O:.. C:..) 숨김
 pace = true     # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> 페이스 아이콘(🐢/👾/🔥)을 숨기고 %는 유지
-modelShort = true # false -> 5.5 대신 gpt-5.5
-effortShort = false # true -> xhigh 대신 xh
+identityShort = true # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
 fastMode = false
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"

@@ -30,7 +30,7 @@ Codex HUD 是一個本機 Codex 外掛，會為 OpenAI Codex CLI 工作階段呈
 以下是由 `--line` 印出的精簡狀態列（僅在修補模式下才會渲染為 TUI 內嵌頁尾）：
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.6-sol|h|f|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > 該列中的區段、標籤、顏色與門檻全部都可設定——請參閱[設定](#設定)。
@@ -110,7 +110,7 @@ npm test
 
 ```text
 $ ./rust/target/release/codex-hud --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.6-sol|h|f|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
@@ -183,8 +183,7 @@ tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> 僅顯示總計，隱藏 (I:.. O:.. C:..)
 pace = true     # false -> hide the pace % in 5h/7d
 pacePrefix = true # false -> 隱藏節奏圖示（🐢/👾/🔥），保留 %
-modelShort = true # false -> gpt-5.5 而不是 5.5
-effortShort = false # true -> xh 而不是 xhigh
+identityShort = true # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
 fastMode = false
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"

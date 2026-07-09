@@ -30,7 +30,7 @@ Standardmäßig ist es ein Begleiter zur nativen `[tui].status_line` von Codex, 
 Die kompakte Status-Line, ausgegeben mit `--line` (nur im Patched-Modus als Fußzeile in der TUI gerendert):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.6-sol|h|f|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
 > Die Segmente, Labels, Farben und Schwellenwerte in dieser Zeile sind alle konfigurierbar — siehe [Konfiguration](#konfiguration).
@@ -110,7 +110,7 @@ Terminal-Mitschnitt der kompakten Status-Line (`--line`):
 
 ```text
 $ ./rust/target/release/codex-hud --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.6-sol|h|f|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
@@ -183,8 +183,7 @@ tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> nur Gesamtwert, (I:.. O:.. C:..) ausblenden
 pace = true     # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> Pace-Icon (🐢/👾/🔥) ausblenden, % behalten
-modelShort = true # false -> gpt-5.5 statt 5.5
-effortShort = false # true -> xh statt xhigh
+identityShort = true # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
 fastMode = false
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"

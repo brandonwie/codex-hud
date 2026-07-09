@@ -1,6 +1,6 @@
 # Codex HUD Configuration Schema
 
-**Schema version:** `4` (frozen) · **Status:** stable · **Source of truth:**
+**Schema version:** `5` (frozen) · **Status:** stable · **Source of truth:**
 `default_config()` in `rust/src/hudcfg.rs`
 
 This document freezes the `codex-hud.toml` configuration contract and the
@@ -65,9 +65,10 @@ Aliases expanded before validation: `workspace` → `project,branch,runtime`;
 | `open`       | `"("`   | Opens a detail group (rate detail, tkn). |
 | `close`      | `")"`   | Closes a detail group.                   |
 
-When `space = true`: `segment` becomes `" " + segment.trim() + " "`,
-`labelValue` becomes `labelValue.trimEnd() + " "`, and the model segment uses a
-single space between model name and reasoning effort.
+When `space = true`: `segment` becomes `" " + segment.trim() + " "` and
+`labelValue` becomes `labelValue.trimEnd() + " "`. Model, reasoning effort,
+and non-default service tier are separate identity atoms, so the configured
+segment separator is used between them too.
 
 ### Labels
 
@@ -138,14 +139,25 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `tokenUsage`   | `true`  | `false` → total only, hide `(I:.. O:.. C:..)`.           |
 | `pace`         | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
 | `pacePrefix`   | `true`  | `false` → hide the pace icon (🐢/👾/🔥), keep the `%`.   |
-| `modelShort`   | `true`  | `false` → keep full model names such as `gpt-5.5`.      |
-| `effortShort`  | `false` | `true` → `xh` instead of `xhigh`.                        |
-| `fastMode`     | `false` | `true` → force `f` after the model (manual override; `f` auto-shows when Codex `service_tier = "fast"`). |
+| `identityShort` | `true` | `true` → `5.6-sol|h|f`; `false` → `gpt-5.6-sol|high|fast`. |
+| `fastMode`     | `false` | `true` → force the fast service-tier atom (manual override). |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
 | `paceNormalPrefix` | `"👾"` | Prefix when usage is within `±pace.crit` of pace.     |
 | `paceFastPrefix` | `"🔥"` | Prefix when usage is more than `pace.crit` ahead of pace. |
 
-**Fast-mode marker.** The `f` after the model segment is driven by Codex's `service_tier`: it appears automatically when the resolved tier is `fast`. `format.fastMode` is a manual override that forces the marker on regardless of tier. `service_tier` is read from Codex's `config.toml` (the same path as `model` / `model_reasoning_effort`), not a `codex-hud.toml` key — so the persisted default or active profile is reflected, not live `/fast on|off` toggles.
+**Identity atoms.** The model, reasoning effort, and non-default service tier
+render as separate atoms using the configured segment separator. Compact mode
+maps known values (`xhigh` → `xh`, `high` → `h`, `medium` → `m`, `low` → `l`,
+`minimal` → `min`, `fast` → `f`, `flex` → `fl`); full mode preserves their
+canonical lowercase names. The `default` and `standard` service tiers are
+omitted. The legacy `modelShort` and `effortShort` booleans are still accepted
+as per-field compatibility overrides when present, but are no longer emitted.
+
+`format.fastMode` forces the tier atom to `fast` regardless of the resolved
+tier. `service_tier` is read from Codex's `config.toml` (the same path as
+`model` / `model_reasoning_effort`), not a `codex-hud.toml` key, so the
+persisted default or active profile is reflected, not live `/fast on|off`
+toggles.
 
 ## Defaults (`DEFAULT_CONFIG`, verbatim)
 
@@ -164,7 +176,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
   format: {
     percentRound: true, tokenUnits: true, tokenUsage: true, pace: true, pacePrefix: true,
-    modelShort: true, effortShort: false, fastMode: false,
+    identityShort: true, fastMode: false,
     paceSlowPrefix: "🐢", paceNormalPrefix: "👾", paceFastPrefix: "🔥",
   },
 }
@@ -205,6 +217,9 @@ fixtures lock them; do not "clean them up":
    rendering; arrays replace (never concat) on merge.
 8. **Missing data renders `label:?`** (e.g. `5h:?`, `Tkn:?`), not an omitted
    segment.
+9. **Identity atoms use the normal segment separator:** model, effort, and a
+   non-default service tier are independently colorized pieces; `default` and
+   `standard` tiers are omitted without leaving a separator gap.
 
 ## Enforcement
 

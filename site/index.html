@@ -18,7 +18,7 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="styles.css?v=20260618-rust">
+    <link rel="stylesheet" href="styles.css?v=20260710-identity">
     <link rel="preload" href="assets/codex-hud-screenshot.png" as="image">
 
     <meta property="og:type" content="website">
@@ -296,6 +296,7 @@
             <label>
               Model
               <select id="model" data-setting>
+                <option value="gpt-5.6-sol">gpt-5.6-sol</option>
                 <option value="gpt-5.5">gpt-5.5</option>
                 <option value="gpt-5">gpt-5</option>
                 <option value="gpt-4.1">gpt-4.1</option>
@@ -306,17 +307,18 @@
               Effort
               <select id="effort" data-setting>
                 <option value="xhigh">xhigh</option>
-                <option value="high">high</option>
+                <option value="high" selected>high</option>
                 <option value="medium">medium</option>
                 <option value="low">low</option>
+                <option value="minimal">minimal</option>
               </select>
             </label>
             <label>
               Service tier
               <select id="service-tier" data-setting>
-                <option value="standard">standard</option>
+                <option value="default">default</option>
                 <option value="flex">flex</option>
-                <option value="fast">fast</option>
+                <option value="fast" selected>fast</option>
               </select>
             </label>
             <label>
@@ -474,14 +476,19 @@
               <input id="pace-prefix" data-setting type="checkbox" checked>
               <span>Pace icon</span>
             </label>
-            <label class="toggle">
-              <input id="short-model" data-setting type="checkbox" checked>
-              <span>Short model</span>
-            </label>
-            <label class="toggle">
-              <input id="short-effort" data-setting type="checkbox">
-              <span>Short effort</span>
-            </label>
+            <div class="format-choice">
+              <span class="format-choice-label" id="identity-format-label">Identity labels</span>
+              <div class="segmented-control" role="radiogroup" aria-labelledby="identity-format-label">
+                <label class="segmented-option">
+                  <input id="identity-short" data-setting type="radio" name="identity-format" value="short" checked>
+                  <span>Compact</span>
+                </label>
+                <label class="segmented-option">
+                  <input id="identity-full" data-setting type="radio" name="identity-format" value="full">
+                  <span>Full</span>
+                </label>
+              </div>
+            </div>
             <label class="toggle">
               <input id="fast-mode" data-setting type="checkbox">
               <span>Fast marker (override)</span>
@@ -531,18 +538,18 @@
       <section class="split-section" id="install" aria-labelledby="install-title">
         <div>
           <p class="eyebrow">Install path</p>
-          <h2 id="install-title">One command. Patched footer when you want it.</h2>
+          <h2 id="install-title">Install or update with one command.</h2>
         </div>
-        <div class="steps">
+        <div class="steps" aria-label="Install and update commands">
           <article>
-            <h3>1. Run the installer</h3>
+            <h3>Install</h3>
             <div class="command-copy-row">
-              <code id="install-step-installer">curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash</code>
+              <code id="install-step-install">curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash</code>
               <button
                 class="install-copy-button"
                 type="button"
-                data-copy-target="install-step-installer"
-                data-copy-status="install-step-installer-status"
+                data-copy-target="install-step-install"
+                data-copy-status="install-step-install-status"
                 aria-label="Copy installer command"
                 title="Copy command"
               >
@@ -552,10 +559,30 @@
                 </svg>
               </button>
             </div>
-            <p class="command-copy-status" id="install-step-installer-status" role="status" aria-live="polite"></p>
+            <p class="command-copy-status" id="install-step-install-status" role="status" aria-live="polite"></p>
           </article>
           <article>
-            <h3>2. Preview the line</h3>
+            <h3>Update</h3>
+            <div class="command-copy-row">
+              <code id="install-step-update">curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash</code>
+              <button
+                class="install-copy-button"
+                type="button"
+                data-copy-target="install-step-update"
+                data-copy-status="install-step-update-status"
+                aria-label="Copy update command"
+                title="Copy command"
+              >
+                <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+                </svg>
+              </button>
+            </div>
+            <p class="command-copy-status" id="install-step-update-status" role="status" aria-live="polite"></p>
+          </article>
+          <article>
+            <h3>Preview</h3>
             <div class="command-copy-row">
               <code id="install-step-preview">codex-hud --line --color</code>
               <button
@@ -575,7 +602,7 @@
             <p class="command-copy-status" id="install-step-preview-status" role="status" aria-live="polite"></p>
           </article>
           <article>
-            <h3>3. Scaffold config</h3>
+            <h3>Configure</h3>
             <div class="command-copy-row">
               <code id="install-step-config">codex-hud --init-config</code>
               <button
@@ -652,6 +679,6 @@
     <noscript>
       <p class="noscript-note">Codex HUD install steps and repository links are available on this page. The interactive footer preview and generated config require JavaScript.</p>
     </noscript>
-    <script src="app.js?v=20260621-service-tier" defer></script>
+    <script src="app.js?v=20260710-identity" defer></script>
   </body>
 </html>

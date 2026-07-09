@@ -34,10 +34,10 @@ By default it is a companion to Codex's native `[tui].status_line`, because stoc
 The compact status line, printed by `--line` (rendered as an in-TUI footer only in patched mode):
 
 ```text
-5.5xhigh|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.6-sol|h|f|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
-> The segments, labels, colors, thresholds, and fast-mode marker in that line are all configurable — see [Configuration](#configuration). The fast-mode marker — `f` after the model — appears automatically when Codex runs in fast mode (`service_tier = "fast"`).
+> The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and non-default service tier are separate atoms; `f` appears automatically when Codex resolves `service_tier = "fast"`.
 
 The default status-line renderer is `codex-hud`, a small native Rust binary (edition 2021, MIT): a single self-contained executable with no interpreter on the rendering path, a minimal dependency footprint (just `serde_json` and `toml`), zero `unsafe` code, and a size-optimized release build that comes in around 574 KB. For clarity, two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the separate in-repo status-line renderer.
 
@@ -53,13 +53,15 @@ The default status-line renderer is `codex-hud`, a small native Rust binary (edi
 
 ## Quick Start
 
-### One-line install
+### Install
 
 The fastest path. It builds from source, so it needs `git`, `node`, and a Rust toolchain (`cargo`) on your `PATH`, plus a working `codex`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | bash
 ```
+
+Run the same command again to update an existing install. The website presents Install and Update as separate copy blocks while keeping one auditable script path.
 
 This clones a pinned release, builds the `codex-hud` renderer, installs the stock-delegation launcher, and registers the plugin — it does **not** touch your existing `codex` command. To also make `codex` resolve to the HUD launcher, pass the flag to the shell that runs the script: `curl -fsSL https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh | CODEX_HUD_MAKE_DEFAULT=1 bash`. To preview without changing anything, run `bash install.sh --dry-run` (or set `CODEX_HUD_DRY_RUN=1`). To audit before running, download with `curl -fsSLO https://raw.githubusercontent.com/brandonwie/codex-hud/main/install.sh`, read it, then run `bash install.sh`.
 
@@ -114,7 +116,7 @@ Terminal capture of the compact status line (`--line`):
 
 ```text
 $ ./rust/target/release/codex-hud --line
-5.5xhigh|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.6-sol|h|f|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
 ```
 
 Run `./rust/target/release/codex-hud --line --color` locally to see the same line with ANSI color styling.
@@ -189,15 +191,14 @@ tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> total only, hide (I:.. O:.. C:..)
 pace = true         # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> hide the pace icon (🐢/👾/🔥), keep the %
-modelShort = true # false -> gpt-5.5 instead of 5.5
-effortShort = false # true -> xh instead of xhigh
-fastMode = false # force f after the model; auto-shown when service_tier="fast"
+identityShort = true # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
+fastMode = false # force the fast service-tier atom
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"
 ```
 
-The `f` after the model is a fast-mode marker: it appears automatically when Codex's resolved `service_tier` is `fast`, and `fastMode = true` above forces it on as a manual override.
+Model, reasoning effort, and a non-default service tier use the normal segment separator. Compact mode maps known names such as `high` to `h` and `fast` to `f`; full mode keeps `gpt-5.6-sol|high|fast`. The `default` and `standard` tiers are omitted. Older `modelShort` and `effortShort` keys remain accepted as compatibility overrides, but new configs should use `identityShort`.
 
 Pace markers compare usage against even burn rate: slow is more than `thresholds.pace.crit` behind pace, fast is more than `thresholds.pace.crit` ahead, and the middle band is normal. Run `codex-hud --print-config` to see the full resolved option set.
 

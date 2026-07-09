@@ -80,8 +80,9 @@ try {
     );
     assert.deepStrictEqual(config.config.segments, DEFAULT_SEGMENTS);
     assert.strictEqual(config.config.space, false);
-    assert.strictEqual(config.config.format.modelShort, true);
-    assert.strictEqual(config.config.format.effortShort, false);
+    assert.strictEqual(config.config.format.identityShort, true);
+    assert.strictEqual(config.config.format.modelShort, undefined);
+    assert.strictEqual(config.config.format.effortShort, undefined);
     assert.strictEqual(config.config.format.fastMode, false);
     assert.strictEqual(config.config.format.tokenUsage, true);
     assert.strictEqual(config.config.format.pace, true);
@@ -135,13 +136,14 @@ try {
     const cfg = writeConfig(
       dir,
       "t.toml",
-      '[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenUsage = false\nmodelShort = false\neffortShort = true\nfastMode = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n'
+      '[thresholds.percent]\nwarn = 50\ncrit = 60\n[format]\ntokenUsage = false\nidentityShort = false\nmodelShort = true\neffortShort = true\nfastMode = true\npaceSlowPrefix = "slow-"\npaceNormalPrefix = "ok-"\npaceFastPrefix = "fast-"\n'
     );
     const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(config.config.thresholds.percent.warn, 50);
     assert.strictEqual(config.config.thresholds.percent.crit, 60);
     assert.strictEqual(config.config.format.tokenUsage, false);
-    assert.strictEqual(config.config.format.modelShort, false);
+    assert.strictEqual(config.config.format.identityShort, false);
+    assert.strictEqual(config.config.format.modelShort, true);
     assert.strictEqual(config.config.format.effortShort, true);
     assert.strictEqual(config.config.format.fastMode, true);
     assert.strictEqual(config.config.format.paceSlowPrefix, "slow-");
@@ -181,13 +183,14 @@ try {
     const cfg = writeConfig(
       dir,
       "inv.toml",
-      '[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n[format]\nmodelStyle = "full"\nmodelShort = "yes"\neffortShort = "yes"\nfastMode = "yes"\npaceFastPrefix = true\n'
+      '[colors]\nmodel = true\n[thresholds.percent]\nwarn = 9000\n[format]\nmodelStyle = "full"\nidentityShort = "yes"\nmodelShort = "yes"\neffortShort = "yes"\nfastMode = "yes"\npaceFastPrefix = true\n'
     );
     const config = printConfig({ ...baseEnv, CODEX_HUD_CONFIG: cfg });
     assert.strictEqual(config.config.colors.model, "neonViolet", "invalid color dropped -> default kept");
     assert.strictEqual(config.config.thresholds.percent.warn, 100, "out-of-range threshold clamped to 100");
-    assert.strictEqual(config.config.format.modelShort, true, "invalid modelShort dropped -> default kept");
-    assert.strictEqual(config.config.format.effortShort, false, "invalid effortShort dropped -> default kept");
+    assert.strictEqual(config.config.format.identityShort, true, "invalid identityShort dropped -> default kept");
+    assert.strictEqual(config.config.format.modelShort, undefined, "invalid legacy modelShort must be dropped");
+    assert.strictEqual(config.config.format.effortShort, undefined, "invalid legacy effortShort must be dropped");
     assert.strictEqual(config.config.format.fastMode, false, "invalid fastMode dropped -> default kept");
     assert.strictEqual(config.config.format.paceFastPrefix, "🔥", "invalid pace prefix dropped -> default kept");
     assert.ok(
