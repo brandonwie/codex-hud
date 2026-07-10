@@ -532,6 +532,21 @@ function statusCommandHelperSource() {
     "            process",
     "        };",
     "",
+    "        process.env(\"CODEX_HUD_MODEL\", self.current_model());",
+    "        process.env(",
+    "            \"CODEX_HUD_EFFORT\",",
+    "            self.effective_reasoning_effort()",
+    "                .map(|e| e.to_string())",
+    "                .unwrap_or_default(),",
+    "        );",
+    "        process.env(\"CODEX_HUD_SERVICE_TIER\", self.current_service_tier().unwrap_or_default());",
+    "        process.env(",
+    "            \"CODEX_HUD_ROLLOUT_PATH\",",
+    "            self.rollout_path()",
+    "                .map(|p| p.to_string_lossy().into_owned())",
+    "                .unwrap_or_default(),",
+    "        );",
+    "",
     "        let output = process.current_dir(self.status_line_cwd()).output().ok()?;",
     "        if !output.status.success() {",
     "            return None;",
@@ -617,7 +632,7 @@ function statusCommandHelperSource() {
 
 function ensureAnsiStatusLineParser(filePath) {
   const current = fs.readFileSync(filePath, "utf8");
-  if (current.includes("fn ansi_status_line_to_line")) {
+  if (current.includes("CODEX_HUD_MODEL")) {
     return false;
   }
 
@@ -777,6 +792,14 @@ function patchSource(sourceRoot) {
   }
 
   return changes;
+}
+
+function verifyPatchedSource(sourceRoot) {
+  const statusSurfaces = path.join(sourceRoot, "codex-rs", "tui", "src", "chatwidget", "status_surfaces.rs");
+  const current = fs.readFileSync(statusSurfaces, "utf8");
+  if (!current.includes("CODEX_HUD_MODEL")) {
+    throw new Error(`Patched Codex source is missing CODEX_HUD_MODEL env injection: ${statusSurfaces}`);
+  }
 }
 
 function sourceHasPatch(sourceRoot) {
@@ -2163,6 +2186,7 @@ function runPatchedInstall(args) {
 
   const sourceDir = ensureSource(args);
   const changes = patchSource(sourceDir);
+  verifyPatchedSource(sourceDir);
   console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
 
   if (args.dryRun) {
@@ -2295,6 +2319,7 @@ module.exports = {
   detectLegacyLayout,
   detectStockCodex,
   doctor,
+  ensureAnsiStatusLineParser,
   findStockCodexPath,
   installBinary,
   installBuiltBinary,
@@ -2322,10 +2347,12 @@ module.exports = {
   resolveRenderer,
   refreshPatchedLauncher,
   reviewLegacyBinEntry,
+  sourceHasPatch,
   stageBuiltBinary,
   statusLineCommandFor,
   syncPatchedRuntime,
   uninstallDefaultShim,
   verifyInstalledBinary,
+  verifyPatchedSource,
   verifyRustRenderer,
 };

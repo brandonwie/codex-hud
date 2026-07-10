@@ -10,6 +10,7 @@ const {
   detectLegacyLayout,
   detectStockCodex,
   doctor,
+  ensureAnsiStatusLineParser,
   findStockCodexPath,
   checkPatchedRuntime,
   installBuiltBinary,
@@ -34,10 +35,12 @@ const {
   resolveRenderer,
   refreshPatchedLauncher,
   reviewLegacyBinEntry,
+  sourceHasPatch,
   statusLineCommandFor,
   syncPatchedRuntime,
   uninstallDefaultShim,
   verifyInstalledBinary,
+  verifyPatchedSource,
   verifyRustRenderer,
 } = require("./install-patched-codex");
 
@@ -160,6 +163,12 @@ assert(coreConfig.includes("pub tui_status_line_command: Option<String>"));
 assert(coreConfig.includes("tui_status_line_command: cfg"));
 assert(statusSurfaces.includes("fn custom_status_line_from_command"));
 assert(statusSurfaces.includes("std::process::Command::new"));
+assert(statusSurfaces.includes('process.env("CODEX_HUD_MODEL", self.current_model())'));
+assert(statusSurfaces.includes('"CODEX_HUD_EFFORT"'));
+assert(statusSurfaces.includes("self.effective_reasoning_effort()"));
+assert(statusSurfaces.includes('process.env("CODEX_HUD_SERVICE_TIER", self.current_service_tier().unwrap_or_default())'));
+assert(statusSurfaces.includes('"CODEX_HUD_ROLLOUT_PATH"'));
+assert(statusSurfaces.includes("self.rollout_path()"));
 assert(statusSurfaces.includes("fn ansi_status_line_to_line"));
 assert(statusSurfaces.includes("ratatui::style::Color::Indexed"));
 assert(statusSurfaces.includes(".lines()"));
@@ -176,6 +185,83 @@ assert(
   statusLineCommandFor({ kind: "rust", path: "/tmp/test-prefix/codex-hud" }).includes("--line --color"),
   "patched Codex footer command must use compact single-line HUD output",
 );
+
+const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-legacy-patch-test-"));
+writeFile(legacyRoot, "codex-rs/config/src/types.rs", `
+pub struct Tui {
+    #[serde(default)]
+    pub status_line: Option<Vec<String>>,
+
+    /// Shell command used to render a custom status line. When set, it overrides status_line.
+    #[serde(default)]
+    pub status_line_command: Option<String>,
+
+    /// Color status line items with colors derived from the active syntax theme.
+    #[serde(default = "default_true")]
+    pub status_line_use_colors: bool,
+}
+`);
+writeFile(legacyRoot, "codex-rs/core/src/config/mod.rs", `
+pub struct Config {
+    pub tui_status_line: Option<Vec<String>>,
+
+    /// Shell command that renders a custom TUI status line.
+    pub tui_status_line_command: Option<String>,
+
+    /// Whether to color status line items with colors from the active syntax theme.
+    pub tui_status_line_use_colors: bool,
+}
+
+fn build(cfg: ConfigToml) -> Config {
+    Config {
+            tui_status_line: cfg.tui.as_ref().and_then(|t| t.status_line.clone()),
+            tui_status_line_command: cfg
+                .tui
+                .as_ref()
+                .and_then(|t| t.status_line_command.clone()),
+            tui_status_line_use_colors: cfg
+                .tui
+                .as_ref()
+                .map(|t| t.status_line_use_colors)
+                .unwrap_or(true),
+    }
+}
+`);
+const legacyStatusPath = path.join(legacyRoot, "codex-rs/tui/src/chatwidget/status_surfaces.rs");
+writeFile(legacyRoot, "codex-rs/tui/src/chatwidget/status_surfaces.rs", `
+impl ChatWidget {
+    fn custom_status_line_from_command(&self) -> Option<ratatui::text::Line<'static>> {
+        let command = self.config.tui_status_line_command.as_ref()?.trim();
+        if command.is_empty() {
+            return None;
+        }
+
+        let output = std::process::Command::new("sh")
+            .args(["-lc", command])
+            .current_dir(self.status_line_cwd())
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+
+        Some(Self::ansi_status_line_to_line("legacy"))
+    }
+
+    fn ansi_status_line_to_line(text: &str) -> ratatui::text::Line<'static> {
+        ratatui::text::Line::from(text.to_string())
+    }
+
+    /// Clears the terminal title Codex most recently wrote, if any.
+    fn clear_title(&self) {}
+}
+`);
+assert.strictEqual(sourceHasPatch(legacyRoot), true, "legacy patched source must pass admission");
+assert.strictEqual(ensureAnsiStatusLineParser(legacyStatusPath), true, "legacy helper must be region-replaced");
+const migratedStatusSurfaces = fs.readFileSync(legacyStatusPath, "utf8");
+assert(migratedStatusSurfaces.includes('process.env("CODEX_HUD_MODEL", self.current_model())'));
+assert.doesNotMatch(migratedStatusSurfaces, /Line::from\(text\.to_string\(\)\)/);
+assert.doesNotThrow(() => verifyPatchedSource(legacyRoot), "migrated source must pass strict post-patch verification");
 
 // --- renderLauncherScript: stock mode ---
 const stockScript = renderLauncherScript({

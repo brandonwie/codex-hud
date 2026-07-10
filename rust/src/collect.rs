@@ -2,6 +2,7 @@ use crate::compat;
 use crate::hudcfg;
 use crate::util;
 use serde_json::{json, Map, Value};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 // SSoT: Cargo.toml owns the version; release tooling bumps it there only.
@@ -327,9 +328,28 @@ pub fn token_summary(raw: Option<&Value>) -> Value {
     json!({ "total": compat::number_value(total), "input": opt(input), "output": opt(output), "cache": opt(cache) })
 }
 
-/// Port of latestUsage(): scan newest rollouts for context/tokens/rate-limits.
-pub fn latest_usage(codex_home: &Path) -> Value {
-    let files = list_session_files(codex_home);
+fn empty_usage() -> Value {
+    usage_value(Value::Null, Value::Null, Value::Null, Value::Null)
+}
+
+fn usage_value(source_file: Value, context: Value, tokens: Value, rate_limits: Value) -> Value {
+    json!({
+        "sourceFile": source_file,
+        "context": context,
+        "tokens": tokens,
+        "rateLimits": rate_limits,
+    })
+}
+
+fn latest_usage_from_files(
+    files: &[PathBuf],
+    include_context_tokens: bool,
+    include_rate_limits: bool,
+) -> Value {
+    if !include_context_tokens && !include_rate_limits {
+        return empty_usage();
+    }
+
     let mut latest_context = Value::Null;
     let mut latest_tokens = Value::Null;
     let mut latest_rate_limits = Value::Null;
@@ -345,7 +365,7 @@ pub fn latest_usage(codex_home: &Path) -> Value {
             };
             let info = token_count.get("info").filter(|i| compat::truthy(Some(i)));
 
-            if latest_context.is_null() {
+            if include_context_tokens && latest_context.is_null() {
                 if let Some(info) = info {
                     let last_usage = info.get("last_token_usage");
                     let used_tokens = if compat::truthy(last_usage) {
@@ -382,7 +402,7 @@ pub fn latest_usage(codex_home: &Path) -> Value {
                 }
             }
 
-            if latest_tokens.is_null() {
+            if include_context_tokens && latest_tokens.is_null() {
                 if let Some(info) = info {
                     let raw = info
                         .get("total_token_usage")
@@ -392,7 +412,7 @@ pub fn latest_usage(codex_home: &Path) -> Value {
                 }
             }
 
-            if latest_rate_limits.is_null() {
+            if include_rate_limits && latest_rate_limits.is_null() {
                 let rate_limits = token_count
                     .get("rateLimits")
                     .filter(|r| compat::truthy(Some(r)));
@@ -416,26 +436,67 @@ pub fn latest_usage(codex_home: &Path) -> Value {
                 }
             }
 
-            if !latest_context.is_null()
-                && !latest_tokens.is_null()
-                && !latest_rate_limits.is_null()
-            {
-                return json!({
-                    "sourceFile": source_file,
-                    "context": latest_context,
-                    "tokens": latest_tokens,
-                    "rateLimits": latest_rate_limits,
-                });
+            let context_tokens_done =
+                !include_context_tokens || (!latest_context.is_null() && !latest_tokens.is_null());
+            let rate_limits_done = !include_rate_limits || !latest_rate_limits.is_null();
+            if context_tokens_done && rate_limits_done {
+                return usage_value(
+                    source_file,
+                    latest_context,
+                    latest_tokens,
+                    latest_rate_limits,
+                );
             }
         }
     }
 
-    json!({
-        "sourceFile": source_file,
-        "context": latest_context,
-        "tokens": latest_tokens,
-        "rateLimits": latest_rate_limits,
-    })
+    usage_value(
+        source_file,
+        latest_context,
+        latest_tokens,
+        latest_rate_limits,
+    )
+}
+
+fn latest_usage_with_rollout_path(codex_home: &Path, rollout_path_env: Option<&OsStr>) -> Value {
+    let files = list_session_files(codex_home);
+    match rollout_path_env {
+        None => latest_usage_from_files(&files, true, true),
+        Some(raw_path) => {
+            let rate_limits = latest_usage_from_files(&files, false, true)
+                .get("rateLimits")
+                .cloned()
+                .unwrap_or(Value::Null);
+            let session_usage = if raw_path.to_string_lossy().is_empty() {
+                empty_usage()
+            } else {
+                let rollout_file = PathBuf::from(Path::new(raw_path));
+                if std::fs::metadata(&rollout_file)
+                    .map(|metadata| metadata.is_file())
+                    .unwrap_or(false)
+                {
+                    latest_usage_from_files(std::slice::from_ref(&rollout_file), true, false)
+                } else {
+                    empty_usage()
+                }
+            };
+
+            usage_value(
+                session_usage
+                    .get("sourceFile")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                session_usage.get("context").cloned().unwrap_or(Value::Null),
+                session_usage.get("tokens").cloned().unwrap_or(Value::Null),
+                rate_limits,
+            )
+        }
+    }
+}
+
+/// Port of latestUsage(): scan newest rollouts for context/tokens/rate-limits.
+pub fn latest_usage(codex_home: &Path) -> Value {
+    latest_usage_with_rollout_path(codex_home, None)
 }
 
 /// Port of commandVersion(): first stdout line of `cmd args`.
@@ -475,6 +536,28 @@ fn native_status_colors(configs: &hudcfg::Configs) -> Value {
         .unwrap_or(Value::Null)
 }
 
+fn resolve_identity_value(
+    env_value: Option<&str>,
+    session_mode: bool,
+    config_value: Option<String>,
+) -> Option<String> {
+    if let Some(value) = env_value {
+        let trimmed = value.trim();
+        return (!trimmed.is_empty()).then(|| trimmed.to_string());
+    }
+    if session_mode {
+        return None;
+    }
+    config_value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    })
+}
+
+fn omit_reasoning_none(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.eq_ignore_ascii_case("none"))
+}
+
 /// Port of collect(): the full HUD data object.
 pub fn collect() -> Value {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -485,8 +568,32 @@ pub fn collect() -> Value {
     let status_items = native_status_items(&configs);
     let hints = project_hints(&cwd, git_root.as_deref());
     let hud = hudcfg::load_hud_config(&codex_home, &cwd, git_root.as_deref());
+    let env_model = std::env::var("CODEX_HUD_MODEL").ok();
+    let env_effort = std::env::var("CODEX_HUD_EFFORT").ok();
+    let env_service_tier = std::env::var("CODEX_HUD_SERVICE_TIER").ok();
+    let env_rollout_path = std::env::var_os("CODEX_HUD_ROLLOUT_PATH");
+    let session_mode = env_model.is_some();
 
     let opt_string = |v: Option<String>| v.map(Value::String).unwrap_or(Value::Null);
+    let model = resolve_identity_value(
+        env_model.as_deref(),
+        session_mode,
+        hudcfg::merged_config_value(&configs, "model"),
+    );
+    let reasoning = omit_reasoning_none(resolve_identity_value(
+        env_effort.as_deref(),
+        session_mode,
+        hudcfg::merged_config_value(&configs, "model_reasoning_effort"),
+    ));
+    let service_tier = resolve_identity_value(
+        env_service_tier.as_deref(),
+        session_mode,
+        hudcfg::merged_config_value(&configs, "service_tier"),
+    );
+    let usage = match env_rollout_path.as_deref() {
+        None => latest_usage(&codex_home),
+        Some(path) => latest_usage_with_rollout_path(&codex_home, Some(path)),
+    };
     let status_colors = native_status_colors(&configs);
 
     json!({
@@ -501,9 +608,9 @@ pub fn collect() -> Value {
         "config": {
             "userPath": configs.user_config.display().to_string(),
             "projectPath": configs.project_config.as_ref().map(|p| Value::String(p.display().to_string())).unwrap_or(Value::Null),
-            "model": opt_string(hudcfg::merged_config_value(&configs, "model")),
-            "reasoning": opt_string(hudcfg::merged_config_value(&configs, "model_reasoning_effort")),
-            "serviceTier": opt_string(hudcfg::merged_config_value(&configs, "service_tier")),
+            "model": opt_string(model),
+            "reasoning": opt_string(reasoning),
+            "serviceTier": opt_string(service_tier),
             "sandbox": opt_string(hudcfg::merged_config_value(&configs, "sandbox_mode")),
             "approval": opt_string(hudcfg::merged_config_value(&configs, "approval_policy")),
             "nativeStatusItems": status_items,
@@ -513,7 +620,7 @@ pub fn collect() -> Value {
         "git": git,
         "project": hints,
         "hooks": hook_summary(&codex_home),
-        "usage": latest_usage(&codex_home),
+        "usage": usage,
         "limits": {
             "note": "Usage is parsed from the latest Codex rollout JSONL. Codex's native TUI status line remains authoritative.",
         },
@@ -534,6 +641,157 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("codex-hud-{name}-{unique}"));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
+    }
+
+    fn write_usage_rollout(
+        path: &Path,
+        timestamp: &str,
+        used_tokens: i64,
+        window_tokens: i64,
+        total_tokens: i64,
+        rate_used_percent: i64,
+    ) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create rollout parent");
+        }
+        let rollout = json!({
+            "timestamp": timestamp,
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "last_token_usage": { "total_tokens": used_tokens },
+                    "total_token_usage": { "total_tokens": total_tokens },
+                    "model_context_window": window_tokens
+                },
+                "rate_limits": {
+                    "primary": {
+                        "used_percent": rate_used_percent,
+                        "window_minutes": 300,
+                        "resets_at": 1780848000
+                    }
+                }
+            }
+        });
+        fs::write(path, format!("{rollout}\n")).expect("write rollout");
+    }
+
+    #[test]
+    fn resolve_identity_value_uses_session_env_before_config() {
+        struct Case {
+            name: &'static str,
+            env_value: Option<&'static str>,
+            session_mode: bool,
+            config_value: Option<&'static str>,
+            expected: Option<&'static str>,
+        }
+
+        let cases = [
+            Case {
+                name: "env wins over config",
+                env_value: Some("gpt-5-env"),
+                session_mode: true,
+                config_value: Some("gpt-5-config"),
+                expected: Some("gpt-5-env"),
+            },
+            Case {
+                name: "env value is trimmed",
+                env_value: Some("  gpt-5-env  "),
+                session_mode: true,
+                config_value: None,
+                expected: Some("gpt-5-env"),
+            },
+            Case {
+                name: "empty env in session mode has no config fallback",
+                env_value: Some("  "),
+                session_mode: true,
+                config_value: Some("gpt-5-config"),
+                expected: None,
+            },
+            Case {
+                name: "missing env in session mode has no config fallback",
+                env_value: None,
+                session_mode: true,
+                config_value: Some("gpt-5-config"),
+                expected: None,
+            },
+            Case {
+                name: "no env uses config",
+                env_value: None,
+                session_mode: false,
+                config_value: Some("gpt-5-config"),
+                expected: Some("gpt-5-config"),
+            },
+            Case {
+                name: "config value is trimmed",
+                env_value: None,
+                session_mode: false,
+                config_value: Some("  gpt-5-config  "),
+                expected: Some("gpt-5-config"),
+            },
+        ];
+
+        for case in cases {
+            let actual = resolve_identity_value(
+                case.env_value,
+                case.session_mode,
+                case.config_value.map(str::to_string),
+            );
+            assert_eq!(actual.as_deref(), case.expected, "{}", case.name);
+        }
+    }
+
+    #[test]
+    fn reasoning_identity_omits_none_literal() {
+        for value in [Some("none"), Some(" NoNe ")] {
+            let resolved = resolve_identity_value(value, value.is_some(), Some("high".to_string()));
+            assert_eq!(omit_reasoning_none(resolved), None);
+        }
+
+        let resolved = resolve_identity_value(Some(" xhigh "), true, Some("high".to_string()));
+        assert_eq!(omit_reasoning_none(resolved).as_deref(), Some("xhigh"));
+    }
+
+    #[test]
+    fn latest_usage_can_split_session_context_from_global_rate_limits() {
+        let codex_home = temp_dir("usage-split");
+        let older = codex_home.join("sessions/2026/06/07/rollout-2026-06-07T00-00-00-a.jsonl");
+        let newer = codex_home.join("sessions/2026/06/08/rollout-2026-06-08T00-00-00-b.jsonl");
+        write_usage_rollout(&older, "2026-06-07T00:00:00.000Z", 250, 1000, 333, 11);
+        write_usage_rollout(&newer, "2026-06-08T00:00:00.000Z", 900, 1000, 999, 17);
+
+        let requested_session =
+            latest_usage_with_rollout_path(&codex_home, Some(older.as_os_str()));
+        assert_eq!(requested_session["context"]["usedTokens"], json!(250));
+        assert_eq!(requested_session["tokens"]["total"], json!(333));
+
+        let global_rates = latest_usage_from_files(&[newer, older], false, true);
+        assert_eq!(global_rates["context"], Value::Null);
+        assert_eq!(global_rates["tokens"], Value::Null);
+        assert_eq!(
+            global_rates["rateLimits"]["primary"]["usedPercent"],
+            json!(17)
+        );
+
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
+    }
+
+    #[test]
+    fn latest_usage_present_but_empty_or_invalid_rollout_omits_session_usage() {
+        let codex_home = temp_dir("usage-empty-rollout");
+        let rollout = codex_home.join("sessions/2026/06/08/rollout-2026-06-08T00-00-00-b.jsonl");
+        write_usage_rollout(&rollout, "2026-06-08T00:00:00.000Z", 900, 1000, 999, 17);
+
+        let empty_present =
+            latest_usage_with_rollout_path(&codex_home, Some(std::ffi::OsStr::new("")));
+        assert_eq!(empty_present["context"], Value::Null);
+        assert_eq!(empty_present["tokens"], Value::Null);
+
+        let invalid_path = codex_home.join("sessions/2026/06/08/nope.jsonl");
+        let invalid = latest_usage_with_rollout_path(&codex_home, Some(invalid_path.as_os_str()));
+        assert_eq!(invalid["context"], Value::Null);
+        assert_eq!(invalid["tokens"], Value::Null);
+
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
     }
 
     #[test]
