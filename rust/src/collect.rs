@@ -789,11 +789,19 @@ mod tests {
             latest_usage_with_rollout_path(&codex_home, Some(std::ffi::OsStr::new("")));
         assert_eq!(empty_present["context"], Value::Null);
         assert_eq!(empty_present["tokens"], Value::Null);
+        assert_eq!(
+            empty_present["rateLimits"]["primary"]["usedPercent"],
+            json!(17)
+        );
 
         let invalid_path = codex_home.join("sessions/2026/06/08/nope.jsonl");
         let invalid = latest_usage_with_rollout_path(&codex_home, Some(invalid_path.as_os_str()));
         assert_eq!(invalid["context"], Value::Null);
         assert_eq!(invalid["tokens"], Value::Null);
+        assert_eq!(
+            invalid["rateLimits"]["primary"]["usedPercent"],
+            json!(17)
+        );
 
         fs::remove_dir_all(codex_home).expect("remove temp dir");
     }
