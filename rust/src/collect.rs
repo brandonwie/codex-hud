@@ -763,6 +763,10 @@ mod tests {
             latest_usage_with_rollout_path(&codex_home, Some(older.as_os_str()));
         assert_eq!(requested_session["context"]["usedTokens"], json!(250));
         assert_eq!(requested_session["tokens"]["total"], json!(333));
+        assert_eq!(
+            requested_session["rateLimits"]["primary"]["usedPercent"],
+            json!(17)
+        );
 
         let global_rates = latest_usage_from_files(&[newer, older], false, true);
         assert_eq!(global_rates["context"], Value::Null);
