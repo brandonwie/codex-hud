@@ -8,6 +8,12 @@ const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const expectedVersion = require(path.join(repoRoot, "package.json")).version;
+const sessionEnvKeys = [
+  "CODEX_HUD_MODEL",
+  "CODEX_HUD_EFFORT",
+  "CODEX_HUD_SERVICE_TIER",
+  "CODEX_HUD_ROLLOUT_PATH",
+];
 
 function rustBinaryName() {
   return process.platform === "win32" ? "codex-hud.exe" : "codex-hud";
@@ -30,10 +36,12 @@ function resolveBinary() {
 const hudBin = resolveBinary();
 
 function run(args, options = {}) {
+  const env = { ...process.env, ...(options.env || {}) };
+  for (const key of options.unsetEnv || []) delete env[key];
   return spawnSync(hudBin, args, {
     cwd: repoRoot,
     encoding: "utf8",
-    env: { ...process.env, ...(options.env || {}) },
+    env,
   });
 }
 
@@ -145,7 +153,9 @@ try {
 
   const fixtureEnv = { CODEX_HOME: tmpCodexHome, CODEX_HUD_NOW_MS: String(nowMs) };
   function runJsonWithEnv(env) {
-    const result = run(["--json"], { env });
+    const explicitKeys = new Set(Object.keys(env));
+    const unsetEnv = sessionEnvKeys.filter((key) => !explicitKeys.has(key));
+    const result = run(["--json"], { env, unsetEnv });
     assert.strictEqual(result.status, 0, result.stderr);
     return JSON.parse(result.stdout);
   }
