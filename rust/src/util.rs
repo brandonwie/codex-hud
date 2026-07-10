@@ -66,10 +66,8 @@ pub fn find_up(start_dir: &Path, file_name: &str) -> Option<PathBuf> {
         if candidate.exists() {
             return Some(candidate);
         }
-        match current.parent() {
-            Some(parent) => current = parent.to_path_buf(),
-            None => return None,
-        }
+        let parent = current.parent()?;
+        current = parent.to_path_buf();
     }
 }
 
@@ -97,10 +95,8 @@ pub fn find_project_file(
         if current == stop_at {
             return None;
         }
-        match current.parent() {
-            Some(parent) => current = parent.to_path_buf(),
-            None => return None,
-        }
+        let parent = current.parent()?;
+        current = parent.to_path_buf();
     }
 }
 
