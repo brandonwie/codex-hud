@@ -8,6 +8,12 @@ const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const expectedVersion = require(path.join(repoRoot, "package.json")).version;
+const sessionEnvKeys = [
+  "CODEX_HUD_MODEL",
+  "CODEX_HUD_EFFORT",
+  "CODEX_HUD_SERVICE_TIER",
+  "CODEX_HUD_ROLLOUT_PATH",
+];
 
 function rustBinaryName() {
   return process.platform === "win32" ? "codex-hud.exe" : "codex-hud";
@@ -30,10 +36,12 @@ function resolveBinary() {
 const hudBin = resolveBinary();
 
 function run(args, options = {}) {
+  const env = { ...process.env, ...(options.env || {}) };
+  for (const key of options.unsetEnv || []) delete env[key];
   return spawnSync(hudBin, args, {
     cwd: repoRoot,
     encoding: "utf8",
-    env: { ...process.env, ...(options.env || {}) },
+    env,
   });
 }
 
@@ -61,16 +69,52 @@ assert.strictEqual(typeof parsed.usage, "object");
 const tmpCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-test-"));
 try {
   const nowMs = Date.parse("2026-06-08T00:00:00.000Z");
+  function writeRollout(filePath, event) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, `${JSON.stringify(event)}\n`, "utf8");
+  }
+
   fs.writeFileSync(
     path.join(tmpCodexHome, "config.toml"),
     'model = "gpt-5.6-sol"\nmodel_reasoning_effort = "high"\nservice_tier = "fast"\n',
     "utf8"
   );
-  const sessionDir = path.join(tmpCodexHome, "sessions", "2026", "06", "08");
-  fs.mkdirSync(sessionDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(sessionDir, "rollout-2026-06-08T00-00-00-test.jsonl"),
-    JSON.stringify({
+  const rolloutA = path.join(tmpCodexHome, "sessions", "2026", "06", "07", "rollout-2026-06-07T00-00-00-a.jsonl");
+  const rolloutB = path.join(tmpCodexHome, "sessions", "2026", "06", "08", "rollout-2026-06-08T00-00-00-b.jsonl");
+  writeRollout(
+    rolloutA,
+    {
+      timestamp: "2026-06-07T00:00:00.000Z",
+      payload: {
+        type: "token_count",
+        info: {
+          total_token_usage: {
+            input_tokens: 100000,
+            cached_input_tokens: 20000,
+            output_tokens: 3000,
+            total_tokens: 123000,
+          },
+          last_token_usage: {
+            input_tokens: 750,
+            cached_input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 750,
+          },
+          model_context_window: 1000,
+        },
+        rate_limits: {
+          primary: {
+            used_percent: 3,
+            window_minutes: 300,
+            resets_at: Math.floor(nowMs / 1000),
+          },
+        },
+      },
+    }
+  );
+  writeRollout(
+    rolloutB,
+    {
       timestamp: "2026-06-08T00:00:00.000Z",
       payload: {
         type: "token_count",
@@ -102,11 +146,63 @@ try {
           },
         },
       },
-    }) + "\n",
-    "utf8"
+    }
   );
+  fs.utimesSync(rolloutA, new Date(nowMs - 1000), new Date(nowMs - 1000));
+  fs.utimesSync(rolloutB, new Date(nowMs), new Date(nowMs));
 
   const fixtureEnv = { CODEX_HOME: tmpCodexHome, CODEX_HUD_NOW_MS: String(nowMs) };
+  function runJsonWithEnv(env) {
+    const explicitKeys = new Set(Object.keys(env));
+    const unsetEnv = sessionEnvKeys.filter((key) => !explicitKeys.has(key));
+    const result = run(["--json"], { env, unsetEnv });
+    assert.strictEqual(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  }
+
+  const envIdentityLine = run(["--line"], {
+    env: {
+      ...fixtureEnv,
+      CODEX_HUD_MODEL: "gpt-5.7-env",
+      CODEX_HUD_EFFORT: "xhigh",
+      CODEX_HUD_SERVICE_TIER: "",
+    },
+  });
+  assert.strictEqual(envIdentityLine.status, 0, envIdentityLine.stderr);
+  assert.match(envIdentityLine.stdout, /^5\.7-env\|xh\|codex-hud\|/);
+  assert.doesNotMatch(envIdentityLine.stdout, /^5\.7-env\|xh\|f\|/);
+
+  const tierIdentityLine = run(["--line"], {
+    env: {
+      ...fixtureEnv,
+      CODEX_HUD_MODEL: "gpt-5.7-env",
+      CODEX_HUD_EFFORT: "xhigh",
+      CODEX_HUD_SERVICE_TIER: "flex",
+    },
+  });
+  assert.strictEqual(tierIdentityLine.status, 0, tierIdentityLine.stderr);
+  assert.match(tierIdentityLine.stdout, /^5\.7-env\|xh\|fl\|codex-hud\|/);
+
+  const newestUsage = runJsonWithEnv(fixtureEnv).usage;
+  assert.strictEqual(newestUsage.context.usedTokens, 210, "absent rollout env should use newest context");
+  assert.strictEqual(newestUsage.tokens.total, 904000, "absent rollout env should use newest tokens");
+  assert.strictEqual(newestUsage.rateLimits.primary.usedPercent, 17);
+
+  const requestedUsage = runJsonWithEnv({ ...fixtureEnv, CODEX_HUD_ROLLOUT_PATH: rolloutA }).usage;
+  assert.strictEqual(requestedUsage.sourceFile, rolloutA);
+  assert.strictEqual(requestedUsage.context.usedTokens, 750);
+  assert.strictEqual(requestedUsage.tokens.total, 123000);
+  assert.strictEqual(requestedUsage.rateLimits.primary.usedPercent, 17, "rate limits should still use newest rollout");
+
+  const invalidUsage = runJsonWithEnv({ ...fixtureEnv, CODEX_HUD_ROLLOUT_PATH: "/nonexistent/codex-hud-rollout.jsonl" }).usage;
+  assert.strictEqual(invalidUsage.context, null);
+  assert.strictEqual(invalidUsage.tokens, null);
+  assert.strictEqual(invalidUsage.rateLimits.primary.usedPercent, 17, "invalid rollout path should not suppress global rate limits");
+
+  const emptyPresentUsage = runJsonWithEnv({ ...fixtureEnv, CODEX_HUD_ROLLOUT_PATH: "" }).usage;
+  assert.strictEqual(emptyPresentUsage.context, null);
+  assert.strictEqual(emptyPresentUsage.tokens, null);
+  assert.strictEqual(emptyPresentUsage.rateLimits.primary.usedPercent, 17, "empty-present rollout path should not suppress global rate limits");
 
   const text = run([], { env: fixtureEnv });
   assert.strictEqual(text.status, 0, text.stderr);
@@ -121,7 +217,7 @@ try {
   const line = run(["--line"], { env: fixtureEnv });
   assert.strictEqual(line.status, 0, line.stderr);
   assert.strictEqual(line.stdout.trimEnd().split(/\r?\n/).length, 1, "--line output should stay single-line");
-  assert.match(line.stdout, /5\.6-sol\|h\|f/);
+  assert.match(line.stdout, /^5\.6-sol\|h\|f\|/);
   assert.doesNotMatch(line.stdout, /git:\(/);
   assert.doesNotMatch(line.stdout, /·/);
   assert.doesNotMatch(line.stdout, /node v/);

@@ -154,10 +154,11 @@ omitted. The legacy `modelShort` and `effortShort` booleans are still accepted
 as per-field compatibility overrides when present, but are no longer emitted.
 
 `format.fastMode` forces the tier atom to `fast` regardless of the resolved
-tier. `service_tier` is read from Codex's `config.toml` (the same path as
-`model` / `model_reasoning_effort`), not a `codex-hud.toml` key, so the
-persisted default or active profile is reflected, not live `/fast on|off`
-toggles.
+tier. In patched mode, Codex injects live identity through `CODEX_HUD_MODEL`,
+`CODEX_HUD_EFFORT`, and `CODEX_HUD_SERVICE_TIER`, so `/model`, reasoning, and
+`/fast` changes reflect immediately. In standalone or stock-launcher mode,
+those variables are absent and the renderer reads Codex's `config.toml`
+(`model`, `model_reasoning_effort`, and `service_tier`) instead.
 
 ## Defaults (`DEFAULT_CONFIG`, verbatim)
 
