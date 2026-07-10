@@ -172,6 +172,17 @@ try {
   assert.match(envIdentityLine.stdout, /^5\.7-env\|xh\|codex-hud\|/);
   assert.doesNotMatch(envIdentityLine.stdout, /^5\.7-env\|xh\|f\|/);
 
+  const tierIdentityLine = run(["--line"], {
+    env: {
+      ...fixtureEnv,
+      CODEX_HUD_MODEL: "gpt-5.7-env",
+      CODEX_HUD_EFFORT: "xhigh",
+      CODEX_HUD_SERVICE_TIER: "flex",
+    },
+  });
+  assert.strictEqual(tierIdentityLine.status, 0, tierIdentityLine.stderr);
+  assert.match(tierIdentityLine.stdout, /^5\.7-env\|xh\|fl\|codex-hud\|/);
+
   const newestUsage = runJsonWithEnv(fixtureEnv).usage;
   assert.strictEqual(newestUsage.context.usedTokens, 210, "absent rollout env should use newest context");
   assert.strictEqual(newestUsage.tokens.total, 904000, "absent rollout env should use newest tokens");
