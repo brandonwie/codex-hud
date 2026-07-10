@@ -495,10 +495,6 @@ fn latest_usage_with_rollout_path(codex_home: &Path, rollout_path_env: Option<&O
 }
 
 /// Port of latestUsage(): scan newest rollouts for context/tokens/rate-limits.
-pub fn latest_usage(codex_home: &Path) -> Value {
-    latest_usage_with_rollout_path(codex_home, None)
-}
-
 /// Port of commandVersion(): first stdout line of `cmd args`.
 pub fn command_version(command: &str, args: &[&str]) -> Value {
     match util::run(command, args, None, util::DEFAULT_TIMEOUT_MS) {
@@ -599,10 +595,7 @@ pub fn collect() -> Value {
         session_mode,
         hudcfg::merged_config_value(&configs, "service_tier"),
     );
-    let usage = match env_rollout_path.as_deref() {
-        None => latest_usage(&codex_home),
-        Some(path) => latest_usage_with_rollout_path(&codex_home, Some(path)),
-    };
+    let usage = latest_usage_with_rollout_path(&codex_home, env_rollout_path.as_deref());
     let status_colors = native_status_colors(&configs);
 
     json!({
@@ -792,7 +785,6 @@ mod tests {
             global_rates["rateLimits"]["primary"]["usedPercent"],
             json!(17)
         );
-
         fs::remove_dir_all(codex_home).expect("remove temp dir");
     }
 
@@ -851,7 +843,7 @@ mod tests {
         )
         .expect("write rollout");
 
-        let usage = latest_usage(&codex_home);
+        let usage = latest_usage_with_rollout_path(&codex_home, None);
         assert_eq!(usage["context"]["usedTokens"], json!(250));
         assert_eq!(usage["context"]["windowTokens"], json!(1000));
         assert_eq!(
