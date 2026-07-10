@@ -554,8 +554,17 @@ fn resolve_identity_value(
     })
 }
 
-fn omit_reasoning_none(value: Option<String>) -> Option<String> {
-    value.filter(|value| !value.eq_ignore_ascii_case("none"))
+fn resolve_reasoning_identity(
+    env_value: Option<&str>,
+    session_mode: bool,
+    config_value: Option<String>,
+) -> Option<String> {
+    let resolved = resolve_identity_value(env_value, session_mode, config_value);
+    if session_mode {
+        resolved.filter(|value| !value.eq_ignore_ascii_case("none"))
+    } else {
+        resolved
+    }
 }
 
 /// Port of collect(): the full HUD data object.
@@ -580,11 +589,11 @@ pub fn collect() -> Value {
         session_mode,
         hudcfg::merged_config_value(&configs, "model"),
     );
-    let reasoning = omit_reasoning_none(resolve_identity_value(
+    let reasoning = resolve_reasoning_identity(
         env_effort.as_deref(),
         session_mode,
         hudcfg::merged_config_value(&configs, "model_reasoning_effort"),
-    ));
+    );
     let service_tier = resolve_identity_value(
         env_service_tier.as_deref(),
         session_mode,
@@ -741,14 +750,22 @@ mod tests {
     }
 
     #[test]
-    fn reasoning_identity_omits_none_literal() {
+    fn reasoning_identity_omits_session_none_but_preserves_config_none() {
         for value in [Some("none"), Some(" NoNe ")] {
-            let resolved = resolve_identity_value(value, value.is_some(), Some("high".to_string()));
-            assert_eq!(omit_reasoning_none(resolved), None);
+            assert_eq!(
+                resolve_reasoning_identity(value, true, Some("high".to_string())),
+                None
+            );
         }
 
-        let resolved = resolve_identity_value(Some(" xhigh "), true, Some("high".to_string()));
-        assert_eq!(omit_reasoning_none(resolved).as_deref(), Some("xhigh"));
+        assert_eq!(
+            resolve_reasoning_identity(Some(" xhigh "), true, Some("high".to_string())).as_deref(),
+            Some("xhigh")
+        );
+        assert_eq!(
+            resolve_reasoning_identity(None, false, Some("none".to_string())).as_deref(),
+            Some("none")
+        );
     }
 
     #[test]
@@ -798,10 +815,7 @@ mod tests {
         let invalid = latest_usage_with_rollout_path(&codex_home, Some(invalid_path.as_os_str()));
         assert_eq!(invalid["context"], Value::Null);
         assert_eq!(invalid["tokens"], Value::Null);
-        assert_eq!(
-            invalid["rateLimits"]["primary"]["usedPercent"],
-            json!(17)
-        );
+        assert_eq!(invalid["rateLimits"]["primary"]["usedPercent"], json!(17));
 
         fs::remove_dir_all(codex_home).expect("remove temp dir");
     }
