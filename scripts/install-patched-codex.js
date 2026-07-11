@@ -331,30 +331,67 @@ function verifyRustRenderer(binPath, options = {}) {
 }
 
 const RENDERER_CAPABILITY_PROBE_MODEL = "__codex-hud-capability-probe__";
+const RENDERER_CAPABILITY_PROBE_PREFIX = `${RENDERER_CAPABILITY_PROBE_MODEL}|max|fl|`;
 
 // Behavioral probe: a renderer built before the per-session env contract (#29)
 // parses --help fine but silently ignores CODEX_HUD_* variables, falling back
-// to config.toml identity and the newest-global rollout. Run the binary once
-// with a sentinel model in a fully isolated environment (temp CODEX_HOME,
-// CODEX_HUD_CONFIG cleared, neutral cwd so no ./.codex/codex-hud.toml or git
-// root config leaks in) and assert the sentinel appears in the --line output.
-// Shape-independent on purpose: pre-#29 binaries emit different JSON keys.
+// to config.toml identity and the newest-global rollout. Run the binary twice
+// with sentinel identity values and a decoy newest rollout in a fully isolated
+// environment (temp CODEX_HOME, CODEX_HUD_CONFIG cleared, neutral cwd so no
+// ./.codex/codex-hud.toml or git root config leaks in). The outputs must prove
+// that model, effort, and service tier came from env while an empty rollout
+// path suppresses session context/tokens instead of falling back to the decoy.
 function verifyRendererSessionCapability(binPath, options = {}) {
   const runCommand = options.runCommand || run;
   const probeHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-probe-"));
   try {
+    const decoyRollout = path.join(
+      probeHome,
+      "sessions",
+      "2099",
+      "01",
+      "01",
+      "rollout-2099-01-01T00-00-00-decoy.jsonl",
+    );
+    fs.mkdirSync(path.dirname(decoyRollout), { recursive: true });
+    fs.writeFileSync(
+      decoyRollout,
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        payload: {
+          type: "token_count",
+          info: {
+            last_token_usage: { total_tokens: 900 },
+            total_token_usage: { total_tokens: 999 },
+            model_context_window: 1000,
+          },
+        },
+      })}\n`,
+    );
+
     const env = { ...(options.env || process.env) };
     delete env.CODEX_HUD_CONFIG;
     env.CODEX_HOME = probeHome;
     env.CODEX_HUD_MODEL = RENDERER_CAPABILITY_PROBE_MODEL;
     env.CODEX_HUD_EFFORT = "max";
-    env.CODEX_HUD_SERVICE_TIER = "";
+    env.CODEX_HUD_SERVICE_TIER = "flex";
+    delete env.CODEX_HUD_ROLLOUT_PATH;
+    const visibleOutput = runCommand(binPath, ["--line"], { timeout: 10000, env, cwd: probeHome });
+    const visibleLine = (visibleOutput || "").trim().split(/\r?\n/)[0] || "";
+    const decoyIsVisible = visibleLine.includes("|Ctx:90%|") && visibleLine.includes("|Tkn:999");
+
     env.CODEX_HUD_ROLLOUT_PATH = "";
-    const output = runCommand(binPath, ["--line"], { timeout: 10000, env, cwd: probeHome });
-    const firstLine = (output || "").trim().split(/\r?\n/)[0] || "";
-    if (!firstLine.includes(RENDERER_CAPABILITY_PROBE_MODEL)) {
+    const hiddenOutput = runCommand(binPath, ["--line"], { timeout: 10000, env, cwd: probeHome });
+    const hiddenLine = (hiddenOutput || "").trim().split(/\r?\n/)[0] || "";
+    const decoyLeaked = hiddenLine.includes("|Ctx:90%|") || hiddenLine.includes("|Tkn:999");
+    if (
+      !visibleLine.startsWith(RENDERER_CAPABILITY_PROBE_PREFIX) ||
+      !hiddenLine.startsWith(RENDERER_CAPABILITY_PROBE_PREFIX) ||
+      !decoyIsVisible ||
+      decoyLeaked
+    ) {
       throw new Error(
-        `renderer does not consume CODEX_HUD_* session variables (built before per-session HUD support); probe line: "${firstLine}"`,
+        `renderer failed CODEX_HUD_* session capability probe (expected decoy Ctx:90%/Tkn:999 with rollout env absent, then no concrete decoy values with it empty); absent line: "${visibleLine}"; empty line: "${hiddenLine}"`,
       );
     }
   } finally {
@@ -448,7 +485,7 @@ function installRustRenderer(args, options = {}) {
 }
 
 function brokenRendererDetail(brokenPath, errorMessage) {
-  return `${brokenPath} failed its --help health check (${errorMessage})`;
+  return `${brokenPath} failed renderer validation (${errorMessage})`;
 }
 
 function missingRendererError() {
@@ -2293,7 +2330,9 @@ function runPatchedInstall(args) {
   console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
 
   if (args.dryRun) {
-    console.log(`HUD command: ${statusLineCommandFor(resolveRenderer(args, { install: false }))}`);
+    console.log(
+      `HUD command: ${statusLineCommandFor(resolveRenderer(args, { install: false, requireSessionCapability: true }))}`,
+    );
     console.log("Dry run complete; build/install skipped.");
     return;
   }
@@ -2356,7 +2395,7 @@ function main() {
   }
 
   if (args.printConfig) {
-    const renderer = resolveRenderer(args, { install: false });
+    const renderer = resolveRenderer(args, { install: false, requireSessionCapability: true });
     console.log(`status_line_command = ${JSON.stringify(statusLineCommandFor(renderer))}`);
     if (renderer.preview) {
       console.error("note: no usable binary at the install target (missing or failed health check); run npm run install:launcher or npm run patch:codex");
