@@ -330,6 +330,76 @@ function verifyRustRenderer(binPath, options = {}) {
   return match[1];
 }
 
+const RENDERER_CAPABILITY_PROBE_MODEL = "__codex-hud-capability-probe__";
+
+// Behavioral probe: a renderer built before the per-session env contract (#29)
+// parses --help fine but silently ignores CODEX_HUD_* variables, falling back
+// to config.toml identity and the newest-global rollout. Run the binary once
+// with a sentinel model in a fully isolated environment (temp CODEX_HOME,
+// CODEX_HUD_CONFIG cleared, neutral cwd so no ./.codex/codex-hud.toml or git
+// root config leaks in) and assert the sentinel appears in the --line output.
+// Shape-independent on purpose: pre-#29 binaries emit different JSON keys.
+function verifyRendererSessionCapability(binPath, options = {}) {
+  const runCommand = options.runCommand || run;
+  const probeHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-probe-"));
+  try {
+    const env = { ...(options.env || process.env) };
+    delete env.CODEX_HUD_CONFIG;
+    env.CODEX_HOME = probeHome;
+    env.CODEX_HUD_MODEL = RENDERER_CAPABILITY_PROBE_MODEL;
+    env.CODEX_HUD_EFFORT = "max";
+    env.CODEX_HUD_SERVICE_TIER = "";
+    env.CODEX_HUD_ROLLOUT_PATH = "";
+    const output = runCommand(binPath, ["--line"], { timeout: 10000, env, cwd: probeHome });
+    const firstLine = (output || "").trim().split(/\r?\n/)[0] || "";
+    if (!firstLine.includes(RENDERER_CAPABILITY_PROBE_MODEL)) {
+      throw new Error(
+        `renderer does not consume CODEX_HUD_* session variables (built before per-session HUD support); probe line: "${firstLine}"`,
+      );
+    }
+  } finally {
+    fs.rmSync(probeHome, { recursive: true, force: true });
+  }
+}
+
+function checkRendererSessionCapability(binPath, options = {}) {
+  try {
+    verifyRendererSessionCapability(binPath, options);
+    return { capable: true };
+  } catch (error) {
+    return { capable: false, error: error.message };
+  }
+}
+
+// Patched mode hard-fails (a session-blind renderer defeats the patched
+// launcher's whole purpose); stock mode warns only — the stock launcher never
+// invokes the renderer, and install:launcher must not grow a cargo dependency.
+function enforceRendererSessionCapability(binPath, options = {}) {
+  const capability = checkRendererSessionCapability(binPath, options);
+  if (capability.capable) {
+    return;
+  }
+  if (options.requireSessionCapability) {
+    throw new Error(capability.error);
+  }
+  console.error(
+    `warning: ${binPath}: ${capability.error}; session-scoped HUD values need a rebuilt renderer (npm run build:rust)`,
+  );
+}
+
+function warnOnRendererVersionMismatch(version) {
+  try {
+    const repoVersion = require(path.join(repoRoot(), "package.json")).version;
+    if (version !== repoVersion) {
+      console.error(
+        `warning: codex-hud is v${version} but the repo is v${repoVersion}; rebuild with npm run build:rust if this is unexpected`,
+      );
+    }
+  } catch (_) {
+    // best-effort: never block install on a package.json read problem
+  }
+}
+
 function installRustRenderer(args, options = {}) {
   const target = path.join(args.prefix, rendererBinaryName());
   const source = options.sourcePath || rustRendererSourcePath();
@@ -338,6 +408,8 @@ function installRustRenderer(args, options = {}) {
   if (executableExists(source)) {
     try {
       const version = verifyRustRenderer(source, options);
+      enforceRendererSessionCapability(source, options);
+      warnOnRendererVersionMismatch(version);
       fs.mkdirSync(args.prefix, { recursive: true });
       const tmpFile = `${target}.tmp-${process.pid}`;
       try {
@@ -357,6 +429,8 @@ function installRustRenderer(args, options = {}) {
   if (executableExists(target)) {
     try {
       const version = verifyRustRenderer(target, options);
+      enforceRendererSessionCapability(target, options);
+      warnOnRendererVersionMismatch(version);
       if (sourceError) {
         return { status: "existing", path: target, version, sourceError: sourceError.message, sourcePath: source };
       }
@@ -393,6 +467,7 @@ function resolveRenderer(args, options = {}) {
     if (executableExists(target)) {
       try {
         verifyRustRenderer(target, options);
+        enforceRendererSessionCapability(target, options);
         return { kind: "rust", path: target };
       } catch (error) {
         brokenDetail = brokenRendererDetail(target, error.message);
@@ -401,6 +476,7 @@ function resolveRenderer(args, options = {}) {
     if (executableExists(source)) {
       try {
         verifyRustRenderer(source, options);
+        enforceRendererSessionCapability(source, options);
         return { kind: "rust", path: target, preview: true };
       } catch (error) {
         brokenDetail = brokenDetail || brokenRendererDetail(source, error.message);
@@ -1580,7 +1656,7 @@ function doctor(args, options = {}) {
     launcher: { path: launcherPath, status: "missing", mode: null, metadata: null },
     stock: null,
     patched: { dir: versionsDir(args), versions: [], active: null, flatPayload: null },
-    renderer: { configured: null, binPath: path.join(args.prefix, rendererBinaryName()), installed: false, broken: false, version: null },
+    renderer: { configured: null, binPath: path.join(args.prefix, rendererBinaryName()), installed: false, broken: false, version: null, sessionCapable: null, capabilityError: null },
     anomalies: [],
     recommendations: [],
     buildCache: null,
@@ -1631,12 +1707,16 @@ function doctor(args, options = {}) {
   }
 
   if (executableExists(report.renderer.binPath)) {
+    const boundedRunCommand = (command, commandArgs, commandOptions) =>
+      runCommand(command, commandArgs, { ...commandOptions, timeout: args.healthCheckTimeoutMs || 10000 });
     try {
-      report.renderer.version = verifyRustRenderer(report.renderer.binPath, {
-        runCommand: (command, commandArgs, commandOptions) =>
-          runCommand(command, commandArgs, { ...commandOptions, timeout: args.healthCheckTimeoutMs || 10000 }),
-      });
+      report.renderer.version = verifyRustRenderer(report.renderer.binPath, { runCommand: boundedRunCommand });
       report.renderer.installed = true;
+      const capability = checkRendererSessionCapability(report.renderer.binPath, { runCommand: boundedRunCommand, env });
+      report.renderer.sessionCapable = capability.capable;
+      if (!capability.capable) {
+        report.renderer.capabilityError = capability.error;
+      }
     } catch (error) {
       report.renderer.broken = true;
       report.anomalies.push(`installed codex-hud failed --help health check: ${error.message}`);
@@ -1775,6 +1855,24 @@ function doctor(args, options = {}) {
     if (report.renderer.version !== repoVersion) {
       report.recommendations.push(
         `codex-hud is v${report.renderer.version} but the repo is v${repoVersion} -> rebuild: npm run build:rust && rerun the installer`,
+      );
+    }
+  }
+
+  // A session-blind renderer silently shows config.toml identity and another
+  // session's usage in patched mode (issue #30) — that breaks the active
+  // entrypoint, so it is unhealthy there. Stock launchers never invoke the
+  // renderer; keep it a recommendation in stock mode.
+  if (report.renderer.installed && report.renderer.sessionCapable === false) {
+    const capabilityFix = "run: npm run build:rust && npm run patch:codex";
+    if (report.launcher.mode === "patched") {
+      report.healthy = false;
+      report.anomalies.push(
+        `installed codex-hud predates per-session HUD support (ignores CODEX_HUD_* env) -> ${capabilityFix}`,
+      );
+    } else {
+      report.recommendations.push(
+        `installed codex-hud predates per-session HUD support (matters for patched mode/--print-config) -> ${capabilityFix}`,
       );
     }
   }
@@ -1920,7 +2018,7 @@ function refreshPatchedLauncher(args, report, options = {}) {
     throw new Error("Cannot refresh patched launcher metadata because the active patched payload is missing or broken.");
   }
   const resolveRendererImpl = options.resolveRenderer || resolveRenderer;
-  const renderer = resolveRendererImpl(args);
+  const renderer = resolveRendererImpl(args, { requireSessionCapability: true });
   const statusLineCommand = statusLineCommandFor(renderer);
   const trackedStockPath = report.shim.status === "managed" && report.launcher.metadata && report.launcher.metadata.stockPath
     ? report.launcher.metadata.stockPath
@@ -2073,7 +2171,12 @@ function printDoctorReport(report) {
       ? "; used by --print-config/patched mode only — stock launcher does not invoke it"
       : "";
     if (report.renderer.installed) {
-      lines.push(`renderer: rust (${report.renderer.binPath}, v${report.renderer.version}${stockQualifier})`);
+      const capabilityNote = report.renderer.sessionCapable === false
+        ? ", NOT session-capable — predates CODEX_HUD_* env support"
+        : report.renderer.sessionCapable === true
+          ? ", session-capable"
+          : "";
+      lines.push(`renderer: rust (${report.renderer.binPath}, v${report.renderer.version}${capabilityNote}${stockQualifier})`);
     } else if (report.renderer.broken) {
       lines.push(`renderer: rust binary is broken at ${report.renderer.binPath} — failed --help health check${stockQualifier}`);
     } else if (report.renderer.configured === "rust") {
@@ -2212,8 +2315,10 @@ function runPatchedInstall(args) {
   // Resolve and install the renderer BEFORE activating the patched payload so
   // an explicit --renderer rust failure cannot leave a half-finished install
   // (new payload active, stale launcher). If installBinary fails below, an
-  // already installed standalone renderer is harmless.
-  const renderer = resolveRenderer(args);
+  // already installed standalone renderer is harmless. Patched mode requires a
+  // session-capable renderer — a pre-#29 binary would silently render config
+  // fallback identity and cross-session usage (issue #30).
+  const renderer = resolveRenderer(args, { requireSessionCapability: true });
   const statusLineCommand = statusLineCommandFor(renderer);
   console.log(`HUD command: ${statusLineCommand}`);
   const installed = installBinary(sourceDir, args);
@@ -2355,4 +2460,6 @@ module.exports = {
   verifyInstalledBinary,
   verifyPatchedSource,
   verifyRustRenderer,
+  verifyRendererSessionCapability,
+  checkRendererSessionCapability,
 };

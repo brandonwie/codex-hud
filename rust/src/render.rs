@@ -965,6 +965,21 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn format_reasoning_effort_passes_max_through_verbatim() {
+        // issue #30 guard: `max` has no alias — it must render literally in
+        // both short and long modes and must never collapse to `xh`.
+        let max = json!("max");
+        assert_eq!(
+            format_reasoning_effort(Some(&max), true),
+            Some("max".to_string())
+        );
+        assert_eq!(
+            format_reasoning_effort(Some(&max), false),
+            Some("max".to_string())
+        );
+    }
+
+    #[test]
     fn format_counts_reports_clean_for_missing_or_empty_counts() {
         assert_eq!(format_counts(None), "clean");
         assert_eq!(format_counts(Some(&json!({}))), "clean");
