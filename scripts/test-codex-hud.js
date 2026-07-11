@@ -204,6 +204,80 @@ try {
   assert.strictEqual(emptyPresentUsage.tokens, null);
   assert.strictEqual(emptyPresentUsage.rateLimits.primary.usedPercent, 17, "empty-present rollout path should not suppress global rate limits");
 
+  // issue #30 regression rows: session-env identity semantics
+
+  // literal `max` must render verbatim (no alias); the stale-renderer incident
+  // showed the config effort (`xh`) instead.
+  const maxEffortLine = run(["--line"], {
+    env: {
+      ...fixtureEnv,
+      CODEX_HUD_MODEL: "gpt-5.7-env",
+      CODEX_HUD_EFFORT: "max",
+      CODEX_HUD_SERVICE_TIER: "",
+    },
+  });
+  assert.strictEqual(maxEffortLine.status, 0, maxEffortLine.stderr);
+  assert.match(maxEffortLine.stdout, /^5\.7-env\|max\|/, "effort max must render literally in session mode");
+  assert.doesNotMatch(maxEffortLine.stdout, /^5\.7-env\|xh\|/, "effort max must never alias to xh");
+
+  // session mode with EFFORT absent must HIDE the effort atom, never fall back
+  // to config.toml effort (the identity-side symptom of issue #30).
+  const absentEffortLine = run(["--line"], {
+    env: { ...fixtureEnv, CODEX_HUD_MODEL: "gpt-5.7-env" },
+    unsetEnv: ["CODEX_HUD_EFFORT", "CODEX_HUD_SERVICE_TIER", "CODEX_HUD_ROLLOUT_PATH"],
+  });
+  assert.strictEqual(absentEffortLine.status, 0, absentEffortLine.stderr);
+  assert.match(absentEffortLine.stdout, /^5\.7-env\|codex-hud\|/, "absent session effort must hide the effort atom");
+
+  // EFFORT="" (present-but-empty) and EFFORT=none both hide the atom.
+  for (const hiddenEffort of ["", "none"]) {
+    const hiddenEffortLine = run(["--line"], {
+      env: {
+        ...fixtureEnv,
+        CODEX_HUD_MODEL: "gpt-5.7-env",
+        CODEX_HUD_EFFORT: hiddenEffort,
+        CODEX_HUD_SERVICE_TIER: "",
+      },
+      unsetEnv: ["CODEX_HUD_ROLLOUT_PATH"],
+    });
+    assert.strictEqual(hiddenEffortLine.status, 0, hiddenEffortLine.stderr);
+    assert.match(
+      hiddenEffortLine.stdout,
+      /^5\.7-env\|codex-hud\|/,
+      `EFFORT=${JSON.stringify(hiddenEffort)} must hide the effort atom`,
+    );
+  }
+
+  // concurrent-session simulation: two invocations against the same
+  // CODEX_HOME, each pinned to its own rollout with its own effort. Each line
+  // must show its own identity + context while 5h/7d stay account-global.
+  const sessionOneLine = run(["--line"], {
+    env: {
+      ...fixtureEnv,
+      CODEX_HUD_MODEL: "gpt-5.7-env",
+      CODEX_HUD_EFFORT: "max",
+      CODEX_HUD_SERVICE_TIER: "",
+      CODEX_HUD_ROLLOUT_PATH: rolloutA,
+    },
+  });
+  const sessionTwoLine = run(["--line"], {
+    env: {
+      ...fixtureEnv,
+      CODEX_HUD_MODEL: "gpt-5.7-env",
+      CODEX_HUD_EFFORT: "xhigh",
+      CODEX_HUD_SERVICE_TIER: "",
+      CODEX_HUD_ROLLOUT_PATH: rolloutB,
+    },
+  });
+  assert.strictEqual(sessionOneLine.status, 0, sessionOneLine.stderr);
+  assert.strictEqual(sessionTwoLine.status, 0, sessionTwoLine.stderr);
+  assert.match(sessionOneLine.stdout, /^5\.7-env\|max\|/, "session one must show its own effort despite rolloutB being newer");
+  assert.match(sessionOneLine.stdout, /Ctx:75%/, "session one must use rolloutA context (750/1000)");
+  assert.match(sessionTwoLine.stdout, /^5\.7-env\|xh\|/, "session two must show its own effort");
+  assert.match(sessionTwoLine.stdout, /Ctx:21%/, "session two must use rolloutB context (210/1000)");
+  assert.match(sessionOneLine.stdout, /5h:17%/, "rate limits stay account-global (newest rollout) for session one");
+  assert.match(sessionTwoLine.stdout, /5h:17%/, "rate limits stay account-global (newest rollout) for session two");
+
   const text = run([], { env: fixtureEnv });
   assert.strictEqual(text.status, 0, text.stderr);
   assert.match(text.stdout, new RegExp(`Codex HUD ${expectedVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));

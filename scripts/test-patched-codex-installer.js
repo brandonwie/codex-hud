@@ -42,7 +42,30 @@ const {
   verifyInstalledBinary,
   verifyPatchedSource,
   verifyRustRenderer,
+  verifyRendererSessionCapability,
+  checkRendererSessionCapability,
 } = require("./install-patched-codex");
+
+const localGitEnvResult = spawnSync("git", ["rev-parse", "--local-env-vars"], { encoding: "utf8" });
+assert.strictEqual(localGitEnvResult.status, 0, `git local-env discovery failed: ${localGitEnvResult.stderr}`);
+const localGitEnvNames = localGitEnvResult.stdout.trim().split(/\s+/).filter(Boolean);
+const cleanGitEnv = { ...process.env };
+for (const name of localGitEnvNames) {
+  delete cleanGitEnv[name];
+}
+
+function gitRepositorySnapshot(cwd) {
+  const read = (args) => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8", env: cleanGitEnv });
+    assert.strictEqual(result.status, 0, `git ${args.join(" ")} failed: ${result.stderr}`);
+    return result.stdout;
+  };
+  return {
+    head: read(["rev-parse", "HEAD"]),
+    index: read(["diff", "--cached", "--binary"]),
+    status: read(["status", "--short"]),
+  };
+}
 
 function writeFile(root, relativePath, contents) {
   const filePath = path.join(root, relativePath);
@@ -56,12 +79,64 @@ function writeExecutable(filePath, contents) {
   fs.chmodSync(filePath, 0o755);
 }
 
+// Doctor/sync fakes: a session-capable renderer stub. Answers --line with the
+// injected CODEX_HUD_* env (passing the issue #30 capability probe) and
+// everything else with a --help version banner.
+function fakeRendererRun(version) {
+  return (command, commandArgs = [], commandOptions = {}) => {
+    if (command.endsWith("codex-hud")) {
+      if ((commandArgs || [])[0] === "--line") {
+        const probeEnv = (commandOptions && commandOptions.env) || {};
+        const tier = probeEnv.CODEX_HUD_SERVICE_TIER === "flex" ? "fl|" : "";
+        const emptyRollout =
+          Object.prototype.hasOwnProperty.call(probeEnv, "CODEX_HUD_ROLLOUT_PATH") &&
+          probeEnv.CODEX_HUD_ROLLOUT_PATH === "";
+        const usage = emptyRollout ? "|Ctx:?|5h:?|7d:?|Tkn:?" : "|Ctx:90%|Tkn:999";
+        return `${probeEnv.CODEX_HUD_MODEL || "cfg-model"}|${probeEnv.CODEX_HUD_EFFORT || "cfg"}|${tier}proj${usage}\n`;
+      }
+      return `codex-hud ${version}\n`;
+    }
+    return "codex-cli 0.139.0\n";
+  };
+}
+
 function fakeCodexScript(version) {
   return `#!/usr/bin/env bash\necho codex-cli ${version}\n`;
 }
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function assertStatusLineCommandEnvInjection(source) {
+  const helperNeedle = "fn custom_status_line_from_command";
+  const commandReadNeedle = "tui_status_line_command.as_ref";
+  assert.strictEqual(
+    source.split(helperNeedle).length - 1,
+    1,
+    "status_surfaces.rs must define exactly one custom status-line command helper",
+  );
+  assert.strictEqual(
+    source.split(commandReadNeedle).length - 1,
+    1,
+    "tui_status_line_command must have exactly one execution surface",
+  );
+
+  const helperStart = source.indexOf(helperNeedle);
+  const helperEnd = source.indexOf("\n    fn ", helperStart + helperNeedle.length);
+  assert(helperEnd > helperStart, "custom status-line command helper must have a following function boundary");
+  const helper = source.slice(helperStart, helperEnd);
+  assert(helper.includes(commandReadNeedle), "status-line command execution must stay inside the validated helper");
+  assert.strictEqual(helper.split(".output()").length - 1, 1, "validated status-line helper must run exactly one subprocess");
+
+  const outputCall = helper.indexOf(".output()");
+  const helperEnvRegion = helper.slice(0, outputCall);
+  for (const envVar of ["CODEX_HUD_MODEL", "CODEX_HUD_EFFORT", "CODEX_HUD_SERVICE_TIER", "CODEX_HUD_ROLLOUT_PATH"]) {
+    assert(
+      helperEnvRegion.includes(`"${envVar}"`),
+      `${envVar} must be injected inside custom_status_line_from_command before .output()`,
+    );
+  }
 }
 
 function captureConsoleLog(fn) {
@@ -169,6 +244,24 @@ assert(statusSurfaces.includes("self.effective_reasoning_effort()"));
 assert(statusSurfaces.includes('process.env("CODEX_HUD_SERVICE_TIER", self.current_service_tier().unwrap_or_default())'));
 assert(statusSurfaces.includes('"CODEX_HUD_ROLLOUT_PATH"'));
 assert(statusSurfaces.includes("self.rollout_path()"));
+// Injection placement (issue #30 / H6 guard): the one source location that
+// reads tui_status_line_command must inject all four env values before its one
+// subprocess runs. A second command-reading surface is rejected explicitly.
+assertStatusLineCommandEnvInjection(statusSurfaces);
+const secondEnvlessSurface = statusSurfaces.replace(
+  "    fn ansi_status_line_to_line",
+  `    fn second_status_line_from_command(&self) {
+        let command = self.config.tui_status_line_command.as_ref().unwrap();
+        let _ = std::process::Command::new("sh").args(["-lc", command]).output();
+    }
+
+    fn ansi_status_line_to_line`,
+);
+assert.throws(
+  () => assertStatusLineCommandEnvInjection(secondEnvlessSurface),
+  /exactly one execution surface/,
+  "a second env-less status-line subprocess surface must fail the placement guard",
+);
 assert(statusSurfaces.includes("fn ansi_status_line_to_line"));
 assert(statusSurfaces.includes("ratatui::style::Color::Indexed"));
 assert(statusSurfaces.includes(".lines()"));
@@ -538,7 +631,13 @@ assert(updatedPatchedRun.stderr.includes("stock Codex changed"), "stock updater 
 const rendererRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-renderer-test-"));
 const rendererSource = path.join(rendererRoot, "source", "codex-hud");
 const missingSource = path.join(rendererRoot, "source", "not-built");
-writeExecutable(rendererSource, '#!/usr/bin/env bash\necho "codex-hud 0.2.0"\n');
+// Session-capable fake: reflects the observable identity contract. Like the
+// real renderer, present-empty rollout state uses placeholders rather than the
+// decoy's concrete Ctx/Tkn values.
+writeExecutable(
+  rendererSource,
+  '#!/usr/bin/env bash\nif [ "$1" = "--line" ]; then\n  tier=""\n  if [ "$CODEX_HUD_SERVICE_TIER" = "flex" ]; then tier="fl|"; fi\n  usage="|Ctx:90%|Tkn:999"\n  if [ "${CODEX_HUD_ROLLOUT_PATH+x}" = "x" ] && [ -z "$CODEX_HUD_ROLLOUT_PATH" ]; then usage="|Ctx:?|5h:?|7d:?|Tkn:?"; fi\n  echo "${CODEX_HUD_MODEL:-cfg-model}|${CODEX_HUD_EFFORT:-cfg}|${tier}proj${usage}"\nelse\n  echo "codex-hud 0.2.0"\nfi\n',
+);
 const rendererPrefix = path.join(rendererRoot, "bin");
 const rendererArgs = { prefix: rendererPrefix, renderer: "auto" };
 
@@ -591,12 +690,12 @@ assert.strictEqual(brokenInstalled.path, path.join(rendererPrefix, "codex-hud"))
 assert.match(brokenInstalled.error, /--help/, "broken renderer result must carry the health-check failure cause");
 assert.throws(
   () => resolveRenderer(rendererArgs, { sourcePath: missingSource }),
-  /renderer unavailable: .*failed its --help health check/,
+  /renderer unavailable: .*failed renderer validation/,
   "auto must fail loudly when the installed renderer is broken",
 );
 assert.throws(
   () => resolveRenderer({ prefix: rendererPrefix, renderer: "rust" }, { sourcePath: missingSource }),
-  /failed its --help health check/,
+  /failed renderer validation/,
   "explicit rust with a broken installed binary must surface the health check, not claim it is not built",
 );
 
@@ -610,18 +709,18 @@ assert.strictEqual(brokenSourceResult.path, brokenSource);
 assert.match(brokenSourceResult.error, /--help/);
 assert.throws(
   () => resolveRenderer({ prefix: brokenSourcePrefix, renderer: "auto" }, { sourcePath: brokenSource }),
-  /renderer unavailable: .*failed its --help health check/,
+  /renderer unavailable: .*failed renderer validation/,
   "auto must fail loudly when the built source binary is broken",
 );
 assert(!fs.existsSync(path.join(brokenSourcePrefix, "codex-hud")), "a broken source binary must never be installed");
 assert.throws(
   () => resolveRenderer({ prefix: brokenSourcePrefix, renderer: "rust" }, { sourcePath: brokenSource }),
-  /failed its --help health check/,
+  /failed renderer validation/,
 );
 
 // broken source + healthy installed target: keep the working install
 const keepPrefix = path.join(rendererRoot, "keep-bin");
-writeExecutable(path.join(keepPrefix, "codex-hud"), '#!/usr/bin/env bash\necho "codex-hud 0.2.0"\n');
+writeExecutable(path.join(keepPrefix, "codex-hud"), fs.readFileSync(rendererSource, "utf8"));
 assert.deepStrictEqual(
   resolveRenderer({ prefix: keepPrefix, renderer: "auto" }, { sourcePath: brokenSource }),
   { kind: "rust", path: path.join(keepPrefix, "codex-hud") },
@@ -669,12 +768,12 @@ assert.deepStrictEqual(
 // preview can never disagree with what the real install resolves.
 assert.throws(
   () => resolveRenderer(rendererArgs, { install: false, sourcePath: missingSource }),
-  /renderer unavailable: .*failed its --help health check/,
+  /renderer unavailable: .*failed renderer validation/,
   "preview must fail for a broken installed renderer, matching the install path",
 );
 assert.throws(
   () => resolveRenderer({ prefix: rendererPrefix, renderer: "rust" }, { install: false, sourcePath: missingSource }),
-  /failed its --help health check/,
+  /failed renderer validation/,
 );
 assert.deepStrictEqual(
   resolveRenderer(rendererArgs, { install: false, sourcePath: rendererSource }),
@@ -685,6 +784,165 @@ assert.deepStrictEqual(
   resolveRenderer({ prefix: keepPrefix, renderer: "auto" }, { install: false, sourcePath: brokenSource }),
   { kind: "rust", path: path.join(keepPrefix, "codex-hud") },
   "preview must keep a healthy installed renderer despite a broken build artifact",
+);
+
+// --- rust renderer: session-capability probe (issue #30) ---
+// A stale (pre-#29) renderer answers --help with a valid version but ignores
+// CODEX_HUD_* env, echoing config-derived output on --line.
+const staleRenderer = path.join(rendererRoot, "source", "stale-codex-hud");
+writeExecutable(
+  staleRenderer,
+  '#!/usr/bin/env bash\nif [ "$1" = "--line" ]; then\n  echo "cfg-model|xh|proj|Ctx:31%"\nelse\n  echo "codex-hud 0.3.3"\nfi\n',
+);
+
+verifyRendererSessionCapability(rendererSource); // must not throw
+const builtRenderer = path.join(__dirname, "..", "rust", "target", "release", rendererBinaryName());
+assert(fs.existsSync(builtRenderer), "build the release renderer before running installer tests");
+assert.doesNotThrow(
+  () => verifyRendererSessionCapability(builtRenderer),
+  "the real renderer must pass with placeholder Ctx/Tkn values for an empty rollout path",
+);
+assert.throws(
+  () => verifyRendererSessionCapability(staleRenderer),
+  /failed CODEX_HUD_\* session capability probe/,
+  "capability probe must reject a renderer that ignores session env",
+);
+assert.strictEqual(checkRendererSessionCapability(rendererSource).capable, true);
+const staleCapability = checkRendererSessionCapability(staleRenderer);
+assert.strictEqual(staleCapability.capable, false);
+assert.match(staleCapability.error, /CODEX_HUD_\*/);
+
+// A partial renderer that consumes only model/effort must not be classified as
+// session-capable: tier and empty-rollout isolation are part of the contract.
+const partialRenderer = path.join(rendererRoot, "source", "partial-codex-hud");
+writeExecutable(
+  partialRenderer,
+  '#!/usr/bin/env bash\nif [ "$1" = "--line" ]; then\n  echo "${CODEX_HUD_MODEL}|${CODEX_HUD_EFFORT}|proj|Ctx:90%|Tkn:999"\nelse\n  echo "codex-hud 0.3.3"\nfi\n',
+);
+assert.throws(
+  () => verifyRendererSessionCapability(partialRenderer),
+  /failed CODEX_HUD_\* session capability probe/,
+  "probe must reject a renderer that ignores tier and empty-rollout isolation",
+);
+
+// CLI integration: both patched dry-run and --print-config are renderer-using
+// surfaces, so neither may emit a command for a session-blind binary.
+const hostRepoRoot = path.join(__dirname, "..");
+const hostRepoBeforeCapabilityCli = gitRepositorySnapshot(hostRepoRoot);
+const capabilityCliRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-capability-cli-test-"));
+try {
+  const capabilityCliScript = path.join(capabilityCliRoot, "scripts", "install-patched-codex.js");
+  writeFile(capabilityCliRoot, "scripts/install-patched-codex.js", fs.readFileSync(path.join(__dirname, "install-patched-codex.js"), "utf8"));
+  writeFile(capabilityCliRoot, "package.json", `${JSON.stringify({ version: repoPackageVersion })}\n`);
+  writeExecutable(
+    path.join(capabilityCliRoot, "rust", "target", "release", rendererBinaryName()),
+    fs.readFileSync(staleRenderer, "utf8"),
+  );
+
+  const printConfigRun = spawnSync(
+    process.execPath,
+    [capabilityCliScript, "--print-config", "--prefix", path.join(capabilityCliRoot, "print-config-bin")],
+    { encoding: "utf8", env: cleanGitEnv },
+  );
+  assert.notStrictEqual(printConfigRun.status, 0, "--print-config must reject a session-blind renderer");
+  assert.match(printConfigRun.stderr, /failed renderer validation.*CODEX_HUD_\*/s);
+  assert.doesNotMatch(printConfigRun.stdout, /status_line_command\s*=/);
+
+  const capabilityUpstream = path.join(capabilityCliRoot, "upstream");
+  fs.cpSync(root, capabilityUpstream, { recursive: true });
+  for (const gitArgs of [
+    ["init", "-q"],
+    ["add", "."],
+    ["-c", "user.name=Codex HUD Test", "-c", "user.email=test@example.com", "commit", "-qm", "fixture"],
+    ["tag", "rust-v0.144.1"],
+  ]) {
+    const gitRun = spawnSync("git", gitArgs, { cwd: capabilityUpstream, encoding: "utf8", env: cleanGitEnv });
+    assert.strictEqual(gitRun.status, 0, `fixture git ${gitArgs[0]} failed: ${gitRun.stderr}`);
+  }
+  const patchedDryRun = spawnSync(
+    process.execPath,
+    [
+      capabilityCliScript,
+      "--mode",
+      "patched",
+      "--dry-run",
+      "--version",
+      "0.144.1",
+      "--repo",
+      capabilityUpstream,
+      "--cache-dir",
+      path.join(capabilityCliRoot, "cache"),
+      "--prefix",
+      path.join(capabilityCliRoot, "patched-bin"),
+    ],
+    { encoding: "utf8", env: cleanGitEnv },
+  );
+  assert.notStrictEqual(patchedDryRun.status, 0, "patched dry-run must reject a session-blind renderer");
+  assert.match(patchedDryRun.stderr, /failed renderer validation.*CODEX_HUD_\*/s);
+  assert.doesNotMatch(patchedDryRun.stdout, /HUD command:/);
+} finally {
+  fs.rmSync(capabilityCliRoot, { recursive: true, force: true });
+}
+assert.deepStrictEqual(
+  gitRepositorySnapshot(hostRepoRoot),
+  hostRepoBeforeCapabilityCli,
+  "CLI fixture must not mutate the host repository HEAD, index, or status",
+);
+
+// Patched mode (requireSessionCapability): stale renderer must hard-fail.
+const staleHardPrefix = path.join(rendererRoot, "stale-hard-bin");
+const staleHardInstall = installRustRenderer(
+  { prefix: staleHardPrefix, renderer: "auto" },
+  { sourcePath: staleRenderer, requireSessionCapability: true },
+);
+assert.strictEqual(staleHardInstall.status, "broken-source", "stale source must not install in patched mode");
+assert.match(staleHardInstall.error, /CODEX_HUD_\*/);
+assert(
+  !fs.existsSync(path.join(staleHardPrefix, "codex-hud")),
+  "a session-blind renderer must never be installed in patched mode",
+);
+assert.throws(
+  () => resolveRenderer({ prefix: staleHardPrefix, renderer: "auto" }, { sourcePath: staleRenderer, requireSessionCapability: true }),
+  /renderer unavailable: .*CODEX_HUD_\*/,
+  "patched install must abort with the rebuild hint on a stale renderer",
+);
+
+// Stale renderer already installed at the target: patched mode reports broken.
+const staleTargetPrefix = path.join(rendererRoot, "stale-target-bin");
+writeExecutable(
+  path.join(staleTargetPrefix, "codex-hud"),
+  '#!/usr/bin/env bash\nif [ "$1" = "--line" ]; then\n  echo "cfg-model|xh|proj"\nelse\n  echo "codex-hud 0.3.3"\nfi\n',
+);
+const staleTargetInstall = installRustRenderer(
+  { prefix: staleTargetPrefix, renderer: "auto" },
+  { sourcePath: missingSource, requireSessionCapability: true },
+);
+assert.strictEqual(staleTargetInstall.status, "broken");
+assert.match(staleTargetInstall.error, /CODEX_HUD_\*/);
+
+// Capable renderer passes the patched-mode gate end to end.
+const capablePrefix = path.join(rendererRoot, "capable-bin");
+const capableInstall = installRustRenderer(
+  { prefix: capablePrefix, renderer: "auto" },
+  { sourcePath: rendererSource, requireSessionCapability: true },
+);
+assert.strictEqual(capableInstall.status, "installed");
+
+// Stock mode (no requireSessionCapability): stale renderer is warn-only and
+// must never block install:launcher (no cargo dependency in stock mode).
+const staleTolerantPrefix = path.join(rendererRoot, "stale-tolerant-bin");
+const tolerantResolved = resolveRenderer(
+  { prefix: staleTolerantPrefix, renderer: "auto" },
+  { sourcePath: staleRenderer, allowMissing: true },
+);
+assert.deepStrictEqual(
+  tolerantResolved,
+  { kind: "rust", path: path.join(staleTolerantPrefix, "codex-hud") },
+  "stock install must tolerate a stale-but---help-healthy renderer (warn-only)",
+);
+assert(
+  fs.existsSync(path.join(staleTolerantPrefix, "codex-hud")),
+  "stock mode still installs the stale renderer after warning",
 );
 
 // --- statusLineCommandFor ---
@@ -994,6 +1252,57 @@ const brokenStatus = patchedRuntimeStatus(brokenReport);
 assert.strictEqual(brokenStatus.needsSync, true);
 assert.strictEqual(brokenStatus.action, "rebuild");
 
+// --- doctor: renderer session-capability (issue #30) ---
+// Stale renderer installed + patched launcher: doctor must flag it unhealthy —
+// this is exactly the incident npm run doctor previously reported as healthy.
+const capDoctorRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-capability-test-"));
+const capDoctorArgs = { prefix: capDoctorRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
+writeExecutable(path.join(capDoctorRoot, "codex-hud-codex.d", "0.144.1", "codex"), fakeCodexScript("0.144.1"));
+fs.symlinkSync(path.join(capDoctorRoot, "codex-hud-codex.d", "0.144.1", "codex"), path.join(capDoctorRoot, "codex-hud-codex"));
+writeExecutable(path.join(capDoctorRoot, "codex-hud"), '#!/usr/bin/env bash\necho "codex-hud 0.3.3"\n');
+installLauncher(capDoctorArgs, {
+  mode: "patched",
+  patchedBinary: path.join(capDoctorRoot, "codex-hud-codex"),
+  patchedVersion: "0.144.1",
+  stockPath: doctorFakeStock,
+  stockRealpath: doctorFakeStockRealpath,
+  stockVersion: "0.144.1",
+  statusLineCommand: `'${path.join(capDoctorRoot, "codex-hud")}' --line --color`,
+  renderer: "rust",
+});
+const capDoctorRun = (staleLine) => (command, commandArgs = [], commandOptions = {}) => {
+  if (command === path.join(capDoctorRoot, "codex-hud")) {
+    if ((commandArgs || [])[0] === "--line") {
+      if (staleLine) {
+        return "cfg-model|xh|proj|Ctx:31%\n"; // ignores env — pre-#29 behavior
+      }
+      const probeEnv = (commandOptions && commandOptions.env) || {};
+      const tier = probeEnv.CODEX_HUD_SERVICE_TIER === "flex" ? "fl|" : "";
+      const emptyRollout =
+        Object.prototype.hasOwnProperty.call(probeEnv, "CODEX_HUD_ROLLOUT_PATH") &&
+        probeEnv.CODEX_HUD_ROLLOUT_PATH === "";
+      const usage = emptyRollout ? "|Ctx:?|5h:?|7d:?|Tkn:?" : "|Ctx:90%|Tkn:999";
+      return `${probeEnv.CODEX_HUD_MODEL || "cfg-model"}|${probeEnv.CODEX_HUD_EFFORT || "cfg"}|${tier}proj${usage}\n`;
+    }
+    return "codex-hud 0.3.3\n";
+  }
+  return "codex-cli 0.144.1\n";
+};
+const staleCapReport = doctor(capDoctorArgs, { env: { PATH: doctorStockBin }, runCommand: capDoctorRun(true) });
+assert.strictEqual(staleCapReport.renderer.installed, true);
+assert.strictEqual(staleCapReport.renderer.sessionCapable, false, "doctor must probe session capability");
+assert.strictEqual(staleCapReport.healthy, false, "session-blind renderer in patched mode must be unhealthy");
+assert(
+  staleCapReport.anomalies.some((entry) => entry.includes("predates per-session HUD support")),
+  "doctor must name the stale-renderer anomaly with a rebuild hint",
+);
+const capableCapReport = doctor(capDoctorArgs, { env: { PATH: doctorStockBin }, runCommand: capDoctorRun(false) });
+assert.strictEqual(capableCapReport.renderer.sessionCapable, true);
+assert(
+  !capableCapReport.anomalies.some((entry) => entry.includes("predates per-session HUD support")),
+  "a session-capable renderer must not trigger the capability anomaly",
+);
+
 // --- patched runtime check/sync ---
 const checkResult = checkPatchedRuntime(doctorStaleArgs, {
   env: { PATH: doctorStockBin },
@@ -1048,7 +1357,7 @@ installLauncher(realpathOnlyArgs, {
 });
 const realpathOnlyReport = doctor(realpathOnlyArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: fakeRendererRun(repoPackageVersion),
 });
 const realpathOnlyStatus = patchedRuntimeStatus(realpathOnlyReport);
 assert.strictEqual(realpathOnlyStatus.needsSync, true);
@@ -1072,7 +1381,7 @@ installLauncher(realpathOnlyArgs, {
 });
 const syncRefreshResult = syncPatchedRuntime(realpathOnlyArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: fakeRendererRun(repoPackageVersion),
   resolveRenderer: () => ({ kind: "rust", path: path.join(realpathOnlyRoot, "codex-hud") }),
 });
 assert.strictEqual(syncRefreshResult.action, "refreshed");
@@ -1132,7 +1441,7 @@ function buildPatchedInstall(label, { defaultShim } = {}) {
 function patchedSyncOptions(installRoot) {
   return {
     env: { PATH: doctorStockBin },
-    runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+    runCommand: fakeRendererRun(repoPackageVersion),
     resolveRenderer: () => ({ kind: "rust", path: path.join(installRoot, "codex-hud") }),
   };
 }
@@ -1166,7 +1475,7 @@ const optInShim = path.join(optIn.root, "codex");
 fs.symlinkSync(doctorFakeStock, optInShim); // Codex self-updater hijack: codex -> stock
 const driftReport = doctor(optIn.args, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: fakeRendererRun(repoPackageVersion),
 });
 assert.strictEqual(driftReport.shim.status, "drifted", "hijacked shim on an opted-in patched install must be 'drifted'");
 assert.strictEqual(driftReport.healthy, false, "opted-in drift must mark the entrypoint chain unhealthy");
@@ -1198,11 +1507,11 @@ writeExecutable(path.join(failedDrift.root, "codex-hud-codex.d", "0.139.0", "cod
 assert.throws(
   () => syncPatchedRuntime(failedDrift.args, {
     ...patchedSyncOptions(failedDrift.root),
-    runCommand: (command) => {
+    runCommand: (command, commandArgs, commandOptions) => {
       if (command === path.join(failedDrift.root, "codex-hud-codex")) {
         throw new Error("patched payload is broken");
       }
-      return command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n";
+      return fakeRendererRun(repoPackageVersion)(command, commandArgs, commandOptions);
     },
     runPatchedInstall() {
       throw new Error("rebuild failed");
@@ -1220,11 +1529,11 @@ writeExecutable(rebuildDriftPayload, "#!/usr/bin/env bash\nexit 42\n");
 let rebuildDriftRebuilt = false;
 const rebuildDriftCapture = captureConsoleLog(() => syncPatchedRuntime(rebuildDrift.args, {
   ...patchedSyncOptions(rebuildDrift.root),
-  runCommand: (command) => {
+  runCommand: (command, commandArgs, commandOptions) => {
     if (command === path.join(rebuildDrift.root, "codex-hud-codex") && !rebuildDriftRebuilt) {
       throw new Error("patched payload is broken");
     }
-    return command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n";
+    return fakeRendererRun(repoPackageVersion)(command, commandArgs, commandOptions);
   },
   runPatchedInstall(installArgs) {
     assert.strictEqual(installArgs.version, "0.139.0");
@@ -1264,7 +1573,7 @@ const noOptInShim = path.join(noOptIn.root, "codex");
 fs.symlinkSync(doctorFakeStock, noOptInShim); // a foreign codex the user set themselves
 const noOptInReport = doctor(noOptIn.args, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: fakeRendererRun(repoPackageVersion),
 });
 assert.strictEqual(noOptInReport.shim.status, "drifted");
 assert.strictEqual(noOptInReport.healthy, true, "an un-opted-in foreign shim must NOT mark the chain unhealthy");
@@ -1315,11 +1624,11 @@ writeExecutable(rebuildMigratePayload, "#!/usr/bin/env bash\nexit 42\n");
 let rebuildMigrateRebuilt = false;
 const rebuildMigrateCapture = captureConsoleLog(() => syncPatchedRuntime(rebuildMigrate.args, {
   ...patchedSyncOptions(rebuildMigrate.root),
-  runCommand: (command) => {
+  runCommand: (command, commandArgs, commandOptions) => {
     if (command === path.join(rebuildMigrate.root, "codex-hud-codex") && !rebuildMigrateRebuilt) {
       throw new Error("patched payload is broken");
     }
-    return command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n";
+    return fakeRendererRun(repoPackageVersion)(command, commandArgs, commandOptions);
   },
   runPatchedInstall(installArgs) {
     assert.strictEqual(installArgs.version, "0.139.0");
@@ -1361,7 +1670,7 @@ const regularContents = "#!/usr/bin/env bash\necho my own codex\n";
 fs.writeFileSync(regularShim, regularContents);
 const regularReport = doctor(regular.args, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: fakeRendererRun(repoPackageVersion),
 });
 assert.strictEqual(regularReport.shim.status, "foreign", "a regular-file codex must stay 'foreign', never 'drifted'");
 const regularSync = syncPatchedRuntime(regular.args, patchedSyncOptions(regular.root));
@@ -1441,7 +1750,7 @@ assert(
 writeExecutable(path.join(doctorRendererPatchedRoot, "codex-hud"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
 const rendererInstalledReport = doctor(doctorRendererPatchedArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: fakeRendererRun(repoPackageVersion),
 });
 assert.strictEqual(rendererInstalledReport.renderer.installed, true);
 assert.strictEqual(rendererInstalledReport.renderer.version, repoPackageVersion);
@@ -1451,7 +1760,7 @@ assert(!rendererInstalledReport.recommendations.some((entry) => entry.includes("
 const staleRendererVersion = repoPackageVersion === "0.0.0" ? "0.0.1" : "0.0.0";
 const rendererStaleReport = doctor(doctorRendererPatchedArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${staleRendererVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: fakeRendererRun(staleRendererVersion),
 });
 assert.strictEqual(rendererStaleReport.renderer.installed, true);
 assert.strictEqual(rendererStaleReport.renderer.version, staleRendererVersion);
@@ -1505,7 +1814,7 @@ assert(
 writeExecutable(path.join(doctorStockRoot, "codex-hud"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
 const rendererDefaultInstalledReport = doctor(doctorStockArgs, {
   env: { PATH: doctorStockBin },
-  runCommand: (command) => (command.endsWith("codex-hud") ? `codex-hud ${repoPackageVersion}\n` : "codex-cli 0.139.0\n"),
+  runCommand: fakeRendererRun(repoPackageVersion),
 });
 assert.strictEqual(rendererDefaultInstalledReport.renderer.configured, "rust");
 assert.strictEqual(rendererDefaultInstalledReport.renderer.installed, true);
