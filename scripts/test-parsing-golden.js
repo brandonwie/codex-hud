@@ -151,6 +151,43 @@ const ROLLOUTS = {
   },
 };
 
+// Rate-limit classification shapes (issue #32): since 2026-07-13 the Codex
+// backend can send the weekly window as `primary` with `secondary: null`, so
+// collect() classifies slots by window_minutes (300 -> 5h, 10080 -> 7d)
+// instead of payload position. Same token info as `full`; only rates vary.
+function ratesRollout(rates) {
+  return { info: ROLLOUTS.full.info, rates };
+}
+const NOW_SEC = Math.floor(NOW_MS / 1000);
+const WEEKLY_RESET_SEC = Math.floor((NOW_MS + 5.1 * 24 * 3600000) / 1000);
+Object.assign(ROLLOUTS, {
+  // New payload shape: weekly window arrives as primary, secondary null.
+  weeklyAsPrimary: ratesRollout({
+    primary: { used_percent: 1, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
+    secondary: null,
+  }),
+  // Windows arrive position-swapped; classification must un-swap them.
+  swappedWindows: ratesRollout({
+    primary: { used_percent: 9, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
+    secondary: { used_percent: 3, window_minutes: 300, resets_at: NOW_SEC },
+  }),
+  // Missing window_minutes on primary -> positional fallback fills the 5h slot.
+  missingDuration: ratesRollout({
+    primary: { used_percent: 5, resets_at: NOW_SEC },
+    secondary: { used_percent: 16, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
+  }),
+  // Unrecognized 1440-minute window stays unclassified -> 5h slot stays null.
+  unexpectedDuration: ratesRollout({
+    primary: { used_percent: 4, window_minutes: 1440, resets_at: NOW_SEC },
+    secondary: { used_percent: 16, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
+  }),
+  // Two weekly windows: first claim (payload order) wins, duplicate dropped.
+  duplicateWeekly: ratesRollout({
+    primary: { used_percent: 11, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
+    secondary: { used_percent: 22, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
+  }),
+});
+
 // Drive collect() via --json under the fixture inputs and return a normalized,
 // parsing-only view (volatile fields redacted).
 function collectParsed(binary, gitState, rolloutKey) {
@@ -214,6 +251,11 @@ const CASES = [
   { name: "dirty-git + full-rollout", git: "dirty", rollout: "full" },
   { name: "clean-git + no-rate-limits", git: "clean", rollout: "noRates" },
   { name: "clean-git + near-full-context", git: "clean", rollout: "nearFull" },
+  { name: "clean-git + weekly-as-primary", git: "clean", rollout: "weeklyAsPrimary" },
+  { name: "clean-git + swapped-windows", git: "clean", rollout: "swappedWindows" },
+  { name: "clean-git + missing-duration", git: "clean", rollout: "missingDuration" },
+  { name: "clean-git + unexpected-duration", git: "clean", rollout: "unexpectedDuration" },
+  { name: "clean-git + duplicate-weekly", git: "clean", rollout: "duplicateWeekly" },
 ];
 
 const splitBlocks = (s) => s.trim().split(/\n\n(?=### )/);

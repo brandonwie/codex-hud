@@ -35,6 +35,8 @@ Die kompakte Status-Line, ausgegeben mit `--line` (nur im Patched-Modus als Fuß
 
 > Die Segmente, Labels, Farben und Schwellenwerte in dieser Zeile sind alle konfigurierbar — siehe [Konfiguration](#konfiguration).
 
+> Die Segmente `5h` und `7d` werden den Rate-Limit-Fenstern von Codex anhand der Fensterlänge (300 bzw. 10080 Minuten) zugeordnet, nicht anhand der Position im Payload — das Backend kann jedes Fenster in jedem Slot oder auch nur eines von beiden melden. Ein Segment, dessen Fenster im Payload fehlt, zeigt `?` (z. B. `5h:?`), statt den Wert des anderen Fensters zu übernehmen.
+
 Der Standard-Status-Line-Renderer ist `codex-hud`, ein kleines natives Rust-Binary (edition 2021, MIT): eine einzelne, eigenständige ausführbare Datei ohne Interpreter im Rendering-Pfad, mit minimalem Abhängigkeits-Fußabdruck (nur `serde_json` und `toml`), null `unsafe`-Code und einem größenoptimierten Release-Build, der bei etwa 574 KB landet. Zur Klarstellung: In diesem README tauchen zwei verschiedene „Rust" auf — die Upstream-Codex-CLI ist selbst ein Rust-Programm (das Build-Ziel des experimentellen Patches weiter unten), während `codex-hud` der separate, im Repo enthaltene Status-Line-Renderer ist.
 
 ## Funktionen

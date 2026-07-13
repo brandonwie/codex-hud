@@ -39,6 +39,8 @@ The compact status line, printed by `--line` (rendered as an in-TUI footer only 
 
 > The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and non-default service tier are separate atoms; `f` appears automatically when Codex resolves `service_tier = "fast"`.
 
+> The `5h` and `7d` segments are matched to Codex's rate-limit windows by window length (300 and 10080 minutes), not by payload position — the backend can report either window in either slot, or only one of them. A segment whose window is missing from the payload renders `?` (e.g. `5h:?`) instead of borrowing the other window's value.
+
 The default status-line renderer is `codex-hud`, a small native Rust binary (edition 2021, MIT): a single self-contained executable with no interpreter on the rendering path, a minimal dependency footprint (just `serde_json` and `toml`), zero `unsafe` code, and a size-optimized release build that comes in around 574 KB. For clarity, two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the separate in-repo status-line renderer.
 
 ## Features

@@ -292,6 +292,65 @@ pub fn rate_window(raw: Option<&Value>) -> Value {
     })
 }
 
+/// Known rate-limit window durations (minutes). The Codex backend has shipped
+/// payloads where the weekly window arrives as `primary` with `secondary: null`
+/// (observed 2026-07-13, same CLI version as the prior primary=5h shape), so
+/// slots are classified by duration, not payload position. See issue #32.
+const SHORT_WINDOW_MINUTES: f64 = 300.0;
+const WEEKLY_WINDOW_MINUTES: f64 = 10080.0;
+
+fn window_minutes_of(window: &Value) -> f64 {
+    // rate_window() stores a missing/non-finite duration as JSON null;
+    // js_number would coerce null to 0, so map it back to NaN (= unknown).
+    match window.get("windowMinutes") {
+        None | Some(Value::Null) => f64::NAN,
+        value => compat::js_number(value),
+    }
+}
+
+/// Classify extracted rate windows into (short/5h, weekly/7d) slots.
+///
+/// Pass 1 — exact recognized durations claim slots in payload order
+/// (primary first); a duplicate claim on an already-taken slot is dropped and
+/// never overflows into the other slot. Unrecognized durations are not
+/// classified (the slot stays null and renders `?`).
+/// Pass 2 — a window with missing/non-finite `window_minutes` falls back to
+/// its own original position's slot, only if that slot is still empty. This
+/// preserves the legacy positional behavior for payloads without durations.
+pub fn classify_rate_windows(primary: Value, secondary: Value) -> (Value, Value) {
+    let mut short = Value::Null;
+    let mut weekly = Value::Null;
+    let mut fallback: [Value; 2] = [Value::Null, Value::Null];
+
+    for (position, window) in [primary, secondary].into_iter().enumerate() {
+        if window.is_null() {
+            continue;
+        }
+        let minutes = window_minutes_of(&window);
+        if minutes == SHORT_WINDOW_MINUTES {
+            if short.is_null() {
+                short = window;
+            }
+        } else if minutes == WEEKLY_WINDOW_MINUTES {
+            if weekly.is_null() {
+                weekly = window;
+            }
+        } else if !minutes.is_finite() {
+            fallback[position] = window;
+        }
+        // Any other finite duration: unrecognized — leave unclassified.
+    }
+
+    let [fallback_primary, fallback_secondary] = fallback;
+    if short.is_null() && !fallback_primary.is_null() {
+        short = fallback_primary;
+    }
+    if weekly.is_null() && !fallback_secondary.is_null() {
+        weekly = fallback_secondary;
+    }
+    (short, weekly)
+}
+
 fn token_number(value: Option<&Value>) -> Option<f64> {
     let n = compat::js_number(value);
     if n.is_finite() && n >= 0.0 {
@@ -419,6 +478,13 @@ fn latest_usage_from_files(
                 if let Some(rate_limits) = rate_limits {
                     let primary = rate_window(rate_limits.get("primary"));
                     let secondary = rate_window(rate_limits.get("secondary"));
+                    if primary.is_null() && secondary.is_null() {
+                        continue;
+                    }
+                    // Slots are duration-classified (short=5h, weekly=7d) and
+                    // re-exposed under the legacy primary/secondary keys so the
+                    // renderer stays untouched. See classify_rate_windows().
+                    let (primary, secondary) = classify_rate_windows(primary, secondary);
                     if primary.is_null() && secondary.is_null() {
                         continue;
                     }
@@ -886,5 +952,75 @@ mod tests {
             .unwrap_or(false)));
 
         fs::remove_dir_all(codex_home).expect("remove temp dir");
+    }
+
+    fn window(used: u64, minutes: Option<u64>) -> Value {
+        json!({
+            "usedPercent": used,
+            "windowMinutes": minutes.map(Value::from).unwrap_or(Value::Null),
+            "resetsAt": 1784507205u64,
+        })
+    }
+
+    #[test]
+    fn classify_keeps_legacy_positional_shape() {
+        // Old payload: primary=300 (5h), secondary=10080 (7d) — unchanged.
+        let (short, weekly) =
+            classify_rate_windows(window(17, Some(300)), window(16, Some(10080)));
+        assert_eq!(short["windowMinutes"], json!(300));
+        assert_eq!(weekly["windowMinutes"], json!(10080));
+    }
+
+    #[test]
+    fn classify_moves_weekly_primary_to_weekly_slot() {
+        // New payload (2026-07-13): primary=10080, secondary=null.
+        let (short, weekly) = classify_rate_windows(window(1, Some(10080)), Value::Null);
+        assert!(short.is_null(), "short slot must stay unknown");
+        assert_eq!(weekly["windowMinutes"], json!(10080));
+        assert_eq!(weekly["usedPercent"], json!(1));
+    }
+
+    #[test]
+    fn classify_handles_swapped_positions() {
+        let (short, weekly) =
+            classify_rate_windows(window(9, Some(10080)), window(3, Some(300)));
+        assert_eq!(short["usedPercent"], json!(3));
+        assert_eq!(weekly["usedPercent"], json!(9));
+    }
+
+    #[test]
+    fn classify_missing_duration_falls_back_to_own_position_only() {
+        // Primary lacks window_minutes → fills short slot; secondary recognized.
+        let (short, weekly) = classify_rate_windows(window(5, None), window(16, Some(10080)));
+        assert_eq!(short["usedPercent"], json!(5));
+        assert_eq!(weekly["usedPercent"], json!(16));
+
+        // Fallback must not fill a slot already claimed by a recognized duration.
+        let (short, weekly) = classify_rate_windows(window(7, Some(300)), window(8, None));
+        assert_eq!(short["usedPercent"], json!(7));
+        assert_eq!(weekly["usedPercent"], json!(8));
+
+        // Fallback never crosses positions: secondary-position fallback cannot
+        // fill the short slot.
+        let (short, weekly) = classify_rate_windows(Value::Null, window(8, None));
+        assert!(short.is_null());
+        assert_eq!(weekly["usedPercent"], json!(8));
+    }
+
+    #[test]
+    fn classify_ignores_unexpected_duration() {
+        let (short, weekly) =
+            classify_rate_windows(window(4, Some(1440)), window(16, Some(10080)));
+        assert!(short.is_null(), "unexpected 1440-minute window stays unclassified");
+        assert_eq!(weekly["usedPercent"], json!(16));
+    }
+
+    #[test]
+    fn classify_drops_duplicate_slot_claims() {
+        // Two weekly windows: first claim (payload order) wins, second dropped.
+        let (short, weekly) =
+            classify_rate_windows(window(11, Some(10080)), window(22, Some(10080)));
+        assert!(short.is_null(), "duplicate must not overflow into short slot");
+        assert_eq!(weekly["usedPercent"], json!(11));
     }
 }

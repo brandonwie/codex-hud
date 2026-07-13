@@ -35,6 +35,8 @@ Status line nhỏ gọn, được in bởi `--line` (chỉ được render thàn
 
 > Các segment, nhãn, màu sắc và ngưỡng trong dòng đó đều có thể cấu hình — xem [Cấu hình](#cấu-hình).
 
+> Các segment `5h` và `7d` được khớp với các cửa sổ giới hạn sử dụng của Codex theo độ dài cửa sổ (lần lượt 300 và 10080 phút), chứ không theo vị trí trong payload — backend có thể báo cáo bất kỳ cửa sổ nào ở bất kỳ vị trí nào, hoặc chỉ một trong hai. Segment có cửa sổ bị thiếu trong payload sẽ hiển thị `?` (ví dụ `5h:?`) thay vì mượn giá trị của cửa sổ còn lại.
+
 Bộ render status-line mặc định là `codex-hud`, một nhị phân Rust gốc nhỏ gọn (edition 2021, MIT): một tệp thực thi độc lập duy nhất, không có trình thông dịch nào trên đường render, dấu chân phụ thuộc tối thiểu (chỉ `serde_json` và `toml`), không một dòng mã `unsafe` nào, cùng một bản build release được tối ưu kích thước với dung lượng khoảng 574 KB. Để nói cho rõ, hai chữ "Rust" khác nhau xuất hiện trong README này: Codex CLI thượng nguồn bản thân nó là một chương trình Rust (mục tiêu build của bản vá thử nghiệm bên dưới), còn `codex-hud` là bộ render status-line riêng nằm trong repo này.
 
 ## Tính năng
