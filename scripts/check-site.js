@@ -544,6 +544,12 @@ const runInteractiveSmoke = () => {
   if (!elements["config-code"].textContent.includes("fastMode = false")) {
     fail.push("service_tier auto-detect must not flip the manual fastMode override in config");
   }
+  elements["service-tier"].value = "priority";
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.6-sol|xh|p|codex-hud")) {
+    fail.push("compact service tiers must use their normalized first character");
+  }
+  elements["service-tier"].value = "fast";
   elements.effort.value = "high";
   elements.effort.dispatchEvent({ type: "input" });
 

@@ -177,11 +177,11 @@ try {
       ...fixtureEnv,
       CODEX_HUD_MODEL: "gpt-5.7-env",
       CODEX_HUD_EFFORT: "xhigh",
-      CODEX_HUD_SERVICE_TIER: "flex",
+      CODEX_HUD_SERVICE_TIER: "priority",
     },
   });
   assert.strictEqual(tierIdentityLine.status, 0, tierIdentityLine.stderr);
-  assert.match(tierIdentityLine.stdout, /^5\.7-env\|xh\|fl\|codex-hud\|/);
+  assert.match(tierIdentityLine.stdout, /^5\.7-env\|xh\|p\|codex-hud\|/);
 
   const newestUsage = runJsonWithEnv(fixtureEnv).usage;
   assert.strictEqual(newestUsage.context.usedTokens, 210, "absent rollout env should use newest context");

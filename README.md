@@ -37,7 +37,7 @@ The compact status line, printed by `--line` (rendered as an in-TUI footer only 
 5.6-sol|h|f|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
 ```
 
-> The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and non-default service tier are separate atoms; `f` appears automatically when Codex resolves `service_tier = "fast"`.
+> The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and non-default service tier are separate atoms; compact mode uses the normalized tier's first character (`fast` → `f`, `priority` → `p`).
 
 > The `5h` and `7d` segments are matched to Codex's rate-limit windows by window length (300 and 10080 minutes), not by payload position — the backend can report either window in either slot, or only one of them. A segment whose window is missing from the payload renders `?` (e.g. `5h:?`) instead of borrowing the other window's value.
 
@@ -200,7 +200,7 @@ paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"
 ```
 
-Model, reasoning effort, and a non-default service tier use the normal segment separator. Compact mode maps known names such as `high` to `h` and `fast` to `f`; full mode keeps `gpt-5.6-sol|high|fast`. The `default` and `standard` tiers are omitted. Older `modelShort` and `effortShort` keys remain accepted as compatibility overrides, but new configs should use `identityShort`.
+Model, reasoning effort, and a non-default service tier use the normal segment separator. Compact mode maps known reasoning names such as `high` to `h` and shortens any normalized service tier to its first character (`fast` → `f`, `priority` → `p`); full mode keeps `gpt-5.6-sol|high|fast`. The `default` and `standard` tiers are omitted. Older `modelShort` and `effortShort` keys remain accepted as compatibility overrides, but new configs should use `identityShort`.
 
 Pace markers compare usage against even burn rate: slow is more than `thresholds.pace.crit` behind pace, fast is more than `thresholds.pace.crit` ahead, and the middle band is normal. Run `codex-hud --print-config` to see the full resolved option set.
 

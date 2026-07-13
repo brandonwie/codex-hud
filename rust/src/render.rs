@@ -223,8 +223,10 @@ fn format_service_tier(value: &str, short: bool) -> Option<String> {
     let normalized = value.trim().to_lowercase();
     match normalized.as_str() {
         "" | "default" | "standard" => None,
-        "fast" if short => Some("f".to_string()),
-        "flex" if short => Some("fl".to_string()),
+        _ if short => normalized
+            .chars()
+            .next()
+            .map(|character| character.to_string()),
         _ => Some(normalized),
     }
 }
@@ -1084,6 +1086,21 @@ mod tests {
         assert_eq!(
             render_footer(&data, &config, false),
             "gpt-5.5|xhigh|fast|codex-hud"
+        );
+    }
+
+    #[test]
+    fn format_service_tier_shortens_any_non_default_value_to_first_character() {
+        assert_eq!(format_service_tier("fast", true).as_deref(), Some("f"));
+        assert_eq!(format_service_tier("flex", true).as_deref(), Some("f"));
+        assert_eq!(format_service_tier("priority", true).as_deref(), Some("p"));
+        assert_eq!(
+            format_service_tier("FutureTier", true).as_deref(),
+            Some("f")
+        );
+        assert_eq!(
+            format_service_tier("priority", false).as_deref(),
+            Some("priority")
         );
     }
 

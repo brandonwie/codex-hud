@@ -87,7 +87,7 @@ function fakeRendererRun(version) {
     if (command.endsWith("codex-hud")) {
       if ((commandArgs || [])[0] === "--line") {
         const probeEnv = (commandOptions && commandOptions.env) || {};
-        const tier = probeEnv.CODEX_HUD_SERVICE_TIER === "flex" ? "fl|" : "";
+        const tier = probeEnv.CODEX_HUD_SERVICE_TIER === "flex" ? "f|" : "";
         const emptyRollout =
           Object.prototype.hasOwnProperty.call(probeEnv, "CODEX_HUD_ROLLOUT_PATH") &&
           probeEnv.CODEX_HUD_ROLLOUT_PATH === "";
@@ -636,7 +636,7 @@ const missingSource = path.join(rendererRoot, "source", "not-built");
 // decoy's concrete Ctx/Tkn values.
 writeExecutable(
   rendererSource,
-  '#!/usr/bin/env bash\nif [ "$1" = "--line" ]; then\n  tier=""\n  if [ "$CODEX_HUD_SERVICE_TIER" = "flex" ]; then tier="fl|"; fi\n  usage="|Ctx:90%|Tkn:999"\n  if [ "${CODEX_HUD_ROLLOUT_PATH+x}" = "x" ] && [ -z "$CODEX_HUD_ROLLOUT_PATH" ]; then usage="|Ctx:?|5h:?|7d:?|Tkn:?"; fi\n  echo "${CODEX_HUD_MODEL:-cfg-model}|${CODEX_HUD_EFFORT:-cfg}|${tier}proj${usage}"\nelse\n  echo "codex-hud 0.2.0"\nfi\n',
+  '#!/usr/bin/env bash\nif [ "$1" = "--line" ]; then\n  tier=""\n  if [ "$CODEX_HUD_SERVICE_TIER" = "flex" ]; then tier="f|"; fi\n  usage="|Ctx:90%|Tkn:999"\n  if [ "${CODEX_HUD_ROLLOUT_PATH+x}" = "x" ] && [ -z "$CODEX_HUD_ROLLOUT_PATH" ]; then usage="|Ctx:?|5h:?|7d:?|Tkn:?"; fi\n  echo "${CODEX_HUD_MODEL:-cfg-model}|${CODEX_HUD_EFFORT:-cfg}|${tier}proj${usage}"\nelse\n  echo "codex-hud 0.2.0"\nfi\n',
 );
 const rendererPrefix = path.join(rendererRoot, "bin");
 const rendererArgs = { prefix: rendererPrefix, renderer: "auto" };
@@ -1277,7 +1277,7 @@ const capDoctorRun = (staleLine) => (command, commandArgs = [], commandOptions =
         return "cfg-model|xh|proj|Ctx:31%\n"; // ignores env — pre-#29 behavior
       }
       const probeEnv = (commandOptions && commandOptions.env) || {};
-      const tier = probeEnv.CODEX_HUD_SERVICE_TIER === "flex" ? "fl|" : "";
+      const tier = probeEnv.CODEX_HUD_SERVICE_TIER === "flex" ? "f|" : "";
       const emptyRollout =
         Object.prototype.hasOwnProperty.call(probeEnv, "CODEX_HUD_ROLLOUT_PATH") &&
         probeEnv.CODEX_HUD_ROLLOUT_PATH === "";

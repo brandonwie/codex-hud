@@ -331,7 +331,7 @@ function verifyRustRenderer(binPath, options = {}) {
 }
 
 const RENDERER_CAPABILITY_PROBE_MODEL = "__codex-hud-capability-probe__";
-const RENDERER_CAPABILITY_PROBE_PREFIX = `${RENDERER_CAPABILITY_PROBE_MODEL}|max|fl|`;
+const RENDERER_CAPABILITY_PROBE_PREFIX = `${RENDERER_CAPABILITY_PROBE_MODEL}|max|f|`;
 
 // Behavioral probe: a renderer built before the per-session env contract (#29)
 // parses --help fine but silently ignores CODEX_HUD_* variables, falling back
