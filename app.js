@@ -77,8 +77,7 @@
   const formatServiceTier = (value, short) => {
     const normalized = String(value || "").trim().toLowerCase();
     if (!normalized || normalized === "default" || normalized === "standard") return null;
-    if (short && normalized === "fast") return "f";
-    if (short && normalized === "flex") return "fl";
+    if (short) return Array.from(normalized)[0];
     return normalized;
   };
 
