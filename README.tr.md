@@ -35,6 +35,8 @@ Varsayılan olarak, Codex'in yerel `[tui].status_line` özelliğine eşlik eder;
 
 > Bu satırdaki segmentler, etiketler, renkler ve eşiklerin tümü yapılandırılabilir — bkz. [Yapılandırma](#yapılandırma).
 
+> `5h` ve `7d` segmentleri, Codex'in kullanım limiti pencereleriyle payload'daki konuma göre değil, pencere uzunluğuna göre (sırasıyla 300 ve 10080 dakika) eşleştirilir — arka uç her iki pencereyi de herhangi bir konumda ya da yalnızca birini bildirebilir. Penceresi payload'da bulunmayan segment, diğer pencerenin değerini ödünç almak yerine `?` gösterir (örn. `5h:?`).
+
 Varsayılan durum satırı oluşturucusu `codex-hud`'dur: küçük, yerel (native) bir Rust ikilisidir (edition 2021, MIT) — render yolunda yorumlayıcı bulunmayan, tek parça ve kendi kendine yeten bir çalıştırılabilir dosya; minimal bir bağımlılık ayak izi (yalnızca `serde_json` ve `toml`), sıfır `unsafe` kod ve yaklaşık 574 KB civarında gelen, boyut için optimize edilmiş bir release derlemesi. Netlik için: bu README'de iki farklı "Rust" geçer — yukarı akıştaki Codex CLI'nin kendisi bir Rust programıdır (aşağıdaki deneysel yamanın derleme hedefi), `codex-hud` ise depo içindeki ayrı durum satırı oluşturucusudur.
 
 ## Özellikler

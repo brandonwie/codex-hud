@@ -35,6 +35,8 @@ A linha de status compacta, impressa por `--line` (renderizada como rodapé dent
 
 > Os segmentos, rótulos, cores e limites dessa linha são todos configuráveis — veja [Configuração](#configuração).
 
+> Os segmentos `5h` e `7d` são associados às janelas de limite de uso do Codex pela duração da janela (300 e 10080 minutos, respectivamente), não pela posição no payload — o backend pode reportar qualquer janela em qualquer posição, ou apenas uma delas. Um segmento cuja janela está ausente do payload exibe `?` (por exemplo, `5h:?`) em vez de emprestar o valor da outra janela.
+
 O renderizador padrão da linha de status é o `codex-hud`, um pequeno binário Rust nativo (edition 2021, MIT): um único executável autocontido, sem nenhum interpretador no caminho de renderização, com uma pegada de dependências mínima (apenas `serde_json` e `toml`), zero código `unsafe` e uma build de release otimizada para tamanho que fica em torno de 574 KB. Para deixar claro, dois "Rust" diferentes aparecem neste README: a Codex CLI upstream é, ela própria, um programa Rust (o alvo de compilação do patch experimental abaixo), enquanto o `codex-hud` é o renderizador da linha de status separado, contido neste repositório.
 
 ## Recursos

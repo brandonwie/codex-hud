@@ -35,6 +35,8 @@ La línea de estado compacta, impresa con `--line` (renderizada como pie de pág
 
 > Los segmentos, las etiquetas, los colores y los umbrales de esa línea son todos configurables; consulta [Configuración](#configuración).
 
+> Los segmentos `5h` y `7d` se emparejan con las ventanas de límite de uso de Codex según la duración de la ventana (300 y 10080 minutos), no según su posición en el payload — el backend puede reportar cualquiera de las ventanas en cualquier posición, o solo una de ellas. Un segmento cuya ventana falta en el payload muestra `?` (p. ej. `5h:?`) en lugar de tomar prestado el valor de la otra ventana.
+
 El renderizador predeterminado de la línea de estado es `codex-hud`, un pequeño binario nativo en Rust (edition 2021, MIT): un único ejecutable autónomo sin intérprete en la ruta de renderizado, una huella mínima de dependencias (solo `serde_json` y `toml`), cero código `unsafe` y una compilación de release optimizada en tamaño que ronda los 574 KB. Para que quede claro, en este README aparecen dos "Rust" distintos: la CLI de Codex upstream es en sí misma un programa en Rust (el objetivo de compilación del parche experimental de más abajo), mientras que `codex-hud` es el renderizador de la línea de estado independiente y propio de este repositorio.
 
 ## Características

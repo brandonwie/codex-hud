@@ -203,3 +203,313 @@
     "name": null
   }
 }
+
+### clean-git + weekly-as-primary
+{
+  "git": {
+    "available": true,
+    "branch": "trunk",
+    "dirty": 0,
+    "counts": {
+      "modified": 0,
+      "added": 0,
+      "deleted": 0,
+      "renamed": 0,
+      "untracked": 0,
+      "other": 0
+    },
+    "root": "<GIT>"
+  },
+  "config": {
+    "model": "gpt-5.5",
+    "reasoning": "xhigh"
+  },
+  "usage": {
+    "context": {
+      "usedPercent": 21,
+      "usedTokens": 210,
+      "windowTokens": 1000,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "tokens": {
+      "total": 904000,
+      "input": 533000,
+      "output": 5000,
+      "cache": 366000
+    },
+    "rateLimits": {
+      "primary": null,
+      "secondary": {
+        "usedPercent": 1,
+        "windowMinutes": 10080,
+        "resetsAt": 1781317440
+      },
+      "planType": null,
+      "limitId": null,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "sourceFile": "<HOME>/sessions/2026/06/08/rollout-2026-06-08T00-00-00-test.jsonl"
+  },
+  "project": {
+    "name": null
+  }
+}
+
+### clean-git + swapped-windows
+{
+  "git": {
+    "available": true,
+    "branch": "trunk",
+    "dirty": 0,
+    "counts": {
+      "modified": 0,
+      "added": 0,
+      "deleted": 0,
+      "renamed": 0,
+      "untracked": 0,
+      "other": 0
+    },
+    "root": "<GIT>"
+  },
+  "config": {
+    "model": "gpt-5.5",
+    "reasoning": "xhigh"
+  },
+  "usage": {
+    "context": {
+      "usedPercent": 21,
+      "usedTokens": 210,
+      "windowTokens": 1000,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "tokens": {
+      "total": 904000,
+      "input": 533000,
+      "output": 5000,
+      "cache": 366000
+    },
+    "rateLimits": {
+      "primary": {
+        "usedPercent": 3,
+        "windowMinutes": 300,
+        "resetsAt": 1780876800
+      },
+      "secondary": {
+        "usedPercent": 9,
+        "windowMinutes": 10080,
+        "resetsAt": 1781317440
+      },
+      "planType": null,
+      "limitId": null,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "sourceFile": "<HOME>/sessions/2026/06/08/rollout-2026-06-08T00-00-00-test.jsonl"
+  },
+  "project": {
+    "name": null
+  }
+}
+
+### clean-git + missing-duration
+{
+  "git": {
+    "available": true,
+    "branch": "trunk",
+    "dirty": 0,
+    "counts": {
+      "modified": 0,
+      "added": 0,
+      "deleted": 0,
+      "renamed": 0,
+      "untracked": 0,
+      "other": 0
+    },
+    "root": "<GIT>"
+  },
+  "config": {
+    "model": "gpt-5.5",
+    "reasoning": "xhigh"
+  },
+  "usage": {
+    "context": {
+      "usedPercent": 21,
+      "usedTokens": 210,
+      "windowTokens": 1000,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "tokens": {
+      "total": 904000,
+      "input": 533000,
+      "output": 5000,
+      "cache": 366000
+    },
+    "rateLimits": {
+      "primary": {
+        "usedPercent": 5,
+        "windowMinutes": null,
+        "resetsAt": 1780876800
+      },
+      "secondary": {
+        "usedPercent": 16,
+        "windowMinutes": 10080,
+        "resetsAt": 1781317440
+      },
+      "planType": null,
+      "limitId": null,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "sourceFile": "<HOME>/sessions/2026/06/08/rollout-2026-06-08T00-00-00-test.jsonl"
+  },
+  "project": {
+    "name": null
+  }
+}
+
+### clean-git + unexpected-duration
+{
+  "git": {
+    "available": true,
+    "branch": "trunk",
+    "dirty": 0,
+    "counts": {
+      "modified": 0,
+      "added": 0,
+      "deleted": 0,
+      "renamed": 0,
+      "untracked": 0,
+      "other": 0
+    },
+    "root": "<GIT>"
+  },
+  "config": {
+    "model": "gpt-5.5",
+    "reasoning": "xhigh"
+  },
+  "usage": {
+    "context": {
+      "usedPercent": 21,
+      "usedTokens": 210,
+      "windowTokens": 1000,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "tokens": {
+      "total": 904000,
+      "input": 533000,
+      "output": 5000,
+      "cache": 366000
+    },
+    "rateLimits": {
+      "primary": null,
+      "secondary": {
+        "usedPercent": 16,
+        "windowMinutes": 10080,
+        "resetsAt": 1781317440
+      },
+      "planType": null,
+      "limitId": null,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "sourceFile": "<HOME>/sessions/2026/06/08/rollout-2026-06-08T00-00-00-test.jsonl"
+  },
+  "project": {
+    "name": null
+  }
+}
+
+### clean-git + both-unexpected
+{
+  "git": {
+    "available": true,
+    "branch": "trunk",
+    "dirty": 0,
+    "counts": {
+      "modified": 0,
+      "added": 0,
+      "deleted": 0,
+      "renamed": 0,
+      "untracked": 0,
+      "other": 0
+    },
+    "root": "<GIT>"
+  },
+  "config": {
+    "model": "gpt-5.5",
+    "reasoning": "xhigh"
+  },
+  "usage": {
+    "context": {
+      "usedPercent": 21,
+      "usedTokens": 210,
+      "windowTokens": 1000,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "tokens": {
+      "total": 904000,
+      "input": 533000,
+      "output": 5000,
+      "cache": 366000
+    },
+    "rateLimits": {
+      "primary": null,
+      "secondary": null,
+      "planType": null,
+      "limitId": null,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "sourceFile": "<HOME>/sessions/2026/06/08/rollout-2026-06-08T00-00-00-test.jsonl"
+  },
+  "project": {
+    "name": null
+  }
+}
+
+### clean-git + duplicate-weekly
+{
+  "git": {
+    "available": true,
+    "branch": "trunk",
+    "dirty": 0,
+    "counts": {
+      "modified": 0,
+      "added": 0,
+      "deleted": 0,
+      "renamed": 0,
+      "untracked": 0,
+      "other": 0
+    },
+    "root": "<GIT>"
+  },
+  "config": {
+    "model": "gpt-5.5",
+    "reasoning": "xhigh"
+  },
+  "usage": {
+    "context": {
+      "usedPercent": 21,
+      "usedTokens": 210,
+      "windowTokens": 1000,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "tokens": {
+      "total": 904000,
+      "input": 533000,
+      "output": 5000,
+      "cache": 366000
+    },
+    "rateLimits": {
+      "primary": null,
+      "secondary": {
+        "usedPercent": 11,
+        "windowMinutes": 10080,
+        "resetsAt": 1781317440
+      },
+      "planType": null,
+      "limitId": null,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
+    "sourceFile": "<HOME>/sessions/2026/06/08/rollout-2026-06-08T00-00-00-test.jsonl"
+  },
+  "project": {
+    "name": null
+  }
+}
