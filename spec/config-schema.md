@@ -56,9 +56,12 @@ Aliases expanded before validation: `workspace` → `project,branch,runtime`;
 `runtime` (`node vX`) is available but **off by default** — add it to opt in.
 
 `5h` and `7d` are filled from Codex's rate-limit windows matched by window
-length (300 and 10080 minutes respectively), not by payload position. When the
-payload omits a window (or reports an unrecognized length), that segment
-renders `?` instead of showing the other window's value.
+length (300 and 10080 minutes respectively) rather than by payload position;
+a window that carries no length at all falls back to its own original payload
+position, and only when that slot is still empty. When the payload omits a
+window, that segment renders `?` instead of showing the other window's value.
+A window with an unrecognized length is dropped entirely (it fills no slot),
+so its segment also renders `?`.
 
 ### Separators
 

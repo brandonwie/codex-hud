@@ -181,6 +181,12 @@ Object.assign(ROLLOUTS, {
     primary: { used_percent: 4, window_minutes: 1440, resets_at: NOW_SEC },
     secondary: { used_percent: 16, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
   }),
+  // Both durations unrecognized: newest sample still wins with both slots
+  // null (renders 5h:?|7d:?) instead of falling back to an older line.
+  bothUnexpected: ratesRollout({
+    primary: { used_percent: 4, window_minutes: 1440, resets_at: NOW_SEC },
+    secondary: { used_percent: 6, window_minutes: 2880, resets_at: NOW_SEC },
+  }),
   // Two weekly windows: first claim (payload order) wins, duplicate dropped.
   duplicateWeekly: ratesRollout({
     primary: { used_percent: 11, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
@@ -255,6 +261,7 @@ const CASES = [
   { name: "clean-git + swapped-windows", git: "clean", rollout: "swappedWindows" },
   { name: "clean-git + missing-duration", git: "clean", rollout: "missingDuration" },
   { name: "clean-git + unexpected-duration", git: "clean", rollout: "unexpectedDuration" },
+  { name: "clean-git + both-unexpected", git: "clean", rollout: "bothUnexpected" },
   { name: "clean-git + duplicate-weekly", git: "clean", rollout: "duplicateWeekly" },
 ];
 

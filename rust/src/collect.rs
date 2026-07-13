@@ -484,10 +484,10 @@ fn latest_usage_from_files(
                     // Slots are duration-classified (short=5h, weekly=7d) and
                     // re-exposed under the legacy primary/secondary keys so the
                     // renderer stays untouched. See classify_rate_windows().
+                    // The newest sample wins even when both windows are
+                    // unrecognized (both slots null -> renders 5h:?|7d:?):
+                    // falling through to an older line would show stale usage.
                     let (primary, secondary) = classify_rate_windows(primary, secondary);
-                    if primary.is_null() && secondary.is_null() {
-                        continue;
-                    }
                     let or_null = |v: Option<&Value>| match v {
                         Some(value) if compat::truthy(Some(value)) => value.clone(),
                         _ => Value::Null,
@@ -965,8 +965,7 @@ mod tests {
     #[test]
     fn classify_keeps_legacy_positional_shape() {
         // Old payload: primary=300 (5h), secondary=10080 (7d) — unchanged.
-        let (short, weekly) =
-            classify_rate_windows(window(17, Some(300)), window(16, Some(10080)));
+        let (short, weekly) = classify_rate_windows(window(17, Some(300)), window(16, Some(10080)));
         assert_eq!(short["windowMinutes"], json!(300));
         assert_eq!(weekly["windowMinutes"], json!(10080));
     }
@@ -982,8 +981,7 @@ mod tests {
 
     #[test]
     fn classify_handles_swapped_positions() {
-        let (short, weekly) =
-            classify_rate_windows(window(9, Some(10080)), window(3, Some(300)));
+        let (short, weekly) = classify_rate_windows(window(9, Some(10080)), window(3, Some(300)));
         assert_eq!(short["usedPercent"], json!(3));
         assert_eq!(weekly["usedPercent"], json!(9));
     }
@@ -1009,9 +1007,11 @@ mod tests {
 
     #[test]
     fn classify_ignores_unexpected_duration() {
-        let (short, weekly) =
-            classify_rate_windows(window(4, Some(1440)), window(16, Some(10080)));
-        assert!(short.is_null(), "unexpected 1440-minute window stays unclassified");
+        let (short, weekly) = classify_rate_windows(window(4, Some(1440)), window(16, Some(10080)));
+        assert!(
+            short.is_null(),
+            "unexpected 1440-minute window stays unclassified"
+        );
         assert_eq!(weekly["usedPercent"], json!(16));
     }
 
@@ -1020,7 +1020,10 @@ mod tests {
         // Two weekly windows: first claim (payload order) wins, second dropped.
         let (short, weekly) =
             classify_rate_windows(window(11, Some(10080)), window(22, Some(10080)));
-        assert!(short.is_null(), "duplicate must not overflow into short slot");
+        assert!(
+            short.is_null(),
+            "duplicate must not overflow into short slot"
+        );
         assert_eq!(weekly["usedPercent"], json!(11));
     }
 }
