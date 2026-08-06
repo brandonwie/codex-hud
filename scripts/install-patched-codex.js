@@ -1043,8 +1043,33 @@ function downloadFile(url, destination, options = {}) {
   return !result.error && result.status === 0 && fs.existsSync(destination) && fs.statSync(destination).size > 0;
 }
 
+function validateRuntimeArchiveEntries(listing, verboseListing, baseName) {
+  const entries = String(listing).split(/\r?\n/).filter(Boolean);
+  const verboseEntries = String(verboseListing).split(/\r?\n/).filter(Boolean);
+  if (!entries.length || entries.length !== verboseEntries.length) {
+    throw new Error("Prebuilt runtime archive has an invalid file listing");
+  }
+
+  const prefix = `${baseName}/`;
+  for (const entry of entries) {
+    const parts = entry.split("/");
+    if ((entry !== baseName && entry !== prefix && !entry.startsWith(prefix)) || parts.includes("..")) {
+      throw new Error(`Prebuilt runtime archive contains an unsafe path: ${entry}`);
+    }
+  }
+  for (const entry of verboseEntries) {
+    const type = entry.trimStart()[0];
+    if (type !== "-" && type !== "d") {
+      throw new Error("Prebuilt runtime archive contains a link or unsupported entry type");
+    }
+  }
+}
+
 function extractRuntimeArchive(archivePath, destination, options = {}) {
   const runCommand = options.runCommand || run;
+  const listing = runCommand("tar", ["-tzf", archivePath]);
+  const verboseListing = runCommand("tar", ["-tvzf", archivePath]);
+  validateRuntimeArchiveEntries(listing, verboseListing, options.baseName);
   runCommand("tar", ["-xzf", archivePath, "-C", destination]);
 }
 
@@ -1174,7 +1199,7 @@ function installPrebuiltBinary(args, options = {}) {
       throw new Error(`Prebuilt runtime checksum mismatch for ${asset.archiveName}`);
     }
 
-    extractArchive(archivePath, tempDir);
+    extractArchive(archivePath, tempDir, { baseName: asset.baseName });
     const bundleDir = path.join(tempDir, asset.baseName);
     for (const required of [builtBinaryName(), "LICENSE", "NOTICE"]) {
       if (!fs.existsSync(path.join(bundleDir, required))) {
@@ -2666,5 +2691,6 @@ module.exports = {
   verifyPatchedSource,
   verifyRustRenderer,
   verifyRendererSessionCapability,
+  validateRuntimeArchiveEntries,
   checkRendererSessionCapability,
 };

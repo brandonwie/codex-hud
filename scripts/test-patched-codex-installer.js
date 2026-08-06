@@ -45,6 +45,7 @@ const {
   statusLineCommandFor,
   syncPatchedRuntime,
   uninstallDefaultShim,
+  validateRuntimeArchiveEntries,
   verifyInstalledBinary,
   verifyPatchedSource,
   verifyRustRenderer,
@@ -997,6 +998,27 @@ assert.strictEqual(
   prebuiltAsset.archiveName,
   `codex-hud-codex-v${prebuiltVersion}-x86_64-apple-darwin.tar.gz`,
 );
+assert.doesNotThrow(() => validateRuntimeArchiveEntries(
+  `${prebuiltAsset.baseName}/\n${prebuiltAsset.baseName}/codex\n${prebuiltAsset.baseName}/LICENSE\n${prebuiltAsset.baseName}/NOTICE\n`,
+  `drwxr-xr-x  0 user group 0 Jan 1 00:00 ${prebuiltAsset.baseName}/\n-rwxr-xr-x  0 user group 1 Jan 1 00:00 ${prebuiltAsset.baseName}/codex\n-rw-r--r--  0 user group 1 Jan 1 00:00 ${prebuiltAsset.baseName}/LICENSE\n-rw-r--r--  0 user group 1 Jan 1 00:00 ${prebuiltAsset.baseName}/NOTICE\n`,
+  prebuiltAsset.baseName,
+));
+assert.throws(
+  () => validateRuntimeArchiveEntries(
+    `${prebuiltAsset.baseName}/../escape\n`,
+    `-rw-r--r--  0 user group 1 Jan 1 00:00 ${prebuiltAsset.baseName}/../escape\n`,
+    prebuiltAsset.baseName,
+  ),
+  /unsafe path/,
+);
+assert.throws(
+  () => validateRuntimeArchiveEntries(
+    `${prebuiltAsset.baseName}/codex\n`,
+    `lrwxr-xr-x  0 user group 0 Jan 1 00:00 ${prebuiltAsset.baseName}/codex -> ..\/escape\n`,
+    prebuiltAsset.baseName,
+  ),
+  /link or unsupported/,
+);
 const fakeArchive = Buffer.from("codex-hud prebuilt archive fixture");
 const fakeArchiveHash = crypto.createHash("sha256").update(fakeArchive).digest("hex");
 const downloadedUrls = [];
@@ -1012,7 +1034,8 @@ const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
     }
     return true;
   },
-  extractRuntimeArchive(_archivePath, destination) {
+  extractRuntimeArchive(_archivePath, destination, options) {
+    assert.strictEqual(options.baseName, prebuiltAsset.baseName);
     const bundle = path.join(destination, prebuiltAsset.baseName);
     writeExecutable(path.join(bundle, "codex"), fakeCodexScript(prebuiltVersion));
     writeFile(bundle, "LICENSE", "Apache License 2.0\n");
