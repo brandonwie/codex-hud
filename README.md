@@ -208,6 +208,13 @@ Pace markers compare usage against even burn rate: slow is more than `thresholds
 
 The supported launcher flow targets macOS and Linux shells. WSL can work when paths resolve through the Linux filesystem, but native Windows shells are not supported because the managed launchers are Bash scripts.
 
+| Capability | Intel macOS (`x86_64`) | Apple Silicon macOS (`arm64`) | Linux |
+| ---------- | ----------------------- | ----------------------------- | ----- |
+| Rust renderer and stock-delegating launcher | Supported | Supported | Supported |
+| Experimental patched TUI footer | Downloads a checksummed prebuilt runtime for the exact Codex version when published; otherwise fails fast with an explicit `--source-build` fallback | Source-build fallback | Source-build fallback |
+
+Intel macOS does not silently start a long local Codex build. `npm run patch:codex -- --make-default` downloads and verifies the matching `x86_64-apple-darwin` runtime when available. If that exact Codex release has no Intel asset, the installer exits with the expected asset name and leaves the existing `codex` command untouched; local compilation happens only when you explicitly add `--source-build`.
+
 ## HUD Launcher (Stock Delegation — Default)
 
 `npm run install:launcher` writes `~/.local/bin/codex-hud-tui`, a small launcher that finds your real (stock) Codex install and executes it with `exec -a codex`, so terminal integrations such as Herdr still recognize the pane as a Codex session. The stock binary's path is baked in at install time, with a runtime fallback that re-discovers Codex on `PATH` (skipping all HUD-managed entries, so the launcher can never recurse into itself).
@@ -255,6 +262,7 @@ Start with `npm run doctor`; it prints the active shim, launcher, stock Codex, r
 | ------- | ------------- | --- |
 | `codex` does not start after enabling the shim | `codex shim` missing, unmanaged, or points somewhere unexpected | Run `npm run install:launcher -- --make-default`, then `rehash`. If a non-managed shim exists, inspect it before using `--force-shim`. |
 | Exit 127 or "no stock codex found" | `stock codex: not found` or launcher metadata has no usable stock path | Install or repair the stock Codex CLI, then rerun `npm run install:launcher` so the launcher records the real path. |
+| Intel macOS unexpectedly starts compiling Codex | An older installer is running Cargo instead of looking for an `x86_64-apple-darwin` runtime | Update codex-hud and rerun `npm run patch:codex`. The current installer downloads the exact-version runtime or fails fast; use `--source-build` only when you intentionally want a local build. |
 | Patched footer disappeared after a Codex update | `patched command` exists but doctor reports stale versions | Run `npm run codex:sync`, or switch back to stock delegation with `npm run install:launcher`. |
 | Config changes are ignored | `codex-hud --config-path` does not list the file you edited, or `--print-config` shows defaults | Move the config to `$CODEX_HOME/codex-hud.toml`, `./.codex/codex-hud.toml`, or set `$CODEX_HUD_CONFIG` to the exact file. |
 | Rust renderer is not used | `renderer` reports a missing binary or failed health check | Run `npm run build:rust`, then reinstall the launcher or rerun the patched flow that should use the Rust renderer. |
