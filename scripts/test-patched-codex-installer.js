@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -13,6 +14,10 @@ const {
   ensureAnsiStatusLineParser,
   findStockCodexPath,
   checkPatchedRuntime,
+  checksumForAsset,
+  codexBuildEnv,
+  installPrebuiltBinary,
+  downloadFile,
   installBuiltBinary,
   installDefaultShim,
   installLauncher,
@@ -32,13 +37,17 @@ const {
   formatBytes,
   renderLauncherScript,
   rendererBinaryName,
+  runtimeReleaseAsset,
+  runtimeTarget,
   resolveRenderer,
   refreshPatchedLauncher,
   reviewLegacyBinEntry,
   sourceHasPatch,
+  sourceBuildFallbackAllowed,
   statusLineCommandFor,
   syncPatchedRuntime,
   uninstallDefaultShim,
+  validateRuntimeArchiveEntries,
   verifyInstalledBinary,
   verifyPatchedSource,
   verifyRustRenderer,
@@ -428,12 +437,18 @@ assert.strictEqual(parseArgs(["--doctor"]).doctor, true);
 assert.strictEqual(parseArgs(["--check-patched"]).checkPatched, true);
 assert.strictEqual(parseArgs(["--sync-patched"]).syncPatched, true);
 assert.strictEqual(parseArgs(["--keep-versions", "3"]).keepVersions, 3);
+assert.strictEqual(parseArgs(["--source-build"]).sourceBuild, true);
+assert.strictEqual(
+  parseArgs(["--runtime-release-repo", "example/codex-hud"]).runtimeReleaseRepo,
+  "example/codex-hud",
+);
 assert.strictEqual(parseArgs(["--version", "0.139.0-beta.1+build.2"]).version, "0.139.0-beta.1+build.2");
 assert.throws(() => parseArgs(["--mode", "yolo"]), /--mode must be stock or patched/);
 assert.throws(() => parseArgs(["--keep-versions", "0"]), /--keep-versions/);
 assert.throws(() => parseArgs(["--bin-name", "../codex"]), /--bin-name must contain only/);
 assert.throws(() => parseArgs(["--launcher-name", "codex*"]), /--launcher-name must contain only/);
 assert.throws(() => parseArgs(["--version", "../../0.139.0"]), /--version must be a semver-like/);
+assert.throws(() => parseArgs(["--runtime-release-repo", "not-a-repo"]), /must be owner\/repo/);
 assert.strictEqual(parsed.renderer, "auto", "default renderer must be auto");
 assert.strictEqual(parseArgs(["--renderer", "rust"]).renderer, "rust");
 assert.throws(() => parseArgs(["--renderer", "js"]), /--renderer must be auto or rust/);
@@ -951,6 +966,159 @@ assert.strictEqual(
   "'/x/bin/codex-hud' --line --color",
 );
 assert.throws(() => statusLineCommandFor({ kind: "js" }), /unsupported renderer kind/);
+
+// --- prebuilt patched runtime: target mapping, checksum, license bundle, activation ---
+assert.strictEqual(runtimeTarget("darwin", "x64"), "x86_64-apple-darwin");
+assert.strictEqual(runtimeTarget("darwin", "arm64"), "aarch64-apple-darwin");
+assert.strictEqual(runtimeTarget("linux", "x64"), "x86_64-unknown-linux-gnu");
+assert.strictEqual(runtimeTarget("win32", "x64"), "x86_64-pc-windows-msvc");
+assert.strictEqual(runtimeTarget("freebsd", "x64"), null);
+assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: false }, { platform: "darwin", arch: "x64" }), false);
+assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: true }, { platform: "darwin", arch: "x64" }), true);
+assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: false }, { platform: "darwin", arch: "arm64" }), true);
+const intelBuildEnv = codexBuildEnv({}, { platform: "darwin", arch: "x64" });
+assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_LTO, "false");
+assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_CODEGEN_UNITS, "16");
+assert.strictEqual(
+  codexBuildEnv({ CARGO_PROFILE_RELEASE_LTO: "thin" }, { platform: "darwin", arch: "x64" }).CARGO_PROFILE_RELEASE_LTO,
+  "thin",
+  "an explicit Cargo profile override must win",
+);
+
+const prebuiltVersion = "0.146.1";
+const prebuiltRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prebuilt-test-"));
+const prebuiltArgs = {
+  prefix: path.join(prebuiltRoot, "bin"),
+  binName: "codex-hud-codex",
+  version: prebuiltVersion,
+  runtimeReleaseRepo: "brandonwie/codex-hud",
+  sourceBuild: false,
+};
+const prebuiltAsset = runtimeReleaseAsset(prebuiltArgs, { platform: "darwin", arch: "x64" });
+assert.strictEqual(prebuiltAsset.tag, `codex-runtime-v${prebuiltVersion}`);
+assert.strictEqual(
+  prebuiltAsset.archiveName,
+  `codex-hud-codex-v${prebuiltVersion}-x86_64-apple-darwin.tar.gz`,
+);
+assert.doesNotThrow(() => validateRuntimeArchiveEntries(
+  `${prebuiltAsset.baseName}/\n${prebuiltAsset.baseName}/codex\n${prebuiltAsset.baseName}/LICENSE\n${prebuiltAsset.baseName}/NOTICE\n`,
+  `drwxr-xr-x  0 user group 0 Jan 1 00:00 ${prebuiltAsset.baseName}/\n-rwxr-xr-x  0 user group 1 Jan 1 00:00 ${prebuiltAsset.baseName}/codex\n-rw-r--r--  0 user group 1 Jan 1 00:00 ${prebuiltAsset.baseName}/LICENSE\n-rw-r--r--  0 user group 1 Jan 1 00:00 ${prebuiltAsset.baseName}/NOTICE\n`,
+  prebuiltAsset.baseName,
+));
+assert.throws(
+  () => validateRuntimeArchiveEntries(
+    `${prebuiltAsset.baseName}/../escape\n`,
+    `-rw-r--r--  0 user group 1 Jan 1 00:00 ${prebuiltAsset.baseName}/../escape\n`,
+    prebuiltAsset.baseName,
+  ),
+  /unsafe path/,
+);
+assert.throws(
+  () => validateRuntimeArchiveEntries(
+    `${prebuiltAsset.baseName}/codex\n`,
+    `lrwxr-xr-x  0 user group 0 Jan 1 00:00 ${prebuiltAsset.baseName}/codex -> ..\/escape\n`,
+    prebuiltAsset.baseName,
+  ),
+  /link or unsupported/,
+);
+const fakeArchive = Buffer.from("codex-hud prebuilt archive fixture");
+const fakeArchiveHash = crypto.createHash("sha256").update(fakeArchive).digest("hex");
+assert.strictEqual(
+  checksumForAsset(
+    `# generated checksums\n${"1".repeat(64)}  unrelated.tar.gz\n${fakeArchiveHash}  ${prebuiltAsset.archiveName}\n`,
+    prebuiltAsset.archiveName,
+  ),
+  fakeArchiveHash,
+);
+assert.throws(
+  () => checksumForAsset(`${fakeArchiveHash}  unrelated.tar.gz\n`, prebuiltAsset.archiveName),
+  /must appear exactly once/,
+);
+assert.throws(
+  () => checksumForAsset(
+    `${fakeArchiveHash}  ${prebuiltAsset.archiveName}\n${fakeArchiveHash}  ${prebuiltAsset.archiveName}\n`,
+    prebuiltAsset.archiveName,
+  ),
+  /must appear exactly once/,
+);
+let downloadWarning = "";
+assert.strictEqual(
+  downloadFile("https://example.invalid/runtime", path.join(prebuiltRoot, "missing"), {
+    spawnSync: () => ({ status: 22, stderr: "HTTP 404" }),
+    warn: (message) => { downloadWarning = message; },
+  }),
+  false,
+);
+assert.match(downloadWarning, /exit 22/);
+assert.match(downloadWarning, /HTTP 404/);
+const downloadedUrls = [];
+const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
+  platform: "darwin",
+  arch: "x64",
+  downloadFile(url, destination) {
+    downloadedUrls.push(url);
+    if (url.endsWith(".sha256")) {
+      fs.writeFileSync(destination, `${fakeArchiveHash}  ${prebuiltAsset.archiveName}\n`);
+    } else {
+      fs.writeFileSync(destination, fakeArchive);
+    }
+    return true;
+  },
+  extractRuntimeArchive(_archivePath, destination, options) {
+    assert.strictEqual(options.baseName, prebuiltAsset.baseName);
+    const bundle = path.join(destination, prebuiltAsset.baseName);
+    writeExecutable(path.join(bundle, "codex"), fakeCodexScript(prebuiltVersion));
+    writeFile(bundle, "LICENSE", "Apache License 2.0\n");
+    writeFile(bundle, "NOTICE", "OpenAI Codex\n");
+  },
+});
+assert.strictEqual(prebuiltInstalled.version, prebuiltVersion);
+assert.strictEqual(prebuiltInstalled.source, "prebuilt");
+assert.strictEqual(prebuiltInstalled.assetName, prebuiltAsset.archiveName);
+assert.strictEqual(downloadedUrls.length, 2);
+assert.strictEqual(
+  fs.realpathSync(prebuiltInstalled.target),
+  fs.realpathSync(prebuiltInstalled.target.replace(/codex-hud-codex$/, `codex-hud-codex.d/${prebuiltVersion}/codex`)),
+);
+
+const unavailableArgs = { ...prebuiltArgs, prefix: path.join(prebuiltRoot, "unavailable") };
+assert.strictEqual(
+  installPrebuiltBinary(unavailableArgs, {
+    platform: "darwin",
+    arch: "x64",
+    downloadFile: () => false,
+  }),
+  null,
+  "missing release assets must fall back to the source build",
+);
+let sourceOnlyDownloadAttempted = false;
+assert.strictEqual(
+  installPrebuiltBinary({ ...unavailableArgs, sourceBuild: true }, {
+    downloadFile() {
+      sourceOnlyDownloadAttempted = true;
+      return false;
+    },
+  }),
+  null,
+);
+assert.strictEqual(sourceOnlyDownloadAttempted, false, "--source-build must skip release downloads");
+
+const mismatchArgs = { ...prebuiltArgs, prefix: path.join(prebuiltRoot, "mismatch") };
+assert.throws(
+  () => installPrebuiltBinary(mismatchArgs, {
+    platform: "darwin",
+    arch: "x64",
+    downloadFile(url, destination) {
+      fs.writeFileSync(
+        destination,
+        url.endsWith(".sha256") ? `${"0".repeat(64)}  ${prebuiltAsset.archiveName}\n` : fakeArchive,
+      );
+      return true;
+    },
+  }),
+  /checksum mismatch/,
+  "a published asset with a bad checksum must fail closed instead of compiling silently",
+);
 
 // --- launcher renderer marker round-trips; stock stays free of status_line_command ---
 const rustStatusLineCommand = statusLineCommandFor({ kind: "rust", path: path.join(rendererPrefix, "codex-hud") });

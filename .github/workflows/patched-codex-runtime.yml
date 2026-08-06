@@ -1,0 +1,93 @@
+name: Patched Codex Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      codex_version:
+        description: OpenAI Codex version to patch (without rust-v prefix)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patched-codex-runtime-${{ inputs.codex_version }}-x86_64-apple-darwin
+  cancel-in-progress: false
+
+jobs:
+  build-intel-macos:
+    name: Build Intel macOS runtime
+    runs-on: macos-15-intel
+    timeout-minutes: 90
+    env:
+      CODEX_VERSION: ${{ inputs.codex_version }}
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+    steps:
+      - name: Checkout
+        # Pinned from refs/tags/v6 on 2026-06-11.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        # Pinned from refs/tags/v4 on 2026-06-11.
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Setup Rust
+        # Pinned from refs/heads/stable on 2026-06-10.
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+        with:
+          toolchain: stable
+
+      - name: Validate input
+        run: |
+          node -e 'if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(process.env.CODEX_VERSION)) process.exit(1)'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer
+        run: npm run build:rust
+
+      - name: Build patched Codex
+        run: |
+          node scripts/install-patched-codex.js \
+            --mode patched \
+            --source-build \
+            --version "$CODEX_VERSION" \
+            --prefix "$RUNNER_TEMP/prefix" \
+            --cache-dir "$RUNNER_TEMP/cache" \
+            --retain-build
+
+      - name: Package runtime and licenses
+        run: |
+          target="x86_64-apple-darwin"
+          base="codex-hud-codex-v${CODEX_VERSION}-${target}"
+          bundle="$RUNNER_TEMP/$base"
+          source="$RUNNER_TEMP/cache/openai-codex-rust-v${CODEX_VERSION}"
+          mkdir -p "$bundle" dist
+          cp "$RUNNER_TEMP/prefix/codex-hud-codex.d/$CODEX_VERSION/codex" "$bundle/codex"
+          cp "$source/LICENSE" "$bundle/LICENSE"
+          cp "$source/NOTICE" "$bundle/NOTICE"
+          codesign --force --sign - "$bundle/codex"
+          "$bundle/codex" --version
+          tar -czf "dist/$base.tar.gz" -C "$RUNNER_TEMP" "$base"
+          cd dist
+          shasum -a 256 "$base.tar.gz" > "$base.tar.gz.sha256"
+
+      - name: Publish runtime release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="codex-runtime-v${CODEX_VERSION}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" \
+              --title "Patched Codex runtime ${CODEX_VERSION}" \
+              --notes "Checksummed codex-hud patched runtime for OpenAI Codex ${CODEX_VERSION}. The archive includes the upstream Apache-2.0 LICENSE and NOTICE files."
+          fi
+          gh release upload "$tag" dist/*
