@@ -1035,12 +1035,33 @@ function runtimeReleaseAsset(args, options = {}) {
 
 function downloadFile(url, destination, options = {}) {
   const spawn = options.spawnSync || spawnSync;
+  const warn = options.warn || console.warn;
   const result = spawn(
     "curl",
     ["-fsSL", "--retry", "2", "--connect-timeout", "10", "--max-time", "120", url, "-o", destination],
     { encoding: "utf8", stdio: "pipe" },
   );
-  return !result.error && result.status === 0 && fs.existsSync(destination) && fs.statSync(destination).size > 0;
+  const downloaded = !result.error && result.status === 0 && fs.existsSync(destination) && fs.statSync(destination).size > 0;
+  if (!downloaded && options.quiet !== true) {
+    const exit = result.error ? result.error.code || result.error.message : `exit ${result.status}`;
+    const detail = String(result.stderr || "").trim().slice(0, 500);
+    warn(`Runtime download failed (${exit}): ${url}${detail ? `\n${detail}` : ""}`);
+  }
+  return downloaded;
+}
+
+function checksumForAsset(contents, assetName) {
+  const matches = String(contents)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"))
+    .map((line) => line.match(/^([a-fA-F0-9]{64})\s+\*?(.+)$/))
+    .filter((match) => match && match[2].trim() === assetName)
+    .map((match) => match[1].toLowerCase());
+  if (matches.length !== 1) {
+    throw new Error(`SHA-256 entry for ${assetName} must appear exactly once`);
+  }
+  return matches[0];
 }
 
 function validateRuntimeArchiveEntries(listing, verboseListing, baseName) {
@@ -1190,10 +1211,7 @@ function installPrebuiltBinary(args, options = {}) {
       return null;
     }
 
-    const expected = fs.readFileSync(checksumPath, "utf8").trim().split(/\s+/)[0].toLowerCase();
-    if (!/^[a-f0-9]{64}$/.test(expected)) {
-      throw new Error(`Invalid SHA-256 file for prebuilt runtime: ${asset.checksumName}`);
-    }
+    const expected = checksumForAsset(fs.readFileSync(checksumPath, "utf8"), asset.archiveName);
     const actual = sha256File(archivePath);
     if (actual !== expected) {
       throw new Error(`Prebuilt runtime checksum mismatch for ${asset.archiveName}`);
@@ -2646,6 +2664,7 @@ if (require.main === module) {
 module.exports = {
   activateStagedBinary,
   codexBuildEnv,
+  checksumForAsset,
   detectCodexVersion,
   detectLegacyLayout,
   detectStockCodex,
@@ -2653,6 +2672,7 @@ module.exports = {
   ensureAnsiStatusLineParser,
   findStockCodexPath,
   installBinary,
+  downloadFile,
   installPrebuiltBinary,
   installBuiltBinary,
   installDefaultShim,
