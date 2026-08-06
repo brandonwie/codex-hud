@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
 const fs = require("fs");
+const crypto = require("crypto");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
 const OPENAI_CODEX_REPO = "https://github.com/openai/codex.git";
+const DEFAULT_RUNTIME_RELEASE_REPO = "brandonwie/codex-hud";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
 const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
 const RUST_RENDERER_BIN_NAME = "codex-hud";
@@ -34,7 +36,7 @@ Install the Codex HUD launcher.
 
 Default mode (stock) writes a launcher that delegates to your real Codex
 install, so Codex updates are picked up automatically. Patched mode
-(experimental) builds a patched OpenAI Codex binary with
+(experimental) downloads or builds a patched OpenAI Codex binary with
 [tui].status_line_command support.
 
 Options:
@@ -48,6 +50,9 @@ Options:
   --bin-name <name>         Installed command name. Defaults to ${DEFAULT_BIN_NAME}.
   --launcher-name <name>    Launcher command name. Defaults to ${DEFAULT_LAUNCHER_NAME}.
   --repo <url>              Upstream source repo. Defaults to ${OPENAI_CODEX_REPO}.
+  --runtime-release-repo <owner/repo>
+                            Prebuilt runtime releases. Defaults to ${DEFAULT_RUNTIME_RELEASE_REPO}.
+  --source-build            Skip prebuilt runtime download and build Codex locally.
   --cache-dir <dir>         Source cache directory. Defaults to ~/.cache/codex-hud.
   --keep-versions <n>       Patched payload versions to retain. Defaults to 2.
   --retain-build, --keep-build
@@ -202,9 +207,16 @@ function validateCodexVersion(value, optionName) {
   }
 }
 
+function validateRuntimeReleaseRepo(value) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) {
+    throw new Error(`--runtime-release-repo must be owner/repo, got: ${value}`);
+  }
+}
+
 function parseArgs(argv) {
   const args = {
     repo: OPENAI_CODEX_REPO,
+    runtimeReleaseRepo: process.env.CODEX_HUD_RUNTIME_RELEASE_REPO || DEFAULT_RUNTIME_RELEASE_REPO,
     prefix: path.join(os.homedir(), ".local", "bin"),
     binName: DEFAULT_BIN_NAME,
     launcherName: DEFAULT_LAUNCHER_NAME,
@@ -213,6 +225,7 @@ function parseArgs(argv) {
     renderer: "auto",
     keepVersions: 2,
     retainBuild: false,
+    sourceBuild: false,
     pruneCache: false,
     apply: false,
     doctor: false,
@@ -234,6 +247,8 @@ function parseArgs(argv) {
       args.doctor = true;
     } else if (arg === "--retain-build" || arg === "--keep-build") {
       args.retainBuild = true;
+    } else if (arg === "--source-build") {
+      args.sourceBuild = true;
     } else if (arg === "--prune-cache") {
       args.pruneCache = true;
     } else if (arg === "--apply") {
@@ -262,6 +277,7 @@ function parseArgs(argv) {
       arg === "--bin-name" ||
       arg === "--launcher-name" ||
       arg === "--repo" ||
+      arg === "--runtime-release-repo" ||
       arg === "--cache-dir" ||
       arg === "--keep-versions"
     ) {
@@ -278,6 +294,7 @@ function parseArgs(argv) {
         "--bin-name": "binName",
         "--launcher-name": "launcherName",
         "--repo": "repo",
+        "--runtime-release-repo": "runtimeReleaseRepo",
         "--cache-dir": "cacheDir",
         "--keep-versions": "keepVersions",
       }[arg];
@@ -303,6 +320,7 @@ function parseArgs(argv) {
   if (args.version) {
     validateCodexVersion(args.version, "--version");
   }
+  validateRuntimeReleaseRepo(args.runtimeReleaseRepo);
   args.keepVersions = Number.parseInt(args.keepVersions, 10);
   if (!Number.isFinite(args.keepVersions) || args.keepVersions < 1) {
     throw new Error("--keep-versions must be a positive integer");
@@ -961,12 +979,85 @@ function builtBinaryName() {
   return process.platform === "win32" ? "codex.exe" : "codex";
 }
 
+function codexBuildEnv(env = process.env, options = {}) {
+  const platform = options.platform || process.platform;
+  const arch = options.arch || process.arch;
+  const buildEnv = {
+    ...env,
+    CARGO_NET_GIT_FETCH_WITH_CLI: env.CARGO_NET_GIT_FETCH_WITH_CLI || "true",
+  };
+  if (platform === "darwin" && arch === "x64") {
+    buildEnv.CARGO_PROFILE_RELEASE_LTO = env.CARGO_PROFILE_RELEASE_LTO || "false";
+    buildEnv.CARGO_PROFILE_RELEASE_CODEGEN_UNITS = env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS || "16";
+  }
+  return buildEnv;
+}
+
+function sourceBuildFallbackAllowed(args, options = {}) {
+  const platform = options.platform || process.platform;
+  const arch = options.arch || process.arch;
+  return Boolean(args.sourceBuild) || platform !== "darwin" || arch !== "x64";
+}
+
+function runtimeTarget(platform = process.platform, arch = process.arch) {
+  const targets = {
+    darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" },
+    linux: { x64: "x86_64-unknown-linux-gnu", arm64: "aarch64-unknown-linux-gnu" },
+    win32: { x64: "x86_64-pc-windows-msvc", arm64: "aarch64-pc-windows-msvc" },
+  };
+  return targets[platform] && targets[platform][arch] ? targets[platform][arch] : null;
+}
+
+function runtimeReleaseAsset(args, options = {}) {
+  const platform = options.platform || process.platform;
+  const arch = options.arch || process.arch;
+  const target = runtimeTarget(platform, arch);
+  if (!target || !args.version) {
+    return null;
+  }
+
+  validateCodexVersion(args.version, "--version");
+  validateRuntimeReleaseRepo(args.runtimeReleaseRepo || DEFAULT_RUNTIME_RELEASE_REPO);
+  const baseName = `codex-hud-codex-v${args.version}-${target}`;
+  const tag = `codex-runtime-v${args.version}`;
+  const archiveName = `${baseName}.tar.gz`;
+  const releaseBase = `https://github.com/${args.runtimeReleaseRepo || DEFAULT_RUNTIME_RELEASE_REPO}/releases/download/${encodeURIComponent(tag)}`;
+  return {
+    target,
+    tag,
+    baseName,
+    archiveName,
+    checksumName: `${archiveName}.sha256`,
+    archiveUrl: `${releaseBase}/${encodeURIComponent(archiveName)}`,
+    checksumUrl: `${releaseBase}/${encodeURIComponent(archiveName)}.sha256`,
+  };
+}
+
+function downloadFile(url, destination, options = {}) {
+  const spawn = options.spawnSync || spawnSync;
+  const result = spawn(
+    "curl",
+    ["-fsSL", "--retry", "2", "--connect-timeout", "10", "--max-time", "120", url, "-o", destination],
+    { encoding: "utf8", stdio: "pipe" },
+  );
+  return !result.error && result.status === 0 && fs.existsSync(destination) && fs.statSync(destination).size > 0;
+}
+
+function extractRuntimeArchive(archivePath, destination, options = {}) {
+  const runCommand = options.runCommand || run;
+  runCommand("tar", ["-xzf", archivePath, "-C", destination]);
+}
+
+function sha256File(filePath) {
+  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
 function installBinary(sourceDir, args) {
   const workspace = path.join(sourceDir, "codex-rs");
-  const env = {
-    ...process.env,
-    CARGO_NET_GIT_FETCH_WITH_CLI: process.env.CARGO_NET_GIT_FETCH_WITH_CLI || "true",
-  };
+  const env = codexBuildEnv();
+  if (process.platform === "darwin" && process.arch === "x64") {
+    console.log("Intel macOS source build: LTO disabled and release codegen units raised to 16.");
+  }
   run("cargo", ["build", "--release", "-p", "codex-cli", "--bin", "codex"], {
     cwd: workspace,
     stdio: "inherit",
@@ -976,19 +1067,23 @@ function installBinary(sourceDir, args) {
   return installBuiltBinary(sourceDir, args);
 }
 
-function stageBuiltBinary(sourceDir, args) {
+function stageBinaryFile(sourceBinary, args) {
   if (!args.version) {
     throw new Error("Cannot stage patched binary without a resolved --version.");
   }
   validateCodexVersion(args.version, "--version");
-  const builtBinary = path.join(sourceDir, "codex-rs", "target", "release", builtBinaryName());
   const stagingDir = path.join(versionsDir(args), `${args.version}.staging`);
   fs.rmSync(stagingDir, { recursive: true, force: true });
   fs.mkdirSync(stagingDir, { recursive: true });
   const stagedBinary = path.join(stagingDir, builtBinaryName());
-  fs.copyFileSync(builtBinary, stagedBinary);
+  fs.copyFileSync(sourceBinary, stagedBinary);
   fs.chmodSync(stagedBinary, 0o755);
   return stagedBinary;
+}
+
+function stageBuiltBinary(sourceDir, args) {
+  const builtBinary = path.join(sourceDir, "codex-rs", "target", "release", builtBinaryName());
+  return stageBinaryFile(builtBinary, args);
 }
 
 function markFailedStaging(stagedBinary) {
@@ -1024,10 +1119,7 @@ function activateStagedBinary(stagedBinary, args) {
   return { target, activeBinary, versionDir };
 }
 
-function installBuiltBinary(sourceDir, args) {
-  fs.mkdirSync(args.prefix, { recursive: true });
-  const stagedBinary = stageBuiltBinary(sourceDir, args);
-
+function installStagedBinary(stagedBinary, args) {
   let version;
   try {
     version = verifyInstalledBinary(stagedBinary, args);
@@ -1047,6 +1139,55 @@ function installBuiltBinary(sourceDir, args) {
 
   const { target } = activateStagedBinary(stagedBinary, args);
   return { target, version };
+}
+
+function installBuiltBinary(sourceDir, args) {
+  fs.mkdirSync(args.prefix, { recursive: true });
+  return installStagedBinary(stageBuiltBinary(sourceDir, args), args);
+}
+
+function installPrebuiltBinary(args, options = {}) {
+  if (args.sourceBuild) {
+    return null;
+  }
+  const asset = runtimeReleaseAsset(args, options);
+  if (!asset) {
+    return null;
+  }
+
+  const fetchFile = options.downloadFile || downloadFile;
+  const extractArchive = options.extractRuntimeArchive || extractRuntimeArchive;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-runtime-"));
+  const archivePath = path.join(tempDir, asset.archiveName);
+  const checksumPath = path.join(tempDir, asset.checksumName);
+  try {
+    if (!fetchFile(asset.checksumUrl, checksumPath) || !fetchFile(asset.archiveUrl, archivePath)) {
+      return null;
+    }
+
+    const expected = fs.readFileSync(checksumPath, "utf8").trim().split(/\s+/)[0].toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(expected)) {
+      throw new Error(`Invalid SHA-256 file for prebuilt runtime: ${asset.checksumName}`);
+    }
+    const actual = sha256File(archivePath);
+    if (actual !== expected) {
+      throw new Error(`Prebuilt runtime checksum mismatch for ${asset.archiveName}`);
+    }
+
+    extractArchive(archivePath, tempDir);
+    const bundleDir = path.join(tempDir, asset.baseName);
+    for (const required of [builtBinaryName(), "LICENSE", "NOTICE"]) {
+      if (!fs.existsSync(path.join(bundleDir, required))) {
+        throw new Error(`Prebuilt runtime archive is missing ${required}: ${asset.archiveName}`);
+      }
+    }
+
+    fs.mkdirSync(args.prefix, { recursive: true });
+    const installed = installStagedBinary(stageBinaryFile(path.join(bundleDir, builtBinaryName()), args), args);
+    return { ...installed, source: "prebuilt", assetName: asset.archiveName };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 function verifyInstalledBinary(installedBinary, args) {
@@ -2324,12 +2465,11 @@ function runPatchedInstall(args) {
 
   console.log(`Codex HUD patch target: OpenAI Codex ${args.version}`);
 
-  const sourceDir = ensureSource(args);
-  const changes = patchSource(sourceDir);
-  verifyPatchedSource(sourceDir);
-  console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
-
   if (args.dryRun) {
+    const sourceDir = ensureSource(args);
+    const changes = patchSource(sourceDir);
+    verifyPatchedSource(sourceDir);
+    console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
     console.log(
       `HUD command: ${statusLineCommandFor(resolveRenderer(args, { install: false, requireSessionCapability: true }))}`,
     );
@@ -2360,7 +2500,26 @@ function runPatchedInstall(args) {
   const renderer = resolveRenderer(args, { requireSessionCapability: true });
   const statusLineCommand = statusLineCommandFor(renderer);
   console.log(`HUD command: ${statusLineCommand}`);
-  const installed = installBinary(sourceDir, args);
+  let sourceDir = null;
+  let installed = installPrebuiltBinary(args);
+  if (installed) {
+    console.log(`Installed verified prebuilt runtime: ${installed.assetName}`);
+  } else {
+    if (!sourceBuildFallbackAllowed(args)) {
+      const asset = runtimeReleaseAsset(args);
+      throw new Error(
+        `No verified Intel macOS runtime asset is available for Codex ${args.version}.` +
+        `\nExpected: ${asset ? asset.archiveName : "x86_64-apple-darwin archive"}` +
+        "\nPublish it with the Patched Codex Runtime workflow, or rerun with --source-build to compile locally.",
+      );
+    }
+    console.log(args.sourceBuild ? "Source build requested." : "No prebuilt runtime available for this version/target; building from source.");
+    sourceDir = ensureSource(args);
+    const changes = patchSource(sourceDir);
+    verifyPatchedSource(sourceDir);
+    console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
+    installed = installBinary(sourceDir, args);
+  }
   const launcher = installLauncher(args, {
     mode: "patched",
     patchedBinary: installed.target,
@@ -2381,7 +2540,9 @@ function runPatchedInstall(args) {
   if (pruned.length) {
     console.log(`Pruned old payloads: ${pruned.join(", ")}`);
   }
-  pruneBuildCacheAfterInstall(args);
+  if (sourceDir) {
+    pruneBuildCacheAfterInstall(args);
+  }
   installShimIfRequested(launcher, args);
   console.log("Add this under your existing [tui] table:");
   console.log(`status_line_command = ${JSON.stringify(statusLineCommand)}`);
@@ -2459,6 +2620,7 @@ if (require.main === module) {
 
 module.exports = {
   activateStagedBinary,
+  codexBuildEnv,
   detectCodexVersion,
   detectLegacyLayout,
   detectStockCodex,
@@ -2466,6 +2628,7 @@ module.exports = {
   ensureAnsiStatusLineParser,
   findStockCodexPath,
   installBinary,
+  installPrebuiltBinary,
   installBuiltBinary,
   installDefaultShim,
   installLauncher,
@@ -2488,10 +2651,13 @@ module.exports = {
   reconcileDefaultShim,
   renderLauncherScript,
   rendererBinaryName,
+  runtimeReleaseAsset,
+  runtimeTarget,
   resolveRenderer,
   refreshPatchedLauncher,
   reviewLegacyBinEntry,
   sourceHasPatch,
+  sourceBuildFallbackAllowed,
   stageBuiltBinary,
   statusLineCommandFor,
   syncPatchedRuntime,
