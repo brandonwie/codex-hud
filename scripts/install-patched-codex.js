@@ -987,8 +987,10 @@ function codexBuildEnv(env = process.env, options = {}) {
     CARGO_NET_GIT_FETCH_WITH_CLI: env.CARGO_NET_GIT_FETCH_WITH_CLI || "true",
   };
   if (platform === "darwin" && arch === "x64") {
-    buildEnv.CARGO_PROFILE_RELEASE_LTO = env.CARGO_PROFILE_RELEASE_LTO || "false";
+    buildEnv.CARGO_PROFILE_RELEASE_LTO = env.CARGO_PROFILE_RELEASE_LTO || "off";
     buildEnv.CARGO_PROFILE_RELEASE_CODEGEN_UNITS = env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS || "16";
+    buildEnv.CARGO_PROFILE_RELEASE_DEBUG = env.CARGO_PROFILE_RELEASE_DEBUG || "none";
+    buildEnv.CARGO_PROFILE_RELEASE_STRIP = env.CARGO_PROFILE_RELEASE_STRIP || "symbols";
   }
   return buildEnv;
 }
@@ -1102,15 +1104,15 @@ function installBinary(sourceDir, args) {
   const workspace = path.join(sourceDir, "codex-rs");
   const env = codexBuildEnv();
   if (process.platform === "darwin" && process.arch === "x64") {
-    console.log("Intel macOS source build: LTO disabled and release codegen units raised to 16.");
+    console.log("Intel macOS source build: LTO off, debug info off, symbols stripped, and 16 release codegen units.");
   }
-  run("cargo", ["build", "--release", "-p", "codex-cli", "--bin", "codex"], {
+  run("cargo", ["build", "--release", "--timings", "-p", "codex-cli", "--bin", "codex"], {
     cwd: workspace,
     stdio: "inherit",
     env,
   });
 
-  return installBuiltBinary(sourceDir, args);
+  return installBuiltBinary(sourceDir, args, { env });
 }
 
 function stageBinaryFile(sourceBinary, args) {
@@ -1127,9 +1129,16 @@ function stageBinaryFile(sourceBinary, args) {
   return stagedBinary;
 }
 
-function stageBuiltBinary(sourceDir, args) {
-  const builtBinary = path.join(sourceDir, "codex-rs", "target", "release", builtBinaryName());
-  return stageBinaryFile(builtBinary, args);
+function builtBinaryPath(sourceDir, options = {}) {
+  const env = options.env || process.env;
+  const workspace = path.join(sourceDir, "codex-rs");
+  const targetDir = env.CARGO_TARGET_DIR ? path.resolve(workspace, env.CARGO_TARGET_DIR) : path.join(workspace, "target");
+  const buildTarget = String(env.CARGO_BUILD_TARGET || "").trim();
+  return path.join(targetDir, ...(buildTarget ? [buildTarget] : []), "release", builtBinaryName());
+}
+
+function stageBuiltBinary(sourceDir, args, options = {}) {
+  return stageBinaryFile(builtBinaryPath(sourceDir, options), args);
 }
 
 function markFailedStaging(stagedBinary) {
@@ -1187,9 +1196,9 @@ function installStagedBinary(stagedBinary, args) {
   return { target, version };
 }
 
-function installBuiltBinary(sourceDir, args) {
+function installBuiltBinary(sourceDir, args, options = {}) {
   fs.mkdirSync(args.prefix, { recursive: true });
-  return installStagedBinary(stageBuiltBinary(sourceDir, args), args);
+  return installStagedBinary(stageBuiltBinary(sourceDir, args, options), args);
 }
 
 function installPrebuiltBinary(args, options = {}) {
@@ -2663,6 +2672,7 @@ if (require.main === module) {
 
 module.exports = {
   activateStagedBinary,
+  builtBinaryPath,
   codexBuildEnv,
   checksumForAsset,
   detectCodexVersion,

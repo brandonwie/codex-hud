@@ -7,6 +7,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
+  builtBinaryPath,
   detectCodexVersion,
   detectLegacyLayout,
   detectStockCodex,
@@ -977,13 +978,33 @@ assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: false }, { platform
 assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: true }, { platform: "darwin", arch: "x64" }), true);
 assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: false }, { platform: "darwin", arch: "arm64" }), true);
 const intelBuildEnv = codexBuildEnv({}, { platform: "darwin", arch: "x64" });
-assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_LTO, "false");
+assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_LTO, "off");
 assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_CODEGEN_UNITS, "16");
+assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_DEBUG, "none");
+assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_STRIP, "symbols");
 assert.strictEqual(
   codexBuildEnv({ CARGO_PROFILE_RELEASE_LTO: "thin" }, { platform: "darwin", arch: "x64" }).CARGO_PROFILE_RELEASE_LTO,
   "thin",
   "an explicit Cargo profile override must win",
 );
+assert.strictEqual(
+  builtBinaryPath("/source", {
+    env: {
+      CARGO_TARGET_DIR: "/cache/cargo-target",
+      CARGO_BUILD_TARGET: "x86_64-apple-darwin",
+    },
+  }),
+  "/cache/cargo-target/x86_64-apple-darwin/release/codex",
+  "a shared Cargo target directory and cross-build target must resolve to the staged binary",
+);
+
+const runtimeWorkflow = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "patched-codex-runtime.yml"), "utf8");
+assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_LTO: "off"'));
+assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_DEBUG: "none"'));
+assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_STRIP: "symbols"'));
+assert(runtimeWorkflow.includes("actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7"));
+assert(runtimeWorkflow.includes("actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f"));
+assert(!runtimeWorkflow.includes("--retain-build"), "ephemeral runtime builds must not retain their source-local target tree");
 
 const prebuiltVersion = "0.146.1";
 const prebuiltRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prebuilt-test-"));
