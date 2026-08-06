@@ -1046,7 +1046,10 @@ assert.strictEqual(prebuiltInstalled.version, prebuiltVersion);
 assert.strictEqual(prebuiltInstalled.source, "prebuilt");
 assert.strictEqual(prebuiltInstalled.assetName, prebuiltAsset.archiveName);
 assert.strictEqual(downloadedUrls.length, 2);
-assert.strictEqual(fs.realpathSync(prebuiltInstalled.target), prebuiltInstalled.target.replace(/codex-hud-codex$/, `codex-hud-codex.d/${prebuiltVersion}/codex`));
+assert.strictEqual(
+  fs.realpathSync(prebuiltInstalled.target),
+  fs.realpathSync(prebuiltInstalled.target.replace(/codex-hud-codex$/, `codex-hud-codex.d/${prebuiltVersion}/codex`)),
+);
 
 const unavailableArgs = { ...prebuiltArgs, prefix: path.join(prebuiltRoot, "unavailable") };
 assert.strictEqual(
