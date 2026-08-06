@@ -16,6 +16,9 @@ rust/target/
 docs
 docs/
 .claude/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
 .code-review-graph/
 graphify-out/
 .graphifyignore
