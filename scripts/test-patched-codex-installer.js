@@ -14,8 +14,10 @@ const {
   ensureAnsiStatusLineParser,
   findStockCodexPath,
   checkPatchedRuntime,
+  checksumForAsset,
   codexBuildEnv,
   installPrebuiltBinary,
+  downloadFile,
   installBuiltBinary,
   installDefaultShim,
   installLauncher,
@@ -1021,6 +1023,34 @@ assert.throws(
 );
 const fakeArchive = Buffer.from("codex-hud prebuilt archive fixture");
 const fakeArchiveHash = crypto.createHash("sha256").update(fakeArchive).digest("hex");
+assert.strictEqual(
+  checksumForAsset(
+    `# generated checksums\n${"1".repeat(64)}  unrelated.tar.gz\n${fakeArchiveHash}  ${prebuiltAsset.archiveName}\n`,
+    prebuiltAsset.archiveName,
+  ),
+  fakeArchiveHash,
+);
+assert.throws(
+  () => checksumForAsset(`${fakeArchiveHash}  unrelated.tar.gz\n`, prebuiltAsset.archiveName),
+  /must appear exactly once/,
+);
+assert.throws(
+  () => checksumForAsset(
+    `${fakeArchiveHash}  ${prebuiltAsset.archiveName}\n${fakeArchiveHash}  ${prebuiltAsset.archiveName}\n`,
+    prebuiltAsset.archiveName,
+  ),
+  /must appear exactly once/,
+);
+let downloadWarning = "";
+assert.strictEqual(
+  downloadFile("https://example.invalid/runtime", path.join(prebuiltRoot, "missing"), {
+    spawnSync: () => ({ status: 22, stderr: "HTTP 404" }),
+    warn: (message) => { downloadWarning = message; },
+  }),
+  false,
+);
+assert.match(downloadWarning, /exit 22/);
+assert.match(downloadWarning, /HTTP 404/);
 const downloadedUrls = [];
 const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
   platform: "darwin",
@@ -1079,7 +1109,10 @@ assert.throws(
     platform: "darwin",
     arch: "x64",
     downloadFile(url, destination) {
-      fs.writeFileSync(destination, url.endsWith(".sha256") ? `${"0".repeat(64)}\n` : fakeArchive);
+      fs.writeFileSync(
+        destination,
+        url.endsWith(".sha256") ? `${"0".repeat(64)}  ${prebuiltAsset.archiveName}\n` : fakeArchive,
+      );
       return true;
     },
   }),
