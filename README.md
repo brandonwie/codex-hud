@@ -265,7 +265,7 @@ If you previously ran `npm run patch:codex` (the old default flow), run `npm run
 
 ## Experimental: Patched Codex Footer
 
-> **Warning — experimental.** This mode installs a patched Codex binary. The installer uses a checksummed, ad-hoc-signed runtime release when one exists for the detected Codex version and target; otherwise it falls back to a local source build. macOS may kill unsigned local rebuilds (the installer health-checks every payload *before* activating it, so a failed build can never break your active `codex`), and the patched binary **goes stale when stock Codex updates** — run `npm run codex:sync` after Codex updates to check and repair it. Prefer the default stock-delegating launcher unless you specifically want the in-TUI footer.
+> **Warning — experimental.** This mode installs a patched Codex binary. The installer uses a checksummed, ad-hoc-signed runtime release when one exists for the detected Codex version and target. A missing Intel macOS asset fails fast; other targets retain the local source-build fallback. macOS may kill unsigned local rebuilds (the installer health-checks every payload *before* activating it, so a failed build can never break your active `codex`), and the patched binary **goes stale when stock Codex updates** — run `npm run codex:sync` after Codex updates to check and repair it. Prefer the default stock-delegating launcher unless you specifically want the in-TUI footer.
 
 Stock Codex cannot render arbitrary plugin output under the input area. To get a Claude-HUD-style footer, build a separate patched Codex command:
 
