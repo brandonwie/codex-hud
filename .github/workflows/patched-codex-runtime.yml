@@ -7,6 +7,14 @@ on:
         description: OpenAI Codex version to patch (without rust-v prefix)
         required: true
         type: string
+      local_build_ok:
+        description: >-
+          Confirm a successful local source build of this exact version
+          preceded this dispatch. Runner-minute guard: the job refuses to
+          build without it.
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -19,12 +27,24 @@ jobs:
   build-intel-macos:
     name: Build Intel macOS runtime
     runs-on: macos-15-intel
+    # Hard cap. Cold-cache builds of the 126-crate Codex workspace have been
+    # observed past 64 minutes; actions/cache only saves on success, so a cap
+    # below the cold-build time can never bootstrap the cache. Tighten after
+    # reading the cargo --timings artifact from a successful cached run.
     timeout-minutes: 90
     env:
       CODEX_VERSION: ${{ inputs.codex_version }}
-      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_LTO: "off"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_PROFILE_RELEASE_DEBUG: "none"
+      CARGO_PROFILE_RELEASE_STRIP: "symbols"
     steps:
+      - name: Assert local build gate
+        if: ${{ !inputs.local_build_ok }}
+        run: |
+          echo "::error::Refusing to build: local_build_ok is false. Run the local source build for this version first, then re-dispatch with local_build_ok=true."
+          exit 1
+
       - name: Checkout
         # Pinned from refs/tags/v6 on 2026-06-11.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -44,6 +64,20 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Restore Cargo cache
+        # Pinned from refs/tags/v5.0.4 on 2026-08-06.
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ${{ runner.temp }}/cargo-target
+          key: patched-codex-${{ runner.os }}-${{ runner.arch }}-x86_64-apple-darwin-${{ hashFiles('scripts/install-patched-codex.js') }}-${{ inputs.codex_version }}
+          restore-keys: |
+            patched-codex-${{ runner.os }}-${{ runner.arch }}-x86_64-apple-darwin-${{ hashFiles('scripts/install-patched-codex.js') }}-
+            patched-codex-${{ runner.os }}-${{ runner.arch }}-x86_64-apple-darwin-
+
       - name: Validate input
         run: |
           node -e 'if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(process.env.CODEX_VERSION)) process.exit(1)'
@@ -55,14 +89,38 @@ jobs:
         run: npm run build:rust
 
       - name: Build patched Codex
+        # CARGO_TARGET_DIR is step-scoped on purpose: the runner context is
+        # invalid in job-level env (workflow is rejected at dispatch), and a
+        # job-wide target dir would also redirect the renderer build away from
+        # rust/target/release/, which the installer resolves by fixed path.
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-target
         run: |
+          (
+            while sleep 60; do
+              echo "Cargo build heartbeat: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+              du -sh "$CARGO_TARGET_DIR" 2>/dev/null || true
+              pgrep -fl 'cargo|rustc' | tail -20 || true
+            done
+          ) &
+          heartbeat_pid=$!
+          trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
           node scripts/install-patched-codex.js \
             --mode patched \
             --source-build \
             --version "$CODEX_VERSION" \
             --prefix "$RUNNER_TEMP/prefix" \
-            --cache-dir "$RUNNER_TEMP/cache" \
-            --retain-build
+            --cache-dir "$RUNNER_TEMP/cache"
+
+      - name: Upload Cargo timings
+        if: always()
+        # Pinned from refs/tags/v7.0.0 on 2026-08-06.
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        with:
+          name: codex-${{ inputs.codex_version }}-x86_64-apple-darwin-cargo-timings
+          path: ${{ runner.temp }}/cargo-target/cargo-timings/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Package runtime and licenses
         run: |
