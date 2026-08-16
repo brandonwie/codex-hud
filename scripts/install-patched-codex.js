@@ -779,9 +779,79 @@ function ensureAnsiStatusLineParser(filePath) {
   return true;
 }
 
+function ensureRemotePluginDisableRegressionTest(filePath) {
+  const current = fs.readFileSync(filePath, "utf8");
+  const originalName = "async fn remote_installed_plugin_preserves_configured_mcp_server_policy()";
+  const regressionName = "async fn remote_installed_plugin_respects_local_disable()";
+  if (current.includes(regressionName)) {
+    return false;
+  }
+
+  const start = current.indexOf(originalName);
+  const end = start === -1 ? -1 : current.indexOf("\n#[tokio::test]", start + originalName.length);
+  if (start === -1) {
+    throw new Error(`Remote plugin regression-test anchor not found in ${filePath}`);
+  }
+
+  const resolvedEnd = end === -1 ? current.length : end;
+  const testBody = current.slice(start, resolvedEnd);
+  const localDisableConfig = `[plugins."linear@openai-curated-remote"]
+enabled = false`;
+  if (!testBody.includes(localDisableConfig)) {
+    throw new Error(`Remote plugin local-disable fixture not found in ${filePath}`);
+  }
+
+  const enabledPolicyTest = testBody.replace(
+    localDisableConfig,
+    `[plugins."linear@openai-curated-remote"]
+enabled = true`,
+  );
+  const regressionTest = `
+
+#[tokio::test]
+async fn remote_installed_plugin_respects_local_disable() {
+    let codex_home = TempDir::new().unwrap();
+    write_cached_plugin(codex_home.path(), "openai-curated-remote", "linear");
+    write_file(
+        &codex_home.path().join(CONFIG_TOML_FILE),
+        r#"[features]
+plugins = true
+
+[plugins."linear@openai-curated-remote"]
+enabled = false
+"#,
+    );
+
+    let config = load_config(codex_home.path(), codex_home.path()).await;
+    let manager = PluginsManager::new_with_options(
+        codex_home.path().to_path_buf(),
+        Some(Product::Codex),
+        Some(AuthMode::Chatgpt),
+    );
+    manager.write_remote_installed_plugins_cache(vec![remote_installed_linear_plugin()]);
+
+    let outcome = manager.plugins_for_config(&config).await;
+    let plugin = outcome
+        .plugins()
+        .iter()
+        .find(|plugin| plugin.config_name == "linear@openai-curated-remote")
+        .expect("remote plugin should be loaded");
+
+    assert!(!plugin.enabled);
+    assert!(plugin.mcp_servers.is_empty());
+}`;
+  fs.writeFileSync(
+    filePath,
+    current.slice(0, start) + enabledPolicyTest + regressionTest + current.slice(resolvedEnd),
+  );
+  return true;
+}
+
 function patchSource(sourceRoot) {
   const configTypes = path.join(sourceRoot, "codex-rs", "config", "src", "types.rs");
   const coreConfig = path.join(sourceRoot, "codex-rs", "core", "src", "config", "mod.rs");
+  const pluginLoader = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "loader.rs");
+  const pluginManagerTests = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "manager_tests.rs");
   const statusSurfaces = path.join(sourceRoot, "codex-rs", "tui", "src", "chatwidget", "status_surfaces.rs");
   const skillsHelpers = path.join(sourceRoot, "codex-rs", "tui", "src", "skills_helpers.rs");
 
@@ -908,6 +978,30 @@ function patchSource(sourceRoot) {
     changes.push("TUI ANSI status-line parser");
   }
 
+  if (applyTextPatch(
+    pluginLoader,
+    "remote_plugin_config.enabled &= configured_plugin.enabled;",
+    `    if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
+        remote_plugin_config
+            .mcp_servers
+            .clone_from(&configured_plugin.mcp_servers);
+    }`,
+    `    if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
+        // Remote state is authoritative for availability, while local config is a
+        // user-controlled kill switch. Both must permit the plugin.
+        remote_plugin_config.enabled &= configured_plugin.enabled;
+        remote_plugin_config
+            .mcp_servers
+            .clone_from(&configured_plugin.mcp_servers);
+    }`,
+  )) {
+    changes.push("remote plugin local-disable precedence");
+  }
+
+  if (ensureRemotePluginDisableRegressionTest(pluginManagerTests)) {
+    changes.push("remote plugin local-disable regression test");
+  }
+
   // Render plugin-contributed skills in the interactive TUI picker / mention
   // popup / composer as `plugin:skill` (e.g. `3b:wrap`) instead of the upstream
   // `skill (plugin)` inversion (`wrap (3b)`). Matches the model-prompt label
@@ -930,6 +1024,21 @@ function verifyPatchedSource(sourceRoot) {
   const current = fs.readFileSync(statusSurfaces, "utf8");
   if (!current.includes("CODEX_HUD_MODEL")) {
     throw new Error(`Patched Codex source is missing CODEX_HUD_MODEL env injection: ${statusSurfaces}`);
+  }
+
+  const pluginLoader = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "loader.rs");
+  const pluginLoaderSource = fs.readFileSync(pluginLoader, "utf8");
+  if (!pluginLoaderSource.includes("remote_plugin_config.enabled &= configured_plugin.enabled;")) {
+    throw new Error(`Patched Codex source is missing remote plugin local-disable precedence: ${pluginLoader}`);
+  }
+
+  const pluginManagerTests = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "manager_tests.rs");
+  const pluginManagerTestSource = fs.readFileSync(pluginManagerTests, "utf8");
+  if (
+    !pluginManagerTestSource.includes("remote_installed_plugin_respects_local_disable") ||
+    !pluginManagerTestSource.includes("assert!(!plugin.enabled);")
+  ) {
+    throw new Error(`Patched Codex source is missing the remote plugin local-disable regression guard: ${pluginManagerTests}`);
   }
 }
 

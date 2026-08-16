@@ -233,6 +233,31 @@ pub(crate) fn skill_display_name(skill: &SkillMetadata) -> String {
 }
 `);
 
+writeFile(root, "codex-rs/core-plugins/src/loader.rs", `
+fn merge_remote_plugin_config(
+    configured_plugins: &mut HashMap<String, PluginConfig>,
+    plugin_key: String,
+    mut remote_plugin_config: PluginConfig,
+) {
+    if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
+        remote_plugin_config
+            .mcp_servers
+            .clone_from(&configured_plugin.mcp_servers);
+    }
+    configured_plugins.insert(plugin_key, remote_plugin_config);
+}
+`);
+
+writeFile(root, "codex-rs/core-plugins/src/manager_tests.rs", `
+#[tokio::test]
+async fn remote_installed_plugin_preserves_configured_mcp_server_policy() {
+    let config_toml = r#"[plugins."linear@openai-curated-remote"]
+enabled = false
+"#;
+    assert!(plugin.enabled);
+}
+`);
+
 const firstChanges = patchSource(root);
 const secondChanges = patchSource(root);
 
@@ -240,6 +265,8 @@ const configTypes = fs.readFileSync(path.join(root, "codex-rs/config/src/types.r
 const coreConfig = fs.readFileSync(path.join(root, "codex-rs/core/src/config/mod.rs"), "utf8");
 const statusSurfaces = fs.readFileSync(path.join(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs"), "utf8");
 const skillsHelpers = fs.readFileSync(path.join(root, "codex-rs/tui/src/skills_helpers.rs"), "utf8");
+const pluginLoader = fs.readFileSync(path.join(root, "codex-rs/core-plugins/src/loader.rs"), "utf8");
+const pluginManagerTests = fs.readFileSync(path.join(root, "codex-rs/core-plugins/src/manager_tests.rs"), "utf8");
 
 assert(firstChanges.length >= 5, "expected patchSource to patch every anchor");
 assert.deepStrictEqual(secondChanges, [], "patchSource should be idempotent");
@@ -285,11 +312,45 @@ assert(
   "old skill (plugin) formatter must be replaced",
 );
 assert(
+  pluginLoader.includes("remote_plugin_config.enabled &= configured_plugin.enabled;"),
+  "remote plugin enablement must preserve the local disable switch",
+);
+assert(
+  pluginManagerTests.includes("remote_installed_plugin_respects_local_disable"),
+  "patched upstream regression test must name the local-disable behavior",
+);
+assert(
+  pluginManagerTests.includes("assert!(!plugin.enabled);"),
+  "patched upstream regression test must expect the local disable to win",
+);
+assert(
+  pluginManagerTests.includes(`[plugins."linear@openai-curated-remote"]\nenabled = true`),
+  "existing remote MCP policy test must continue through the enabled-plugin path",
+);
+assert(
   statusLineCommandFor({ kind: "rust", path: "/tmp/test-prefix/codex-hud" }).includes("--line --color"),
   "patched Codex footer command must use compact single-line HUD output",
 );
 
 const legacyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-legacy-patch-test-"));
+writeFile(legacyRoot, "codex-rs/core-plugins/src/loader.rs", `
+fn merge_remote_plugin_config(
+    configured_plugins: &mut HashMap<String, PluginConfig>,
+    plugin_key: String,
+    mut remote_plugin_config: PluginConfig,
+) {
+    if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
+        remote_plugin_config.enabled &= configured_plugin.enabled;
+    }
+    configured_plugins.insert(plugin_key, remote_plugin_config);
+}
+`);
+writeFile(legacyRoot, "codex-rs/core-plugins/src/manager_tests.rs", `
+#[tokio::test]
+async fn remote_installed_plugin_respects_local_disable() {
+    assert!(!plugin.enabled);
+}
+`);
 writeFile(legacyRoot, "codex-rs/config/src/types.rs", `
 pub struct Tui {
     #[serde(default)]
