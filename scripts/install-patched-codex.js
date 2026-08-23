@@ -11,7 +11,7 @@ const DEFAULT_RUNTIME_RELEASE_REPO = "brandonwie/codex-hud";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
 const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
 const RUST_RENDERER_BIN_NAME = "codex-hud";
-const PATCH_SET_REVISION = "2";
+const PATCH_SET_REVISION = "3";
 const RUNTIME_MANIFEST_NAME = "codex-hud-runtime.json";
 const SAFE_COMMAND_NAME_RE = /^[A-Za-z0-9_-]+$/;
 const CODEX_VERSION_PATTERN = "\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?";
@@ -859,6 +859,7 @@ function patchSource(sourceRoot) {
   const pluginManagerTests = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "manager_tests.rs");
   const execLib = path.join(sourceRoot, "codex-rs", "exec", "src", "lib.rs");
   const execMain = path.join(sourceRoot, "codex-rs", "exec", "src", "main.rs");
+  const cliMain = path.join(sourceRoot, "codex-rs", "cli", "src", "main.rs");
   const statusSurfaces = path.join(sourceRoot, "codex-rs", "tui", "src", "chatwidget", "status_surfaces.rs");
   const skillsHelpers = path.join(sourceRoot, "codex-rs", "tui", "src", "skills_helpers.rs");
 
@@ -1034,6 +1035,17 @@ use clap::Parser;`,
     changes.push("codex-exec binary compiler recursion limit");
   }
 
+  if (applyTextPatch(
+    cliMain,
+    `#![recursion_limit = "256"]`,
+    `use clap::Args;`,
+    `#![recursion_limit = "256"]
+
+use clap::Args;`,
+  )) {
+    changes.push("codex CLI compiler recursion limit");
+  }
+
   // Render plugin-contributed skills in the interactive TUI picker / mention
   // popup / composer as `plugin:skill` (e.g. `3b:wrap`) instead of the upstream
   // `skill (plugin)` inversion (`wrap (3b)`). Matches the model-prompt label
@@ -1083,6 +1095,11 @@ function verifyPatchedSource(sourceRoot) {
   if (!execMainSource.includes(`#![recursion_limit = "256"]`)) {
     throw new Error(`Patched Codex source is missing the codex-exec binary compiler recursion limit: ${execMain}`);
   }
+  const cliMain = path.join(sourceRoot, "codex-rs", "cli", "src", "main.rs");
+  const cliMainSource = fs.readFileSync(cliMain, "utf8");
+  if (!cliMainSource.includes(`#![recursion_limit = "256"]`)) {
+    throw new Error(`Patched Codex source is missing the Codex CLI compiler recursion limit: ${cliMain}`);
+  }
 }
 
 function sourceHasPatch(sourceRoot) {
@@ -1091,6 +1108,7 @@ function sourceHasPatch(sourceRoot) {
     ["codex-rs/core/src/config/mod.rs", "pub tui_status_line_command: Option<String>"],
     ["codex-rs/exec/src/lib.rs", `#![recursion_limit = "256"]`],
     ["codex-rs/exec/src/main.rs", `#![recursion_limit = "256"]`],
+    ["codex-rs/cli/src/main.rs", `#![recursion_limit = "256"]`],
     ["codex-rs/tui/src/chatwidget/status_surfaces.rs", "fn custom_status_line_from_command"],
   ];
 

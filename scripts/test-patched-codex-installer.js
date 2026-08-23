@@ -269,6 +269,9 @@ writeFile(root, "codex-rs/exec/src/main.rs", `
 //! of the \`codex-exec\` binary.
 use clap::Parser;
 `);
+writeFile(root, "codex-rs/cli/src/main.rs", `
+use clap::Args;
+`);
 
 const firstChanges = patchSource(root);
 const secondChanges = patchSource(root);
@@ -281,6 +284,7 @@ const pluginLoader = fs.readFileSync(path.join(root, "codex-rs/core-plugins/src/
 const pluginManagerTests = fs.readFileSync(path.join(root, "codex-rs/core-plugins/src/manager_tests.rs"), "utf8");
 const execLib = fs.readFileSync(path.join(root, "codex-rs/exec/src/lib.rs"), "utf8");
 const execMain = fs.readFileSync(path.join(root, "codex-rs/exec/src/main.rs"), "utf8");
+const cliMain = fs.readFileSync(path.join(root, "codex-rs/cli/src/main.rs"), "utf8");
 
 assert(firstChanges.length >= 5, "expected patchSource to patch every anchor");
 assert.deepStrictEqual(secondChanges, [], "patchSource should be idempotent");
@@ -344,6 +348,10 @@ assert(
 assert(
   execMain.includes(`#![recursion_limit = "256"]`),
   "the codex-exec binary must raise the compiler query-depth limit used by its app-server dispatch type",
+);
+assert(
+  cliMain.includes(`#![recursion_limit = "256"]`),
+  "the Codex CLI binary must raise the compiler query-depth limit used by its async dispatch type",
 );
 assert(
   pluginManagerTests.includes(`[plugins."linear@openai-curated-remote"]\nenabled = true`),
@@ -420,6 +428,10 @@ writeFile(legacyRoot, "codex-rs/exec/src/lib.rs", `
 writeFile(legacyRoot, "codex-rs/exec/src/main.rs", `
 #![recursion_limit = "256"]
 use clap::Parser;
+`);
+writeFile(legacyRoot, "codex-rs/cli/src/main.rs", `
+#![recursion_limit = "256"]
+use clap::Args;
 `);
 const legacyStatusPath = path.join(legacyRoot, "codex-rs/tui/src/chatwidget/status_surfaces.rs");
 writeFile(legacyRoot, "codex-rs/tui/src/chatwidget/status_surfaces.rs", `
