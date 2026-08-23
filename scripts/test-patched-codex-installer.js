@@ -261,6 +261,15 @@ enabled = false
 }
 `);
 
+writeFile(root, "codex-rs/exec/src/lib.rs", `
+// For both modes, any other output must be written to stderr.
+#![deny(clippy::print_stdout)]
+`);
+writeFile(root, "codex-rs/exec/src/main.rs", `
+//! of the \`codex-exec\` binary.
+use clap::Parser;
+`);
+
 const firstChanges = patchSource(root);
 const secondChanges = patchSource(root);
 
@@ -270,6 +279,8 @@ const statusSurfaces = fs.readFileSync(path.join(root, "codex-rs/tui/src/chatwid
 const skillsHelpers = fs.readFileSync(path.join(root, "codex-rs/tui/src/skills_helpers.rs"), "utf8");
 const pluginLoader = fs.readFileSync(path.join(root, "codex-rs/core-plugins/src/loader.rs"), "utf8");
 const pluginManagerTests = fs.readFileSync(path.join(root, "codex-rs/core-plugins/src/manager_tests.rs"), "utf8");
+const execLib = fs.readFileSync(path.join(root, "codex-rs/exec/src/lib.rs"), "utf8");
+const execMain = fs.readFileSync(path.join(root, "codex-rs/exec/src/main.rs"), "utf8");
 
 assert(firstChanges.length >= 5, "expected patchSource to patch every anchor");
 assert.deepStrictEqual(secondChanges, [], "patchSource should be idempotent");
@@ -325,6 +336,14 @@ assert(
 assert(
   pluginManagerTests.includes("assert!(!plugin.enabled);"),
   "patched upstream regression test must expect the local disable to win",
+);
+assert(
+  execLib.includes(`#![recursion_limit = "256"]`),
+  "the codex-exec library must raise the compiler query-depth limit used by its app-server dispatch type",
+);
+assert(
+  execMain.includes(`#![recursion_limit = "256"]`),
+  "the codex-exec binary must raise the compiler query-depth limit used by its app-server dispatch type",
 );
 assert(
   pluginManagerTests.includes(`[plugins."linear@openai-curated-remote"]\nenabled = true`),
@@ -393,6 +412,14 @@ fn build(cfg: ConfigToml) -> Config {
                 .unwrap_or(true),
     }
 }
+`);
+writeFile(legacyRoot, "codex-rs/exec/src/lib.rs", `
+#![recursion_limit = "256"]
+#![deny(clippy::print_stdout)]
+`);
+writeFile(legacyRoot, "codex-rs/exec/src/main.rs", `
+#![recursion_limit = "256"]
+use clap::Parser;
 `);
 const legacyStatusPath = path.join(legacyRoot, "codex-rs/tui/src/chatwidget/status_surfaces.rs");
 writeFile(legacyRoot, "codex-rs/tui/src/chatwidget/status_surfaces.rs", `

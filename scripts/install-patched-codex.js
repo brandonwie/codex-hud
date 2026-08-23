@@ -11,7 +11,7 @@ const DEFAULT_RUNTIME_RELEASE_REPO = "brandonwie/codex-hud";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
 const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
 const RUST_RENDERER_BIN_NAME = "codex-hud";
-const PATCH_SET_REVISION = "1";
+const PATCH_SET_REVISION = "2";
 const RUNTIME_MANIFEST_NAME = "codex-hud-runtime.json";
 const SAFE_COMMAND_NAME_RE = /^[A-Za-z0-9_-]+$/;
 const CODEX_VERSION_PATTERN = "\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?";
@@ -857,6 +857,8 @@ function patchSource(sourceRoot) {
   const coreConfig = path.join(sourceRoot, "codex-rs", "core", "src", "config", "mod.rs");
   const pluginLoader = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "loader.rs");
   const pluginManagerTests = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "manager_tests.rs");
+  const execLib = path.join(sourceRoot, "codex-rs", "exec", "src", "lib.rs");
+  const execMain = path.join(sourceRoot, "codex-rs", "exec", "src", "main.rs");
   const statusSurfaces = path.join(sourceRoot, "codex-rs", "tui", "src", "chatwidget", "status_surfaces.rs");
   const skillsHelpers = path.join(sourceRoot, "codex-rs", "tui", "src", "skills_helpers.rs");
 
@@ -1007,6 +1009,31 @@ function patchSource(sourceRoot) {
     changes.push("remote plugin local-disable regression test");
   }
 
+  if (applyTextPatch(
+    execLib,
+    `#![recursion_limit = "256"]`,
+    `// For both modes, any other output must be written to stderr.
+#![deny(clippy::print_stdout)]`,
+    `// For both modes, any other output must be written to stderr.
+#![recursion_limit = "256"]
+#![deny(clippy::print_stdout)]`,
+  )) {
+    changes.push("codex-exec compiler recursion limit");
+  }
+
+  if (applyTextPatch(
+    execMain,
+    `#![recursion_limit = "256"]`,
+    `//! of the \`codex-exec\` binary.
+use clap::Parser;`,
+    `//! of the \`codex-exec\` binary.
+#![recursion_limit = "256"]
+
+use clap::Parser;`,
+  )) {
+    changes.push("codex-exec binary compiler recursion limit");
+  }
+
   // Render plugin-contributed skills in the interactive TUI picker / mention
   // popup / composer as `plugin:skill` (e.g. `3b:wrap`) instead of the upstream
   // `skill (plugin)` inversion (`wrap (3b)`). Matches the model-prompt label
@@ -1045,12 +1072,25 @@ function verifyPatchedSource(sourceRoot) {
   ) {
     throw new Error(`Patched Codex source is missing the remote plugin local-disable regression guard: ${pluginManagerTests}`);
   }
+
+  const execLib = path.join(sourceRoot, "codex-rs", "exec", "src", "lib.rs");
+  const execLibSource = fs.readFileSync(execLib, "utf8");
+  if (!execLibSource.includes(`#![recursion_limit = "256"]`)) {
+    throw new Error(`Patched Codex source is missing the codex-exec compiler recursion limit: ${execLib}`);
+  }
+  const execMain = path.join(sourceRoot, "codex-rs", "exec", "src", "main.rs");
+  const execMainSource = fs.readFileSync(execMain, "utf8");
+  if (!execMainSource.includes(`#![recursion_limit = "256"]`)) {
+    throw new Error(`Patched Codex source is missing the codex-exec binary compiler recursion limit: ${execMain}`);
+  }
 }
 
 function sourceHasPatch(sourceRoot) {
   const checks = [
     ["codex-rs/config/src/types.rs", "pub status_line_command: Option<String>"],
     ["codex-rs/core/src/config/mod.rs", "pub tui_status_line_command: Option<String>"],
+    ["codex-rs/exec/src/lib.rs", `#![recursion_limit = "256"]`],
+    ["codex-rs/exec/src/main.rs", `#![recursion_limit = "256"]`],
     ["codex-rs/tui/src/chatwidget/status_surfaces.rs", "fn custom_status_line_from_command"],
   ];
 
