@@ -7,6 +7,8 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
+  PATCH_SET_REVISION,
+  RUNTIME_MANIFEST_NAME,
   builtBinaryPath,
   detectCodexVersion,
   detectLegacyLayout,
@@ -49,6 +51,7 @@ const {
   syncPatchedRuntime,
   uninstallDefaultShim,
   validateRuntimeArchiveEntries,
+  validateRuntimeManifest,
   verifyInstalledBinary,
   verifyPatchedSource,
   verifyRustRenderer,
@@ -454,11 +457,13 @@ const patchedScript = renderLauncherScript({
   stockVersion: "0.139.0",
   statusLineCommand: "'/tmp/test-prefix/codex-hud' --line --color",
   renderer: "rust",
+  patchSetRevision: PATCH_SET_REVISION,
   builtAt: "2026-06-10T00:00:00.000Z",
 });
 assert(patchedScript.includes("# codex-hud-launcher v2 mode=patched"));
 assert(patchedScript.includes("# patched_version=0.139.0"));
 assert(patchedScript.includes("# stock_realpath=/opt/homebrew/Cellar/codex/0.139.0/bin/codex"));
+assert(patchedScript.includes(`# patch_set_revision=${PATCH_SET_REVISION}`));
 assert(patchedScript.includes("exec -a codex "), "patched launcher must preserve argv[0] as codex");
 assert(patchedScript.includes("--line --color"));
 assert(patchedScript.includes("stock Codex changed since this patched runtime was built"), "patched launcher must carry the staleness warning");
@@ -476,6 +481,7 @@ const patchedMetadata = parseLauncherMetadata(patchedScript);
 assert.strictEqual(patchedMetadata.format, "v2");
 assert.strictEqual(patchedMetadata.mode, "patched");
 assert.strictEqual(patchedMetadata.patchedVersion, "0.139.0");
+assert.strictEqual(patchedMetadata.patchSetRevision, PATCH_SET_REVISION);
 const legacyScript = "#!/usr/bin/env bash\nset -euo pipefail\n\nexec -a codex '/x/codex-hud-codex' \\\n  -c 'tui.status_line_command=\"node hud.js\"' \\\n  \"$@\"\n";
 assert.strictEqual(parseLauncherMetadata(legacyScript).format, "legacy");
 assert.strictEqual(parseLauncherMetadata("echo hello\n").format, "foreign");
@@ -1066,6 +1072,8 @@ assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_STRIP: "symbols"'));
 assert(runtimeWorkflow.includes("actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7"));
 assert(runtimeWorkflow.includes("actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f"));
 assert(!runtimeWorkflow.includes("--retain-build"), "ephemeral runtime builds must not retain their source-local target tree");
+assert(runtimeWorkflow.includes(RUNTIME_MANIFEST_NAME), "runtime archives must carry semantic patch provenance");
+assert(runtimeWorkflow.includes("--clobber"), "same-version patch-set releases must replace stale assets");
 
 const prebuiltVersion = "0.146.1";
 const prebuiltRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prebuilt-test-"));
@@ -1134,6 +1142,7 @@ assert.strictEqual(
 assert.match(downloadWarning, /exit 22/);
 assert.match(downloadWarning, /HTTP 404/);
 const downloadedUrls = [];
+const prebuiltSourceCommit = "a".repeat(40);
 const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
   platform: "darwin",
   arch: "x64",
@@ -1149,18 +1158,44 @@ const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
   extractRuntimeArchive(_archivePath, destination, options) {
     assert.strictEqual(options.baseName, prebuiltAsset.baseName);
     const bundle = path.join(destination, prebuiltAsset.baseName);
-    writeExecutable(path.join(bundle, "codex"), fakeCodexScript(prebuiltVersion));
+    const bundledBinary = path.join(bundle, "codex");
+    writeExecutable(bundledBinary, fakeCodexScript(prebuiltVersion));
     writeFile(bundle, "LICENSE", "Apache License 2.0\n");
     writeFile(bundle, "NOTICE", "OpenAI Codex\n");
+    writeFile(bundle, RUNTIME_MANIFEST_NAME, `${JSON.stringify({
+      schemaVersion: 1,
+      codexVersion: prebuiltVersion,
+      patchSetRevision: PATCH_SET_REVISION,
+      sourceCommit: prebuiltSourceCommit,
+      payloadSha256: crypto.createHash("sha256").update(fs.readFileSync(bundledBinary)).digest("hex"),
+    }, null, 2)}\n`);
   },
 });
 assert.strictEqual(prebuiltInstalled.version, prebuiltVersion);
 assert.strictEqual(prebuiltInstalled.source, "prebuilt");
 assert.strictEqual(prebuiltInstalled.assetName, prebuiltAsset.archiveName);
+assert.strictEqual(prebuiltInstalled.patchSetRevision, PATCH_SET_REVISION);
+assert.strictEqual(prebuiltInstalled.sourceCommit, prebuiltSourceCommit);
 assert.strictEqual(downloadedUrls.length, 2);
 assert.strictEqual(
   fs.realpathSync(prebuiltInstalled.target),
   fs.realpathSync(prebuiltInstalled.target.replace(/codex-hud-codex$/, `codex-hud-codex.d/${prebuiltVersion}/codex`)),
+);
+
+const staleManifestBundle = path.join(prebuiltRoot, "stale-manifest");
+const staleManifestBinary = path.join(staleManifestBundle, "codex");
+writeExecutable(staleManifestBinary, fakeCodexScript(prebuiltVersion));
+writeFile(staleManifestBundle, RUNTIME_MANIFEST_NAME, `${JSON.stringify({
+  schemaVersion: 1,
+  codexVersion: prebuiltVersion,
+  patchSetRevision: "0",
+  sourceCommit: prebuiltSourceCommit,
+  payloadSha256: crypto.createHash("sha256").update(fs.readFileSync(staleManifestBinary)).digest("hex"),
+})}\n`);
+assert.throws(
+  () => validateRuntimeManifest(staleManifestBundle, prebuiltArgs),
+  /patch-set revision mismatch/,
+  "an old prebuilt for the same Codex version must fail closed",
 );
 
 const unavailableArgs = { ...prebuiltArgs, prefix: path.join(prebuiltRoot, "unavailable") };
@@ -1438,6 +1473,31 @@ const doctorRecordedStatus = patchedRuntimeStatus(doctorRecordedReport);
 assert.strictEqual(doctorRecordedReport.stock.path, fs.realpathSync.native(doctorRecordedStock));
 assert.strictEqual(doctorRecordedStatus.stockVersion, "0.144.0");
 assert.strictEqual(doctorRecordedStatus.needsSync, false);
+assert.strictEqual(doctorRecordedStatus.metadataPatchSetRevision, PATCH_SET_REVISION);
+assert.strictEqual(doctorRecordedStatus.activePayloadSha256, doctorRecordedStatus.metadataPayloadSha256);
+const preRevisionReport = {
+  ...doctorRecordedReport,
+  launcher: {
+    ...doctorRecordedReport.launcher,
+    metadata: { ...doctorRecordedReport.launcher.metadata },
+  },
+};
+delete preRevisionReport.launcher.metadata.patchSetRevision;
+const preRevisionStatus = patchedRuntimeStatus(preRevisionReport);
+assert.strictEqual(preRevisionStatus.needsSync, true);
+assert.strictEqual(preRevisionStatus.action, "rebuild");
+assert.match(preRevisionStatus.reason, /revision is missing/);
+const replacedPayloadReport = {
+  ...doctorRecordedReport,
+  launcher: {
+    ...doctorRecordedReport.launcher,
+    metadata: { ...doctorRecordedReport.launcher.metadata, payloadSha256: "0".repeat(64) },
+  },
+};
+const replacedPayloadStatus = patchedRuntimeStatus(replacedPayloadReport);
+assert.strictEqual(replacedPayloadStatus.needsSync, true);
+assert.strictEqual(replacedPayloadStatus.action, "rebuild");
+assert.match(replacedPayloadStatus.reason, /payload SHA-256 changed/);
 refreshPatchedLauncher(doctorRecordedArgs, doctorRecordedReport, {
   resolveRenderer: () => ({ kind: "rust", path: path.join(doctorRecordedArgs.prefix, "codex-hud") }),
 });

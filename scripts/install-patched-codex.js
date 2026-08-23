@@ -11,6 +11,8 @@ const DEFAULT_RUNTIME_RELEASE_REPO = "brandonwie/codex-hud";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
 const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
 const RUST_RENDERER_BIN_NAME = "codex-hud";
+const PATCH_SET_REVISION = "1";
+const RUNTIME_MANIFEST_NAME = "codex-hud-runtime.json";
 const SAFE_COMMAND_NAME_RE = /^[A-Za-z0-9_-]+$/;
 const CODEX_VERSION_PATTERN = "\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?";
 const CODEX_VERSION_RE = new RegExp(`(${CODEX_VERSION_PATTERN})`);
@@ -21,6 +23,9 @@ const LAUNCHER_MARKER_FIELDS = {
   stock_realpath: "stockRealpath",
   stock_version: "stockVersion",
   renderer: "renderer",
+  patch_set_revision: "patchSetRevision",
+  source_commit: "sourceCommit",
+  payload_sha256: "payloadSha256",
   built_at: "builtAt",
   default_shim: "defaultShim",
 };
@@ -1209,6 +1214,41 @@ function sha256File(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
+function validateRuntimeManifest(bundleDir, args) {
+  const manifestPath = path.join(bundleDir, RUNTIME_MANIFEST_NAME);
+  if (!fs.existsSync(manifestPath)) {
+    throw new Error(`Prebuilt runtime archive is missing ${RUNTIME_MANIFEST_NAME}`);
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  } catch (error) {
+    throw new Error(`Prebuilt runtime manifest is invalid JSON: ${error.message}`);
+  }
+
+  if (manifest.schemaVersion !== 1) {
+    throw new Error(`Prebuilt runtime manifest schema must be 1, got: ${manifest.schemaVersion}`);
+  }
+  if (manifest.codexVersion !== args.version) {
+    throw new Error(`Prebuilt runtime manifest Codex version mismatch: expected ${args.version}, got ${manifest.codexVersion}`);
+  }
+  if (manifest.patchSetRevision !== PATCH_SET_REVISION) {
+    throw new Error(
+      `Prebuilt runtime patch-set revision mismatch: expected ${PATCH_SET_REVISION}, got ${manifest.patchSetRevision || "missing"}`,
+    );
+  }
+  if (!/^[0-9a-f]{40}$/.test(manifest.sourceCommit || "")) {
+    throw new Error("Prebuilt runtime manifest source commit must be a 40-character lowercase Git SHA");
+  }
+
+  const payloadSha256 = sha256File(path.join(bundleDir, builtBinaryName()));
+  if (manifest.payloadSha256 !== payloadSha256) {
+    throw new Error("Prebuilt runtime payload SHA-256 does not match its manifest");
+  }
+  return { ...manifest, payloadSha256 };
+}
+
 function installBinary(sourceDir, args) {
   const workspace = path.join(sourceDir, "codex-rs");
   const env = codexBuildEnv();
@@ -1337,15 +1377,24 @@ function installPrebuiltBinary(args, options = {}) {
 
     extractArchive(archivePath, tempDir, { baseName: asset.baseName });
     const bundleDir = path.join(tempDir, asset.baseName);
-    for (const required of [builtBinaryName(), "LICENSE", "NOTICE"]) {
+    for (const required of [builtBinaryName(), "LICENSE", "NOTICE", RUNTIME_MANIFEST_NAME]) {
       if (!fs.existsSync(path.join(bundleDir, required))) {
         throw new Error(`Prebuilt runtime archive is missing ${required}: ${asset.archiveName}`);
       }
     }
 
+    const manifest = validateRuntimeManifest(bundleDir, args);
+
     fs.mkdirSync(args.prefix, { recursive: true });
     const installed = installStagedBinary(stageBinaryFile(path.join(bundleDir, builtBinaryName()), args), args);
-    return { ...installed, source: "prebuilt", assetName: asset.archiveName };
+    return {
+      ...installed,
+      source: "prebuilt",
+      assetName: asset.archiveName,
+      patchSetRevision: manifest.patchSetRevision,
+      sourceCommit: manifest.sourceCommit,
+      payloadSha256: manifest.payloadSha256,
+    };
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1796,11 +1845,18 @@ function installLauncher(args, opts) {
       // No existing launcher to preserve a marker from.
     }
   }
+  const patchedProvenance = opts.mode === "patched"
+    ? {
+        patchSetRevision: opts.patchSetRevision || PATCH_SET_REVISION,
+        payloadSha256: opts.payloadSha256 || sha256File(opts.patchedBinary),
+      }
+    : {};
   const script = renderLauncherScript({
     prefix: args.prefix,
     binName: args.binName,
     launcherName: args.launcherName,
     ...opts,
+    ...patchedProvenance,
     defaultShim,
   });
 
@@ -2263,6 +2319,9 @@ function patchedRuntimeStatus(report) {
     patchedVersion,
     activeVersion,
     metadataPatchedVersion,
+    expectedPatchSetRevision: PATCH_SET_REVISION,
+    metadataPatchSetRevision: metadata.patchSetRevision || null,
+    metadataPayloadSha256: metadata.payloadSha256 || null,
     needsSync: false,
     action: "none",
     canFix: true,
@@ -2297,6 +2356,33 @@ function patchedRuntimeStatus(report) {
     status.needsSync = true;
     status.action = "rebuild";
     status.issues.push(`stock Codex is ${stock.version} but patched runtime is ${patchedVersion}`);
+  }
+
+  if (metadata.patchSetRevision !== PATCH_SET_REVISION) {
+    status.needsSync = true;
+    status.action = "rebuild";
+    status.issues.push(
+      `patched runtime revision is ${metadata.patchSetRevision || "missing"}; expected ${PATCH_SET_REVISION}`,
+    );
+  }
+
+  if (!metadata.payloadSha256) {
+    status.needsSync = true;
+    status.action = "rebuild";
+    status.issues.push("patched runtime payload SHA-256 is missing");
+  } else if (active && !active.broken) {
+    try {
+      status.activePayloadSha256 = sha256File(active.path);
+      if (status.activePayloadSha256 !== metadata.payloadSha256) {
+        status.needsSync = true;
+        status.action = "rebuild";
+        status.issues.push("patched runtime payload SHA-256 changed");
+      }
+    } catch (error) {
+      status.needsSync = true;
+      status.action = "rebuild";
+      status.issues.push(`patched runtime payload SHA-256 could not be read: ${error.message}`);
+    }
   }
 
   if (stock && metadata.stockVersion && metadata.stockVersion !== stock.version) {
@@ -2353,6 +2439,7 @@ function refreshPatchedLauncher(args, report, options = {}) {
     throw new Error("Cannot refresh patched launcher metadata because stock Codex was not found.");
   }
   const active = report.patched.active;
+  const metadata = report.launcher.metadata || {};
   if (!active || active.broken || !active.version) {
     throw new Error("Cannot refresh patched launcher metadata because the active patched payload is missing or broken.");
   }
@@ -2369,6 +2456,9 @@ function refreshPatchedLauncher(args, report, options = {}) {
     stockPath: trackedStockPath,
     stockRealpath: report.stock.realpath,
     stockVersion: report.stock.version,
+    patchSetRevision: metadata.patchSetRevision,
+    sourceCommit: metadata.sourceCommit,
+    payloadSha256: metadata.payloadSha256,
     statusLineCommand,
     renderer: renderer.kind,
     builtAt: new Date().toISOString(),
@@ -2680,7 +2770,10 @@ function runPatchedInstall(args) {
     verifyPatchedSource(sourceDir);
     console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
     installed = installBinary(sourceDir, args);
+    installed.sourceCommit = run("git", ["rev-parse", "HEAD"], { cwd: sourceDir }).trim();
   }
+  installed.patchSetRevision = PATCH_SET_REVISION;
+  installed.payloadSha256 = installed.payloadSha256 || sha256File(installed.target);
   const launcher = installLauncher(args, {
     mode: "patched",
     patchedBinary: installed.target,
@@ -2688,6 +2781,9 @@ function runPatchedInstall(args) {
     stockPath: stock ? stock.path : null,
     stockRealpath: stock ? stock.realpath : null,
     stockVersion: stock ? stock.version : null,
+    patchSetRevision: installed.patchSetRevision,
+    sourceCommit: installed.sourceCommit,
+    payloadSha256: installed.payloadSha256,
     statusLineCommand,
     renderer: renderer.kind,
     builtAt: new Date().toISOString(),
@@ -2780,6 +2876,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  PATCH_SET_REVISION,
+  RUNTIME_MANIFEST_NAME,
   activateStagedBinary,
   builtBinaryPath,
   codexBuildEnv,
@@ -2831,5 +2929,6 @@ module.exports = {
   verifyRustRenderer,
   verifyRendererSessionCapability,
   validateRuntimeArchiveEntries,
+  validateRuntimeManifest,
   checkRendererSessionCapability,
 };
