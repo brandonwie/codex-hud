@@ -1131,6 +1131,15 @@ assert(runtimeWorkflow.includes("actions/upload-artifact@bbbca2ddaa5d8feaa63e36b
 assert(!runtimeWorkflow.includes("--retain-build"), "ephemeral runtime builds must not retain their source-local target tree");
 assert(runtimeWorkflow.includes(RUNTIME_MANIFEST_NAME), "runtime archives must carry semantic patch provenance");
 assert(runtimeWorkflow.includes("--clobber"), "same-version patch-set releases must replace stale assets");
+assert(
+  runtimeWorkflow.includes('if ! gh release create "$tag"'),
+  "concurrent target lanes must handle a shared-release create conflict",
+);
+assert.strictEqual(
+  runtimeWorkflow.split('gh release view "$tag" >/dev/null 2>&1').length - 1,
+  2,
+  "a failed release create must be followed by a second existence check",
+);
 assert(runtimeWorkflow.includes("scripts/package-patched-runtime.js"), "CI must package through the shared packager");
 assert(runtimeWorkflow.includes("--target \"$CODEX_TARGET\""), "CI must pass the dispatched target to the packager");
 for (const target of ["aarch64-apple-darwin", "x86_64-apple-darwin"]) {

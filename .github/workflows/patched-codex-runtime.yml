@@ -154,8 +154,12 @@ jobs:
         run: |
           tag="codex-runtime-v${CODEX_VERSION}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" \
+            if ! gh release create "$tag" \
               --title "Patched Codex runtime ${CODEX_VERSION}" \
-              --notes "Checksummed codex-hud patched runtime for OpenAI Codex ${CODEX_VERSION}. The archive includes patch provenance plus the upstream Apache-2.0 LICENSE and NOTICE files."
+              --notes "Checksummed codex-hud patched runtime for OpenAI Codex ${CODEX_VERSION}. The archive includes patch provenance plus the upstream Apache-2.0 LICENSE and NOTICE files."; then
+              # Another target lane may have created the shared release after
+              # our initial lookup. Continue only when that release now exists.
+              gh release view "$tag" >/dev/null 2>&1
+            fi
           fi
           gh release upload "$tag" dist/* --clobber
