@@ -118,6 +118,23 @@ function fakeCodexScript(version) {
   return `#!/usr/bin/env bash\necho codex-cli ${version}\n`;
 }
 
+function packageRunCommand(target, calls = []) {
+  return (command, args, options = {}) => {
+    calls.push({ command, args, options });
+    if (command === "lipo") {
+      return target.startsWith("aarch64-") ? "arm64\n" : "x86_64\n";
+    }
+    const result = spawnSync(command, args, { encoding: "utf8", ...options });
+    if (result.error) {
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      throw new Error(`${command} ${args.join(" ")} failed with exit ${result.status}: ${result.stderr || ""}`);
+    }
+    return result.stdout;
+  };
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -1167,6 +1184,7 @@ assert.throws(
     sourceDir: packageSource,
     sourceCommit: "not-a-sha",
     codesign: false,
+    runCommand: packageRunCommand("aarch64-apple-darwin"),
     distDir: path.join(packageRoot, "dist-bad"),
   }),
   /40-character lowercase Git SHA/,
@@ -1179,6 +1197,7 @@ assert.throws(
     sourceDir: packageSource,
     sourceCommit: packageSourceCommit,
     codesign: false,
+    runCommand: packageRunCommand("aarch64-apple-darwin"),
     distDir: path.join(packageRoot, "dist-bad"),
   }),
   /expected version 0\.153\.0/,
@@ -1192,6 +1211,7 @@ for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
     sourceDir: packageSource,
     sourceCommit: packageSourceCommit,
     codesign: false,
+    runCommand: packageRunCommand(target),
     distDir: path.join(packageRoot, "dist"),
     workDir: path.join(packageRoot, "work"),
   });
@@ -1267,6 +1287,52 @@ for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
     /checksum mismatch/,
   );
 }
+
+assert.throws(
+  () => packagePatchedRuntime({
+    payloadPath: packagePayload,
+    version: packageVersion,
+    target: "aarch64-apple-darwin",
+    sourceDir: packageSource,
+    sourceCommit: packageSourceCommit,
+    codesign: false,
+    runCommand: packageRunCommand("x86_64-apple-darwin"),
+    distDir: path.join(packageRoot, "dist-wrong-arch"),
+  }),
+  /payload architecture mismatch.*expected arm64.*reported "x86_64"/,
+  "a Darwin payload must match the architecture encoded in its asset target",
+);
+
+const linuxCalls = [];
+packagePatchedRuntime({
+  payloadPath: packagePayload,
+  version: packageVersion,
+  target: "x86_64-unknown-linux-gnu",
+  sourceDir: packageSource,
+  sourceCommit: packageSourceCommit,
+  runCommand: packageRunCommand("x86_64-unknown-linux-gnu", linuxCalls),
+  distDir: path.join(packageRoot, "dist-linux"),
+  workDir: path.join(packageRoot, "work-linux"),
+});
+assert(!linuxCalls.some(({ command }) => command === "codesign"), "non-Darwin targets must not be codesigned by default");
+
+const windowsPackaged = packagePatchedRuntime({
+  payloadPath: packagePayload,
+  version: packageVersion,
+  target: "x86_64-pc-windows-msvc",
+  sourceDir: packageSource,
+  sourceCommit: packageSourceCommit,
+  codesign: false,
+  runCommand: packageRunCommand("x86_64-pc-windows-msvc"),
+  distDir: path.join(packageRoot, "dist-windows"),
+  workDir: path.join(packageRoot, "work-windows"),
+});
+assert(
+  spawnSync("tar", ["-tzf", windowsPackaged.archivePath], { encoding: "utf8" }).stdout
+    .split("\n")
+    .includes(`${windowsPackaged.baseName}/codex.exe`),
+  "Windows target archives must contain codex.exe",
+);
 
 const prebuiltVersion = "0.146.1";
 const prebuiltRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prebuilt-test-"));

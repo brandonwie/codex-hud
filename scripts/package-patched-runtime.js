@@ -8,7 +8,8 @@
 //   <dist>/codex-hud-codex-v<version>-<target>.tar.gz.sha256
 //
 // The archive holds one top-level directory named after the bundle that
-// contains `codex`, the upstream `LICENSE` and `NOTICE`, and the
+// contains `codex` (`codex.exe` for Windows targets), the upstream `LICENSE`
+// and `NOTICE`, and the
 // `codex-hud-runtime.json` provenance manifest. CI and the maintainer's
 // local-publish path share this script so both produce byte-compatible
 // bundles; the installer's prebuilt verification is the only consumer.
@@ -44,10 +45,19 @@ function sha256File(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-function validateTarget(target) {
+function runtimeTargetTraits(target) {
   if (!KNOWN_RUNTIME_TARGETS.includes(target)) {
     throw new Error(`--target must be one of ${KNOWN_RUNTIME_TARGETS.join(", ")}, got: ${target}`);
   }
+  const darwinArchitecture = target === "x86_64-apple-darwin"
+    ? "x86_64"
+    : target === "aarch64-apple-darwin"
+      ? "arm64"
+      : null;
+  return {
+    binaryName: target.endsWith("-pc-windows-msvc") ? "codex.exe" : "codex",
+    darwinArchitecture,
+  };
 }
 
 function validateSourceCommit(value) {
@@ -82,7 +92,7 @@ function packagePatchedRuntime(options) {
     throw new Error("payloadPath, version, target, and sourceDir are required");
   }
   validateCodexVersion(version, "--version");
-  validateTarget(target);
+  const targetTraits = runtimeTargetTraits(target);
   if (!fs.existsSync(payloadPath)) {
     throw new Error(`payload not found: ${payloadPath}`);
   }
@@ -97,7 +107,7 @@ function packagePatchedRuntime(options) {
   const workDir = options.workDir || fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-package-"));
   const names = bundleNames(version, target);
   const bundleDir = path.join(workDir, names.baseName);
-  const bundledBinary = path.join(bundleDir, "codex");
+  const bundledBinary = path.join(bundleDir, targetTraits.binaryName);
 
   fs.rmSync(bundleDir, { recursive: true, force: true });
   fs.mkdirSync(bundleDir, { recursive: true });
@@ -108,7 +118,22 @@ function packagePatchedRuntime(options) {
     fs.copyFileSync(path.join(sourceDir, name), path.join(bundleDir, name));
   }
 
-  const codesign = options.codesign === undefined ? process.platform === "darwin" : Boolean(options.codesign);
+  if (targetTraits.darwinArchitecture) {
+    const reportedArchitectures = String(runCommand("lipo", ["-archs", bundledBinary], { timeout: 10000 }))
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!reportedArchitectures.includes(targetTraits.darwinArchitecture)) {
+      throw new Error(
+        `payload architecture mismatch for ${target}: expected ${targetTraits.darwinArchitecture}, ` +
+        `lipo reported "${reportedArchitectures.join(" ") || "none"}"`,
+      );
+    }
+  }
+
+  const codesign = options.codesign === undefined
+    ? process.platform === "darwin" && Boolean(targetTraits.darwinArchitecture)
+    : Boolean(options.codesign);
   if (codesign) {
     runCommand("codesign", ["--force", "--sign", "-", bundledBinary]);
   }
