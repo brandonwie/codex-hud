@@ -1,1 +1,1 @@
-/Users/brandonwie/dev/personal/3b/.claude/project-claude/codex-hud.md
+/Users/brandonwie/dev/3b/.claude/project-claude/codex-hud.md
