@@ -1203,7 +1203,24 @@ assert.throws(
   /expected version 0\.153\.0/,
   "a payload that reports a different version must not be packaged",
 );
+const prefixCollisionPayload = path.join(packageRoot, "payload-prefix-collision", "codex");
+writeExecutable(prefixCollisionPayload, fakeCodexScript("1.2.30"));
+assert.throws(
+  () => packagePatchedRuntime({
+    payloadPath: prefixCollisionPayload,
+    version: "1.2.3",
+    target: "aarch64-apple-darwin",
+    sourceDir: packageSource,
+    sourceCommit: packageSourceCommit,
+    codesign: false,
+    runCommand: packageRunCommand("aarch64-apple-darwin"),
+    distDir: path.join(packageRoot, "dist-prefix-collision"),
+  }),
+  /reported version 1\.2\.30, expected version 1\.2\.3/,
+  "version validation must reject semver prefix collisions",
+);
 for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
+  const packageCalls = [];
   const packaged = packagePatchedRuntime({
     payloadPath: packagePayload,
     version: packageVersion,
@@ -1211,7 +1228,7 @@ for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
     sourceDir: packageSource,
     sourceCommit: packageSourceCommit,
     codesign: false,
-    runCommand: packageRunCommand(target),
+    runCommand: packageRunCommand(target, packageCalls),
     distDir: path.join(packageRoot, "dist"),
     workDir: path.join(packageRoot, "work"),
   });
@@ -1222,6 +1239,9 @@ for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
   assert(fs.existsSync(packaged.checksumPath));
   assert.strictEqual(packaged.manifest.patchSetRevision, PATCH_SET_REVISION);
   assert.strictEqual(packaged.manifest.sourceCommit, packageSourceCommit);
+  const versionProbe = packageCalls.find(({ command, args }) => command.endsWith("/codex") && args[0] === "--version");
+  assert(versionProbe, "packaging must health-check the bundled Codex payload");
+  assert.strictEqual(versionProbe.options.timeout, 10000, "the packaged Codex health check must be bounded");
   const checksumText = fs.readFileSync(packaged.checksumPath, "utf8");
   assert.strictEqual(
     checksumForAsset(checksumText, packaged.archiveName),

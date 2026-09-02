@@ -3015,6 +3015,7 @@ module.exports = {
   isManagedDefaultShim,
   checkPatchedRuntime,
   migrateLegacyLayout,
+  parseCodexVersion,
   parseArgs,
   parseLauncherMetadata,
   patchedRuntimeStatus,

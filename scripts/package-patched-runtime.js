@@ -24,6 +24,7 @@ const {
   KNOWN_RUNTIME_TARGETS,
   PATCH_SET_REVISION,
   RUNTIME_MANIFEST_NAME,
+  parseCodexVersion,
   validateCodexVersion,
 } = require("./install-patched-codex");
 
@@ -139,9 +140,10 @@ function packagePatchedRuntime(options) {
   }
 
   // Health check after signing: the payload must report the version it claims.
-  const reported = String(runCommand(bundledBinary, ["--version"])).trim();
-  if (!reported.includes(version)) {
-    throw new Error(`packaged codex reported "${reported}", expected version ${version}`);
+  const reported = String(runCommand(bundledBinary, ["--version"], { timeout: 10000 })).trim();
+  const reportedVersion = parseCodexVersion(reported);
+  if (reportedVersion !== version) {
+    throw new Error(`packaged codex reported version ${reportedVersion}, expected version ${version}`);
   }
 
   const manifest = {
