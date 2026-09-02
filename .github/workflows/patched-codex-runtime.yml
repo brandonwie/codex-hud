@@ -7,12 +7,21 @@ on:
         description: OpenAI Codex version to patch (without rust-v prefix)
         required: true
         type: string
+      target:
+        description: Rust target triple to build and publish
+        required: true
+        type: choice
+        default: aarch64-apple-darwin
+        options:
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
       local_build_ok:
         description: >-
           Confirm a successful local source build of this exact version
-          preceded this dispatch. Runner-minute guard: the job refuses to
-          build without it.
-        required: true
+          preceded this dispatch. Runner-minute guard for the Intel target,
+          whose cold builds exceed an hour: that job refuses to build without
+          it. The arm64 target ignores it.
+        required: false
         type: boolean
         default: false
 
@@ -20,13 +29,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: patched-codex-runtime-${{ inputs.codex_version }}-x86_64-apple-darwin
+  group: patched-codex-runtime-${{ inputs.codex_version }}-${{ inputs.target }}
   cancel-in-progress: false
 
 jobs:
-  build-intel-macos:
-    name: Build Intel macOS runtime
-    runs-on: macos-15-intel
+  build-macos:
+    name: Build macOS runtime (${{ inputs.target }})
+    # macos-15 is Apple Silicon (arm64); the Intel target needs the
+    # macos-15-intel label. Both build natively, so no cross-compilation.
+    runs-on: ${{ inputs.target == 'x86_64-apple-darwin' && 'macos-15-intel' || 'macos-15' }}
     # Hard cap. Cold-cache builds of the 126-crate Codex workspace have been
     # observed past 64 minutes; actions/cache only saves on success, so a cap
     # below the cold-build time can never bootstrap the cache. Tighten after
@@ -34,13 +45,15 @@ jobs:
     timeout-minutes: 90
     env:
       CODEX_VERSION: ${{ inputs.codex_version }}
+      CODEX_TARGET: ${{ inputs.target }}
       CARGO_PROFILE_RELEASE_LTO: "off"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
       CARGO_PROFILE_RELEASE_DEBUG: "none"
       CARGO_PROFILE_RELEASE_STRIP: "symbols"
     steps:
       - name: Assert local build gate
-        if: ${{ !inputs.local_build_ok }}
+        # Intel-only runner-minute guard; arm64 builds finish in minutes.
+        if: ${{ inputs.target == 'x86_64-apple-darwin' && !inputs.local_build_ok }}
         run: |
           echo "::error::Refusing to build: local_build_ok is false. Run the local source build for this version first, then re-dispatch with local_build_ok=true."
           exit 1
@@ -73,10 +86,10 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             ${{ runner.temp }}/cargo-target
-          key: patched-codex-${{ runner.os }}-${{ runner.arch }}-x86_64-apple-darwin-${{ hashFiles('scripts/install-patched-codex.js') }}-${{ inputs.codex_version }}
+          key: patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-${{ hashFiles('scripts/install-patched-codex.js') }}-${{ inputs.codex_version }}
           restore-keys: |
-            patched-codex-${{ runner.os }}-${{ runner.arch }}-x86_64-apple-darwin-${{ hashFiles('scripts/install-patched-codex.js') }}-
-            patched-codex-${{ runner.os }}-${{ runner.arch }}-x86_64-apple-darwin-
+            patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-${{ hashFiles('scripts/install-patched-codex.js') }}-
+            patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-
 
       - name: Validate input
         run: |
@@ -117,30 +130,23 @@ jobs:
         # Pinned from refs/tags/v7.0.0 on 2026-08-06.
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
-          name: codex-${{ inputs.codex_version }}-x86_64-apple-darwin-cargo-timings
+          name: codex-${{ inputs.codex_version }}-${{ inputs.target }}-cargo-timings
           path: ${{ runner.temp }}/cargo-target/cargo-timings/
           if-no-files-found: ignore
           retention-days: 14
 
       - name: Package runtime and licenses
+        # Shared packager (also the maintainer's local-publish path): bundles
+        # codex + LICENSE + NOTICE + codex-hud-runtime.json, ad-hoc codesigns,
+        # health-checks --version, then writes the archive and its .sha256.
         run: |
-          target="x86_64-apple-darwin"
-          base="codex-hud-codex-v${CODEX_VERSION}-${target}"
-          bundle="$RUNNER_TEMP/$base"
-          source="$RUNNER_TEMP/cache/openai-codex-rust-v${CODEX_VERSION}"
-          mkdir -p "$bundle" dist
-          cp "$RUNNER_TEMP/prefix/codex-hud-codex.d/$CODEX_VERSION/codex" "$bundle/codex"
-          cp "$source/LICENSE" "$bundle/LICENSE"
-          cp "$source/NOTICE" "$bundle/NOTICE"
-          codesign --force --sign - "$bundle/codex"
-          "$bundle/codex" --version
-          export PATCH_SET_REVISION="$(node -p "require('./scripts/install-patched-codex').PATCH_SET_REVISION")"
-          export SOURCE_COMMIT="$(git -C "$source" rev-parse HEAD)"
-          export PAYLOAD_SHA256="$(shasum -a 256 "$bundle/codex" | awk '{print $1}')"
-          node -e 'const fs = require("fs"); fs.writeFileSync(process.argv[1], `${JSON.stringify({ schemaVersion: 1, codexVersion: process.env.CODEX_VERSION, patchSetRevision: process.env.PATCH_SET_REVISION, sourceCommit: process.env.SOURCE_COMMIT, payloadSha256: process.env.PAYLOAD_SHA256 }, null, 2)}\n`)' "$bundle/codex-hud-runtime.json"
-          tar -czf "dist/$base.tar.gz" -C "$RUNNER_TEMP" "$base"
-          cd dist
-          shasum -a 256 "$base.tar.gz" > "$base.tar.gz.sha256"
+          node scripts/package-patched-runtime.js \
+            --payload "$RUNNER_TEMP/prefix/codex-hud-codex.d/$CODEX_VERSION/codex" \
+            --version "$CODEX_VERSION" \
+            --target "$CODEX_TARGET" \
+            --source "$RUNNER_TEMP/cache/openai-codex-rust-v${CODEX_VERSION}" \
+            --work "$RUNNER_TEMP" \
+            --dist dist
 
       - name: Publish runtime release
         env:
@@ -148,8 +154,12 @@ jobs:
         run: |
           tag="codex-runtime-v${CODEX_VERSION}"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" \
+            if ! gh release create "$tag" \
               --title "Patched Codex runtime ${CODEX_VERSION}" \
-              --notes "Checksummed codex-hud patched runtime for OpenAI Codex ${CODEX_VERSION}. The archive includes patch provenance plus the upstream Apache-2.0 LICENSE and NOTICE files."
+              --notes "Checksummed codex-hud patched runtime for OpenAI Codex ${CODEX_VERSION}. The archive includes patch provenance plus the upstream Apache-2.0 LICENSE and NOTICE files."; then
+              # Another target lane may have created the shared release after
+              # our initial lookup. Continue only when that release now exists.
+              gh release view "$tag" >/dev/null 2>&1
+            fi
           fi
           gh release upload "$tag" dist/* --clobber

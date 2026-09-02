@@ -1173,12 +1173,17 @@ function sourceBuildFallbackAllowed(args, options = {}) {
   return Boolean(args.sourceBuild) || platform !== "darwin" || arch !== "x64";
 }
 
+const RUNTIME_TARGETS = {
+  darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" },
+  linux: { x64: "x86_64-unknown-linux-gnu", arm64: "aarch64-unknown-linux-gnu" },
+  win32: { x64: "x86_64-pc-windows-msvc", arm64: "aarch64-pc-windows-msvc" },
+};
+const KNOWN_RUNTIME_TARGETS = Object.freeze(
+  Object.values(RUNTIME_TARGETS).flatMap((byArch) => Object.values(byArch)),
+);
+
 function runtimeTarget(platform = process.platform, arch = process.arch) {
-  const targets = {
-    darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" },
-    linux: { x64: "x86_64-unknown-linux-gnu", arm64: "aarch64-unknown-linux-gnu" },
-    win32: { x64: "x86_64-pc-windows-msvc", arm64: "aarch64-pc-windows-msvc" },
-  };
+  const targets = RUNTIME_TARGETS;
   return targets[platform] && targets[platform][arch] ? targets[platform][arch] : null;
 }
 
@@ -2987,6 +2992,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  KNOWN_RUNTIME_TARGETS,
   PATCH_SET_REVISION,
   RUNTIME_MANIFEST_NAME,
   activateStagedBinary,
@@ -3009,6 +3015,7 @@ module.exports = {
   isManagedDefaultShim,
   checkPatchedRuntime,
   migrateLegacyLayout,
+  parseCodexVersion,
   parseArgs,
   parseLauncherMetadata,
   patchedRuntimeStatus,
@@ -3040,6 +3047,7 @@ module.exports = {
   verifyRustRenderer,
   verifyRendererSessionCapability,
   validateRuntimeArchiveEntries,
+  validateCodexVersion,
   validateRuntimeManifest,
   checkRendererSessionCapability,
 };
