@@ -233,7 +233,7 @@ patched command: (none)
 status: healthy
 ```
 
-Sai com código diferente de zero apenas quando a cadeia de entrada ativa está quebrada — uma degradação do renderizador nunca altera um status saudável. A recomendação de recompilação do renderizador tem granularidade de release: ela compara a versão do `codex-hud` definida na compilação com o `package.json`, então dispara quando uma release muda a versão, e não a cada commit.
+Sai com código diferente de zero apenas quando a cadeia de entrada ativa está quebrada — uma degradação do renderizador nunca altera um status saudável. A recomendação de recompilação do renderizador tem granularidade de release: ela compara a versão do `codex-hud` definida na compilação com o `package.json`, então dispara quando uma release muda a versão, e não a cada commit. Uma verificação de configuração conta como quebrada: um launcher em modo stock enquanto `$CODEX_HOME/config.toml` declara `[tui].status_line_command`, porque o Codex stock ignora essa chave e o rodapé desaparece silenciosamente (`npm run patch:codex` o restaura, ou remova a chave).
 
 ## Solução de problemas
 

@@ -233,7 +233,7 @@ patched command: (none)
 status: healthy
 ```
 
-Yalnızca etkin giriş zinciri bozulduğunda sıfırdan farklı bir kodla çıkar — oluşturucu tarafındaki bir bozulma, sağlıklı (healthy) durumu asla değiştirmez. Oluşturucu için yeniden derleme önerisi sürüm (release) ayrıntı düzeyinde çalışır: derleme zamanındaki `codex-hud` sürümünü `package.json` ile karşılaştırır; bu yüzden her commit'te değil, yalnızca bir release sürüm numarasını ilerlettiğinde tetiklenir.
+Yalnızca etkin giriş zinciri bozulduğunda sıfırdan farklı bir kodla çıkar — oluşturucu tarafındaki bir bozulma, sağlıklı (healthy) durumu asla değiştirmez. Oluşturucu için yeniden derleme önerisi sürüm (release) ayrıntı düzeyinde çalışır: derleme zamanındaki `codex-hud` sürümünü `package.json` ile karşılaştırır; bu yüzden her commit'te değil, yalnızca bir release sürüm numarasını ilerlettiğinde tetiklenir. Bir yapılandırma denetimi bozuk sayılır: `$CODEX_HOME/config.toml` `[tui].status_line_command` bildirirken başlatıcının stock modunda olması; stock Codex bu anahtarı yok sayar ve alt bilgi sessizce kaybolur (`npm run patch:codex` geri getirir ya da anahtarı kaldırın).
 
 ## Sorun giderme
 

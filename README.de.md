@@ -233,7 +233,7 @@ patched command: (none)
 status: healthy
 ```
 
-Der Befehl endet nur dann mit einem Exit-Code ungleich null, wenn die aktive Startkette defekt ist — ein degradierter Renderer kippt einen gesunden Status nie. Die Rebuild-Empfehlung für den Renderer arbeitet auf Release-Granularität: Sie vergleicht die einkompilierte `codex-hud`-Version mit `package.json` und schlägt daher an, wenn ein Release die Version anhebt — nicht bei jedem Commit.
+Der Befehl endet nur dann mit einem Exit-Code ungleich null, wenn die aktive Startkette defekt ist — ein degradierter Renderer kippt einen gesunden Status nie. Die Rebuild-Empfehlung für den Renderer arbeitet auf Release-Granularität: Sie vergleicht die einkompilierte `codex-hud`-Version mit `package.json` und schlägt daher an, wenn ein Release die Version anhebt — nicht bei jedem Commit. Eine Konfigurationsprüfung zählt als defekt: ein Launcher im Stock-Modus, während `$CODEX_HOME/config.toml` `[tui].status_line_command` deklariert — Stock-Codex ignoriert diesen Schlüssel, und die Fußzeile verschwindet stillschweigend (`npm run patch:codex` stellt sie wieder her, oder entfernen Sie den Schlüssel).
 
 ## Fehlerbehebung
 

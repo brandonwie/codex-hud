@@ -233,7 +233,7 @@ patched command: (none)
 status: healthy
 ```
 
-Solo devuelve un código distinto de cero cuando la cadena de entrada activa está rota — una degradación del renderizador nunca convierte en no sano un estado sano. La recomendación de recompilar el renderizador tiene granularidad de release: compara la versión de `codex-hud` fijada en tiempo de compilación con la de `package.json`, de modo que se activa cuando una release cambia la versión, no en cada commit.
+Solo devuelve un código distinto de cero cuando la cadena de entrada activa está rota — una degradación del renderizador nunca convierte en no sano un estado sano. La recomendación de recompilar el renderizador tiene granularidad de release: compara la versión de `codex-hud` fijada en tiempo de compilación con la de `package.json`, de modo que se activa cuando una release cambia la versión, no en cada commit. Una comprobación de configuración cuenta como rota: un lanzador en modo stock mientras `$CODEX_HOME/config.toml` declara `[tui].status_line_command`, porque Codex stock ignora esa clave y el pie de página desaparece en silencio (`npm run patch:codex` lo restaura, o elimine la clave).
 
 ## Solución de problemas
 

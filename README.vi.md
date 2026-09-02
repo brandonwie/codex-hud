@@ -233,7 +233,7 @@ patched command: (none)
 status: healthy
 ```
 
-Chỉ thoát với mã khác 0 khi chuỗi điểm vào đang hoạt động bị hỏng — suy giảm ở bộ render không bao giờ làm đổi trạng thái healthy. Khuyến nghị build lại bộ render hoạt động ở mức release: nó so sánh phiên bản `codex-hud` lúc biên dịch với `package.json`, nên chỉ kích hoạt khi một bản release thay đổi phiên bản, chứ không phải ở mỗi commit.
+Chỉ thoát với mã khác 0 khi chuỗi điểm vào đang hoạt động bị hỏng — suy giảm ở bộ render không bao giờ làm đổi trạng thái healthy. Khuyến nghị build lại bộ render hoạt động ở mức release: nó so sánh phiên bản `codex-hud` lúc biên dịch với `package.json`, nên chỉ kích hoạt khi một bản release thay đổi phiên bản, chứ không phải ở mỗi commit. Một kiểm tra cấu hình được tính là hỏng: launcher ở chế độ stock trong khi `$CODEX_HOME/config.toml` khai báo `[tui].status_line_command`, vì Codex stock bỏ qua khóa đó và footer biến mất âm thầm (`npm run patch:codex` khôi phục lại, hoặc xóa khóa đó).
 
 ## Khắc phục sự cố
 

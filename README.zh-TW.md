@@ -233,7 +233,7 @@ patched command: (none)
 status: healthy
 ```
 
-僅在活動進入鏈損壞時才以非零代碼結束 — 渲染器降級永遠不會把健康狀態翻成異常。渲染器的重建建議以 release 為粒度:它會比較編譯時的 `codex-hud` 版本與 `package.json`,因此只有在發布版本變動時才會觸發,而不是每次提交都觸發。
+僅在活動進入鏈損壞時才以非零代碼結束 — 渲染器降級永遠不會把健康狀態翻成異常。渲染器的重建建議以 release 為粒度:它會比較編譯時的 `codex-hud` 版本與 `package.json`,因此只有在發布版本變動時才會觸發,而不是每次提交都觸發。 有一項設定檢查會被視為損壞:啟動器處於 stock 模式,而 `$CODEX_HOME/config.toml` 宣告了 `[tui].status_line_command`。stock Codex 會忽略該鍵,頁尾會悄悄消失(執行 `npm run patch:codex` 還原,或移除該鍵)。
 
 ## 疑難排解
 

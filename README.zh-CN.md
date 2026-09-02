@@ -233,7 +233,7 @@ patched command: (none)
 status: healthy
 ```
 
-仅当活动入口链损坏时才以非零码退出 — 渲染器退化绝不会把 healthy 状态翻转为失败。渲染器的重建建议按发布粒度工作:它把编译进 `codex-hud` 的版本与 `package.json` 进行比较,因此只在发布推进版本号时才会触发,而不是每次提交都触发。
+仅当活动入口链损坏时才以非零码退出 — 渲染器退化绝不会把 healthy 状态翻转为失败。渲染器的重建建议按发布粒度工作:它把编译进 `codex-hud` 的版本与 `package.json` 进行比较,因此只在发布推进版本号时才会触发,而不是每次提交都触发。 有一项配置检查会被视为损坏:启动器处于 stock 模式,而 `$CODEX_HOME/config.toml` 声明了 `[tui].status_line_command`。stock Codex 会忽略该键,页脚会悄然消失(运行 `npm run patch:codex` 恢复,或删除该键)。
 
 ## 故障排除
 
