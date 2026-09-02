@@ -8,6 +8,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const {
   PATCH_SET_REVISION,
+  KNOWN_RUNTIME_TARGETS,
   RUNTIME_MANIFEST_NAME,
   builtBinaryPath,
   detectCodexVersion,
@@ -1113,6 +1114,159 @@ assert(runtimeWorkflow.includes("actions/upload-artifact@bbbca2ddaa5d8feaa63e36b
 assert(!runtimeWorkflow.includes("--retain-build"), "ephemeral runtime builds must not retain their source-local target tree");
 assert(runtimeWorkflow.includes(RUNTIME_MANIFEST_NAME), "runtime archives must carry semantic patch provenance");
 assert(runtimeWorkflow.includes("--clobber"), "same-version patch-set releases must replace stale assets");
+assert(runtimeWorkflow.includes("scripts/package-patched-runtime.js"), "CI must package through the shared packager");
+assert(runtimeWorkflow.includes("--target \"$CODEX_TARGET\""), "CI must pass the dispatched target to the packager");
+for (const target of ["aarch64-apple-darwin", "x86_64-apple-darwin"]) {
+  assert(runtimeWorkflow.includes(`- ${target}`), `runtime workflow must offer the ${target} target`);
+}
+assert(
+  !/x86_64-apple-darwin-\$\{\{ hashFiles/.test(runtimeWorkflow),
+  "cache keys must derive from the dispatched target, not a hard-coded triple",
+);
+assert(runtimeWorkflow.includes("${{ inputs.target }}-cargo-timings"), "timings artifact must be target-scoped");
+assert(runtimeWorkflow.includes("patched-codex-runtime-${{ inputs.codex_version }}-${{ inputs.target }}"), "concurrency must be target-scoped");
+assert(
+  runtimeWorkflow.includes("inputs.target == 'x86_64-apple-darwin' && !inputs.local_build_ok"),
+  "the local_build_ok runner-minute guard must stay on the Intel target",
+);
+assert(
+  runtimeWorkflow.includes("inputs.target == 'x86_64-apple-darwin' && 'macos-15-intel' || 'macos-15'"),
+  "runner label must follow the target (macos-15 is arm64)",
+);
+
+// --- shared packager: both targets round-trip through the installer's prebuilt verification ---
+const { bundleNames, packagePatchedRuntime, parseArgs: parsePackageArgs } = require("./package-patched-runtime");
+assert.deepStrictEqual(KNOWN_RUNTIME_TARGETS.slice(0, 2), ["x86_64-apple-darwin", "aarch64-apple-darwin"]);
+assert.strictEqual(parsePackageArgs(["--no-codesign", "--target", "aarch64-apple-darwin"]).codesign, false);
+assert.strictEqual(parsePackageArgs([]).codesign, undefined);
+assert.throws(() => parsePackageArgs(["--bogus"]), /Unknown option/);
+const packageVersion = "0.152.0";
+const packageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-package-test-"));
+const packageSource = path.join(packageRoot, "source");
+writeFile(packageSource, "LICENSE", "Apache License 2.0\n");
+writeFile(packageSource, "NOTICE", "OpenAI Codex\n");
+const packagePayload = path.join(packageRoot, "payload", "codex");
+writeExecutable(packagePayload, fakeCodexScript(packageVersion));
+const packageSourceCommit = "b".repeat(40);
+assert.throws(
+  () => packagePatchedRuntime({
+    payloadPath: packagePayload,
+    version: packageVersion,
+    target: "riscv64gc-unknown-linux-gnu",
+    sourceDir: packageSource,
+    sourceCommit: packageSourceCommit,
+    codesign: false,
+  }),
+  /--target must be one of/,
+);
+assert.throws(
+  () => packagePatchedRuntime({
+    payloadPath: packagePayload,
+    version: packageVersion,
+    target: "aarch64-apple-darwin",
+    sourceDir: packageSource,
+    sourceCommit: "not-a-sha",
+    codesign: false,
+    distDir: path.join(packageRoot, "dist-bad"),
+  }),
+  /40-character lowercase Git SHA/,
+);
+assert.throws(
+  () => packagePatchedRuntime({
+    payloadPath: packagePayload,
+    version: "0.153.0",
+    target: "aarch64-apple-darwin",
+    sourceDir: packageSource,
+    sourceCommit: packageSourceCommit,
+    codesign: false,
+    distDir: path.join(packageRoot, "dist-bad"),
+  }),
+  /expected version 0\.153\.0/,
+  "a payload that reports a different version must not be packaged",
+);
+for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
+  const packaged = packagePatchedRuntime({
+    payloadPath: packagePayload,
+    version: packageVersion,
+    target,
+    sourceDir: packageSource,
+    sourceCommit: packageSourceCommit,
+    codesign: false,
+    distDir: path.join(packageRoot, "dist"),
+    workDir: path.join(packageRoot, "work"),
+  });
+  const expectedNames = bundleNames(packageVersion, target);
+  assert.strictEqual(packaged.archiveName, expectedNames.archiveName);
+  assert.strictEqual(packaged.archiveName, `codex-hud-codex-v${packageVersion}-${target}.tar.gz`);
+  assert(fs.existsSync(packaged.archivePath));
+  assert(fs.existsSync(packaged.checksumPath));
+  assert.strictEqual(packaged.manifest.patchSetRevision, PATCH_SET_REVISION);
+  assert.strictEqual(packaged.manifest.sourceCommit, packageSourceCommit);
+  const checksumText = fs.readFileSync(packaged.checksumPath, "utf8");
+  assert.strictEqual(
+    checksumForAsset(checksumText, packaged.archiveName),
+    crypto.createHash("sha256").update(fs.readFileSync(packaged.archivePath)).digest("hex"),
+  );
+  assert.deepStrictEqual(
+    spawnSync("tar", ["-tzf", packaged.archivePath], { encoding: "utf8" }).stdout.trim().split("\n").sort(),
+    [
+      `${packaged.baseName}/`,
+      `${packaged.baseName}/LICENSE`,
+      `${packaged.baseName}/NOTICE`,
+      `${packaged.baseName}/codex`,
+      `${packaged.baseName}/${RUNTIME_MANIFEST_NAME}`,
+    ].sort(),
+  );
+
+  // Round trip: the real installer download path, real tar extraction, real
+  // manifest verification, using the archive this packager produced.
+  const arch = target.startsWith("aarch64") ? "arm64" : "x64";
+  const roundTripArgs = {
+    prefix: path.join(packageRoot, `bin-${arch}`),
+    binName: "codex-hud-codex",
+    version: packageVersion,
+    runtimeReleaseRepo: "brandonwie/codex-hud",
+  };
+  const roundTripAsset = runtimeReleaseAsset(roundTripArgs, { platform: "darwin", arch });
+  assert.strictEqual(roundTripAsset.archiveName, packaged.archiveName);
+  const roundTripUrls = [];
+  const roundTrip = installPrebuiltBinary(roundTripArgs, {
+    platform: "darwin",
+    arch,
+    downloadFile(url, destination) {
+      roundTripUrls.push(url);
+      fs.copyFileSync(url.endsWith(".sha256") ? packaged.checksumPath : packaged.archivePath, destination);
+      return true;
+    },
+  });
+  assert.strictEqual(roundTrip.source, "prebuilt");
+  assert.strictEqual(roundTrip.version, packageVersion);
+  assert.strictEqual(roundTrip.assetName, packaged.archiveName);
+  assert.strictEqual(roundTrip.sourceCommit, packageSourceCommit);
+  assert.strictEqual(roundTrip.payloadSha256, packaged.manifest.payloadSha256);
+  assert.deepStrictEqual(roundTripUrls.map((url) => url.split("/").pop()), [
+    encodeURIComponent(packaged.checksumName),
+    encodeURIComponent(packaged.archiveName),
+  ]);
+
+  // A tampered archive must fail the checksum gate before extraction.
+  const tamperedArgs = { ...roundTripArgs, prefix: path.join(packageRoot, `bin-${arch}-tampered`) };
+  assert.throws(
+    () => installPrebuiltBinary(tamperedArgs, {
+      platform: "darwin",
+      arch,
+      downloadFile(url, destination) {
+        if (url.endsWith(".sha256")) {
+          fs.copyFileSync(packaged.checksumPath, destination);
+        } else {
+          fs.writeFileSync(destination, Buffer.concat([fs.readFileSync(packaged.archivePath), Buffer.from("x")]));
+        }
+        return true;
+      },
+    }),
+    /checksum mismatch/,
+  );
+}
 
 const prebuiltVersion = "0.146.1";
 const prebuiltRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prebuilt-test-"));
