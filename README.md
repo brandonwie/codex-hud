@@ -211,7 +211,7 @@ The supported launcher flow targets macOS and Linux shells. WSL can work when pa
 | Capability | Intel macOS (`x86_64`) | Apple Silicon macOS (`arm64`) | Linux |
 | ---------- | ----------------------- | ----------------------------- | ----- |
 | Rust renderer and stock-delegating launcher | Supported | Supported | Supported |
-| Experimental patched TUI footer | Downloads a checksummed prebuilt runtime for the exact Codex version when published; otherwise fails fast with an explicit `--source-build` fallback | Source-build fallback | Source-build fallback |
+| Experimental patched TUI footer | Downloads a checksummed prebuilt runtime for the exact Codex version when published; otherwise fails fast with an explicit `--source-build` fallback | Downloads the matching checksummed `aarch64-apple-darwin` runtime when published; otherwise uses the source-build fallback | Source-build fallback |
 
 Intel macOS does not silently start a long local Codex build. `npm run patch:codex -- --make-default` downloads and verifies the matching `x86_64-apple-darwin` runtime when available. If that exact Codex release has no Intel asset, the installer exits with the expected asset name and leaves the existing `codex` command untouched; local compilation happens only when you explicitly add `--source-build`.
 
