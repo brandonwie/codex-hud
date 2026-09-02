@@ -2097,6 +2097,42 @@ function uninstallDefaultShim(args) {
   return { target, status: "removed" };
 }
 
+// Stock Codex has no [tui].status_line_command support; the key only exists in
+// the patched build. A stock-mode launcher next to a config.toml that declares
+// it means the user expects the footer and silently gets none, and codex:sync
+// would report "none" forever because stock mode is exempt from payload sync.
+// Minimal TOML scan: the key must sit inside the [tui] table.
+function codexConfigStatusLine(env) {
+  // Resolve like Codex does (CODEX_HOME, else $HOME/.codex) from the supplied
+  // env only, so an isolated env never leaks the real user config into a probe.
+  const codexHome = env.CODEX_HOME || (env.HOME ? path.join(env.HOME, ".codex") : null);
+  const result = { path: codexHome ? path.join(codexHome, "config.toml") : null, declared: false };
+  if (!result.path) {
+    return result;
+  }
+  let text;
+  try {
+    text = fs.readFileSync(result.path, "utf8");
+  } catch (_) {
+    return result;
+  }
+  let inTui = false;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const table = line.match(/^\[\s*([^\]]+?)\s*\]$/);
+    if (table) {
+      inTui = table[1] === "tui";
+      continue;
+    }
+    if (inTui && /^status_line_command\s*=/.test(line)) {
+      result.declared = true;
+      break;
+    }
+  }
+  return result;
+}
+
 function doctor(args, options = {}) {
   const runCommand = options.runCommand || run;
   const env = options.env || process.env;
@@ -2113,6 +2149,7 @@ function doctor(args, options = {}) {
     anomalies: [],
     recommendations: [],
     buildCache: null,
+    configStatusLine: codexConfigStatusLine(env),
     healthy: true,
   };
 
@@ -2273,6 +2310,16 @@ function doctor(args, options = {}) {
     report.recommendations.push("stock-mode launcher but no stock codex found -> install the Codex CLI");
   }
 
+  if (report.launcher.mode === "stock" && report.configStatusLine.declared) {
+    report.healthy = false;
+    report.anomalies.push(
+      `stock-mode launcher cannot render [tui].status_line_command declared in ${report.configStatusLine.path}`,
+    );
+    report.recommendations.push(
+      "config.toml expects the HUD footer but the stock launcher ignores it -> run: npm run patch:codex (or remove [tui].status_line_command)",
+    );
+  }
+
   if (report.launcher.mode === "patched") {
     const patchedVersion =
       (report.launcher.metadata && report.launcher.metadata.patchedVersion) ||
@@ -2392,6 +2439,12 @@ function patchedRuntimeStatus(report) {
     status.reason = report.launcher.mode === "stock"
       ? "stock launcher delegates to stock Codex, so updates are picked up automatically"
       : "patched launcher is not installed";
+    if (report.launcher.mode === "stock" && report.configStatusLine && report.configStatusLine.declared) {
+      status.issues.push(
+        `${report.configStatusLine.path} declares [tui].status_line_command, which stock Codex ignores; run npm run patch:codex for the footer`,
+      );
+      status.reason = `${status.reason}; ${status.issues[0]}`;
+    }
     return status;
   }
 

@@ -1447,6 +1447,8 @@ assert(reviewBroken.quarantinedPayload && fs.existsSync(reviewBroken.quarantined
 // --- doctor ---
 const doctorStockRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-stock-test-"));
 const doctorStockBin = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-stock-bin-test-"));
+// Subprocess doctor runs inherit process.env; keep the real ~/.codex out of them.
+const isolatedCodexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-codex-home-test-"));
 const doctorFakeStock = path.join(doctorStockBin, "codex");
 writeExecutable(doctorFakeStock, fakeCodexScript("0.139.0"));
 const doctorFakeStockRealpath = fs.realpathSync.native(doctorFakeStock);
@@ -1468,6 +1470,58 @@ assert.strictEqual(stockReport.shim.status, "managed");
 assert.strictEqual(stockReport.stock.path, doctorFakeStock);
 assert.strictEqual(stockReport.healthy, true);
 assert.deepStrictEqual(stockReport.recommendations, []);
+
+// A stock launcher next to a config.toml that declares [tui].status_line_command
+// is a silent HUD regression: stock Codex ignores the key, and codex:check would
+// otherwise report "none" forever because stock mode is exempt from payload sync.
+const footerConfigHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-footer-home-test-"));
+fs.writeFileSync(
+  path.join(footerConfigHome, "config.toml"),
+  [
+    'model = "gpt-5"',
+    "",
+    "[projects.\"/tmp\"]",
+    'status_line_command = "not-the-tui-table"',
+    "",
+    "[tui]",
+    "status_line = [\"model\"]",
+    "status_line_command = \"/home/me/.local/bin/codex-hud --line --color\"",
+    "",
+    "[tui.keymap.composer]",
+    "",
+  ].join("\n"),
+);
+const footerStockReport = doctor(doctorStockArgs, {
+  env: { PATH: doctorStockBin, CODEX_HOME: footerConfigHome },
+  runCommand: () => "codex-cli 0.139.0\n",
+});
+assert.strictEqual(footerStockReport.launcher.mode, "stock");
+assert.strictEqual(footerStockReport.configStatusLine.declared, true);
+assert.strictEqual(footerStockReport.healthy, false, "stock launcher must not read healthy when config expects the footer");
+assert(footerStockReport.anomalies.some((entry) => entry.includes("[tui].status_line_command")));
+assert(footerStockReport.recommendations.some((entry) => entry.includes("npm run patch:codex")));
+const footerStockStatus = patchedRuntimeStatus(footerStockReport);
+assert.strictEqual(footerStockStatus.needsSync, false, "stock mode stays exempt from automatic payload sync");
+assert.match(footerStockStatus.reason, /status_line_command/);
+assert.match(footerStockStatus.reason, /patch:codex/);
+
+// The same key outside the [tui] table must not trigger the guard.
+const nonTuiConfigHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-nontui-home-test-"));
+fs.writeFileSync(
+  path.join(nonTuiConfigHome, "config.toml"),
+  ["[projects.\"/tmp\"]", 'status_line_command = "x"', "", "[tui]", "status_line = [\"model\"]", ""].join("\n"),
+);
+const nonTuiStockReport = doctor(doctorStockArgs, {
+  env: { PATH: doctorStockBin, CODEX_HOME: nonTuiConfigHome },
+  runCommand: () => "codex-cli 0.139.0\n",
+});
+assert.strictEqual(nonTuiStockReport.configStatusLine.declared, false);
+assert.strictEqual(nonTuiStockReport.healthy, true);
+
+// An isolated env without HOME or CODEX_HOME never consults the real user config.
+const stockNoHomeStatus = patchedRuntimeStatus(stockReport);
+assert.strictEqual(stockReport.configStatusLine.path, null);
+assert.strictEqual(stockNoHomeStatus.needsSync, false);
 
 // A managed default shim hides the stock binary that originally occupied the
 // same path. Prefer the launcher's recorded realpath over older PATH fallbacks.
@@ -2057,7 +2111,7 @@ assert(
 const rendererDoctorRun = spawnSync(
   process.execPath,
   [path.join(__dirname, "install-patched-codex.js"), "--doctor", "--prefix", doctorRendererStockRoot],
-  { encoding: "utf8", env: { ...process.env, PATH: `${doctorStockBin}:${process.env.PATH}` } },
+  { encoding: "utf8", env: { ...process.env, CODEX_HOME: isolatedCodexHome, PATH: `${doctorStockBin}:${process.env.PATH}` } },
 );
 assert.strictEqual(rendererDoctorRun.status, 0, "stock-mode doctor with missing renderer must exit healthy");
 assert(
@@ -2152,7 +2206,7 @@ assert.strictEqual(rendererDefaultReport.renderer.installed, false);
 const rendererDefaultRun = spawnSync(
   process.execPath,
   [path.join(__dirname, "install-patched-codex.js"), "--doctor", "--prefix", doctorStockRoot],
-  { encoding: "utf8", env: { ...process.env, PATH: `${doctorStockBin}:${process.env.PATH}` } },
+  { encoding: "utf8", env: { ...process.env, CODEX_HOME: isolatedCodexHome, PATH: `${doctorStockBin}:${process.env.PATH}` } },
 );
 assert.strictEqual(rendererDefaultRun.status, 0);
 assert(
@@ -2172,7 +2226,7 @@ assert.strictEqual(rendererDefaultInstalledReport.renderer.version, repoPackageV
 const rendererDefaultInstalledRun = spawnSync(
   process.execPath,
   [path.join(__dirname, "install-patched-codex.js"), "--doctor", "--prefix", doctorStockRoot],
-  { encoding: "utf8", env: { ...process.env, PATH: `${doctorStockBin}:${process.env.PATH}` } },
+  { encoding: "utf8", env: { ...process.env, CODEX_HOME: isolatedCodexHome, PATH: `${doctorStockBin}:${process.env.PATH}` } },
 );
 assert.strictEqual(rendererDefaultInstalledRun.status, 0);
 assert(

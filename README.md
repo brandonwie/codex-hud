@@ -250,7 +250,7 @@ patched command: (none)
 status: healthy
 ```
 
-It exits non-zero only when the active entrypoint chain is broken — renderer degradation never flips a healthy status. The renderer rebuild recommendation is release-granularity: it compares the compile-time `codex-hud` version against `package.json`, so it fires when a release moves the version, not on every commit.
+It exits non-zero only when the active entrypoint chain is broken — renderer degradation never flips a healthy status. One config check counts as broken: a stock-mode launcher while `$CODEX_HOME/config.toml` declares `[tui].status_line_command`, because stock Codex ignores that key and the footer silently disappears (`npm run patch:codex` restores it, or remove the key). The renderer rebuild recommendation is release-granularity: it compares the compile-time `codex-hud` version against `package.json`, so it fires when a release moves the version, not on every commit.
 
 For patched-mode maintenance, `npm run codex:check` compares the stock version, patch-set revision, and deployed payload SHA-256 without changing anything. `npm run codex:sync` performs the same check and then no-ops, refreshes launcher metadata, or rebuilds the patched payload through the staged `npm run patch:codex` path when either Codex or codex-hud's patch set changed.
 
