@@ -148,8 +148,8 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `percentRound` | `true`  | Round percentages to whole numbers.                      |
 | `bar`          | `true`  | Draw the bargraph on `ctx` / `5h` / `7d`.                |
 | `barWidth`     | `5`     | Bargraph width in cells; `0` disables it, max `40`.      |
-| `barFilled`    | `"█"`   | Glyph for the used part of the bar.                      |
-| `barEmpty`     | `"░"`   | Glyph for the remaining part of the bar.                 |
+| `barFilled`    | `"█"`   | Glyph for the used part of the bar; single-cell only.    |
+| `barEmpty`     | `"░"`   | Glyph for the rest of the bar; single-cell only.         |
 | `tokenUnits`   | `true`  | Use `k`/`M` abbreviation for token counts.               |
 | `tokenUsage`   | `true`  | `false` → total only, hide `(I:.. O:.. C:..)`.           |
 | `pace`         | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
@@ -239,8 +239,11 @@ fixtures lock them; do not "clean them up":
    `round(percent / 100 * barWidth)` (half away from zero, matching JS
    `Math.round` for the positive values involved), clamped to `0..barWidth`, and
    it takes the **same threshold color as the percent it precedes**. A
-   multi-char `barFilled` / `barEmpty` is narrowed to its first scalar so the
-   bar can never exceed `barWidth` cells.
+   multi-char `barFilled` / `barEmpty` is narrowed to its first scalar, and a
+   scalar that is East Asian **Wide** or **Fullwidth** is rejected outright
+   (config warning, default kept), so the bar can never exceed `barWidth`
+   cells. East Asian **Ambiguous** scalars stay legal — the defaults `█` / `░`
+   are themselves ambiguous.
 10. **Identity atoms use the normal segment separator:** model, effort, and a
     non-default service tier are independently colorized pieces; `default` and
     `standard` tiers are omitted without leaving a separator gap.

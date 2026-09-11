@@ -434,7 +434,10 @@ fn render_bar(percent: Option<f64>, ctx: &RenderCtx) -> String {
     let Some(percent) = percent.filter(|p| p.is_finite()) else {
         return String::new();
     };
-    let width = ctx.format_number("barWidth", 5.0).round().clamp(0.0, 40.0) as usize;
+    let width = ctx
+        .format_number("barWidth", 5.0)
+        .round()
+        .clamp(0.0, hudcfg::MAX_BAR_WIDTH as f64) as usize;
     if width == 0 {
         return String::new();
     }

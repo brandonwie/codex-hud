@@ -127,11 +127,36 @@
   };
 
   const readBool = (element, fallback) => (element ? Boolean(element.checked) : fallback);
+  // Mirrors hudcfg::is_double_width(): East Asian Wide / Fullwidth scalars take
+  // two terminal cells and would double the bar's rendered width. Ambiguous
+  // scalars are allowed — the default glyphs █ / ░ are themselves ambiguous.
+  const isDoubleWidth = (ch) => {
+    const cp = ch.codePointAt(0);
+    if (cp < 0x1100) return false;
+    return (
+      (cp >= 0x1100 && cp <= 0x115f)
+      || cp === 0x2329
+      || cp === 0x232a
+      || (cp >= 0x2e80 && cp <= 0xa4cf && cp !== 0x303f)
+      || (cp >= 0xac00 && cp <= 0xd7a3)
+      || (cp >= 0xf900 && cp <= 0xfaff)
+      || (cp >= 0xfe10 && cp <= 0xfe19)
+      || (cp >= 0xfe30 && cp <= 0xfe6f)
+      || (cp >= 0xff00 && cp <= 0xff60)
+      || (cp >= 0xffe0 && cp <= 0xffe6)
+      || (cp >= 0x1f300 && cp <= 0x1faff)
+      || (cp >= 0x20000 && cp <= 0x3fffd)
+    );
+  };
+
   // Mirrors hudcfg::first_char(): a multi-char glyph would widen the bar past
-  // barWidth cells, so only the first scalar is kept.
+  // barWidth cells, so only the first scalar is kept, and only when it occupies
+  // a single cell.
   const readGlyph = (element, fallback) => {
     const value = String(element && element.value ? element.value : "");
-    return Array.from(value)[0] || fallback;
+    const first = Array.from(value)[0];
+    if (!first || isDoubleWidth(first)) return fallback;
+    return first;
   };
 
   // Case-insensitive to match the Rust renderer (format_model_name uses

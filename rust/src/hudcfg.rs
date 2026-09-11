@@ -55,12 +55,42 @@ pub fn default_config() -> Value {
 }
 
 /// A bar wider than this is a config mistake, not an intent.
-const MAX_BAR_WIDTH: i64 = 40;
+pub const MAX_BAR_WIDTH: i64 = 40;
+
+/// True when `ch` is East Asian Wide or Fullwidth, i.e. two terminal cells.
+///
+/// Ambiguous-width scalars are deliberately NOT rejected: the default bar
+/// glyphs `█` / `░` are themselves ambiguous (one cell outside a CJK locale),
+/// so rejecting that class would reject the defaults. Unicode TR11:
+/// https://www.unicode.org/reports/tr11/
+fn is_double_width(ch: char) -> bool {
+    let cp = ch as u32;
+    if cp < 0x1100 {
+        return false;
+    }
+    (0x1100..=0x115F).contains(&cp)
+        || cp == 0x2329
+        || cp == 0x232A
+        || ((0x2E80..=0xA4CF).contains(&cp) && cp != 0x303F)
+        || (0xAC00..=0xD7A3).contains(&cp)
+        || (0xF900..=0xFAFF).contains(&cp)
+        || (0xFE10..=0xFE19).contains(&cp)
+        || (0xFE30..=0xFE6F).contains(&cp)
+        || (0xFF00..=0xFF60).contains(&cp)
+        || (0xFFE0..=0xFFE6).contains(&cp)
+        || (0x1F300..=0x1FAFF).contains(&cp)
+        || (0x20000..=0x3FFFD).contains(&cp)
+}
 
 /// First Unicode scalar of `value`, so a multi-char glyph setting cannot widen
-/// the bar past `barWidth` cells.
-fn first_char(value: &str) -> Option<String> {
-    value.chars().next().map(|c| c.to_string())
+/// the bar past `barWidth` cells — and only when that scalar occupies a single
+/// terminal cell, because a wide glyph would double the bar's rendered width.
+fn first_char(value: &str) -> Result<Option<String>, ()> {
+    match value.chars().next() {
+        None => Ok(None),
+        Some(ch) if is_double_width(ch) => Err(()),
+        Some(ch) => Ok(Some(ch.to_string())),
+    }
 }
 
 fn truncate_js_utf16_units(value: &str, max_units: usize) -> String {
@@ -565,12 +595,16 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         for key in ["barFilled", "barEmpty"] {
             match format.get(key) {
                 Some(Value::String(s)) => match first_char(s) {
-                    Some(ch) => {
+                    Ok(Some(ch)) => {
                         coerced.insert(key.into(), Value::String(ch));
                     }
-                    None => note(
+                    Ok(None) => note(
                         warnings,
                         format!("format.{} must not be empty; ignored", key),
+                    ),
+                    Err(()) => note(
+                        warnings,
+                        format!("format.{} must be a single-width character; ignored", key),
                     ),
                 },
                 Some(_) => note(
@@ -799,6 +833,30 @@ mod tests {
         assert!(warnings
             .iter()
             .any(|w| w == "test.toml: format.barEmpty must not be empty; ignored"));
+    }
+
+    #[test]
+    fn validate_and_coerce_rejects_double_width_bar_glyphs() {
+        let raw = json!({ "format": { "barFilled": "界", "barEmpty": "🟩" } });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let format = coerced
+            .get("format")
+            .and_then(|f| f.as_object())
+            .expect("coerced format object");
+
+        assert!(!format.contains_key("barFilled"));
+        assert!(!format.contains_key("barEmpty"));
+        for key in ["barFilled", "barEmpty"] {
+            assert!(warnings.iter().any(|w| w
+                == &format!(
+                    "test.toml: format.{} must be a single-width character; ignored",
+                    key
+                )));
+        }
+        // The defaults are East Asian Ambiguous, not Wide, and must stay legal.
+        assert!(!is_double_width('█'));
+        assert!(!is_double_width('░'));
     }
 
     #[test]

@@ -184,6 +184,32 @@ for (const [setting, id] of readmeConfigControls) {
   if (!js.includes(`byId("${id}")`)) fail.push(`site app does not read ${setting}`);
 }
 
+// The bar-width slider must be able to reach every value the renderer accepts.
+// Control presence alone would not catch a slider capped below MAX_BAR_WIDTH.
+{
+  const rustMaxBarWidth = read("rust/src/hudcfg.rs").match(
+    /pub const MAX_BAR_WIDTH: i64 = (\d+);/,
+  )?.[1];
+  if (!rustMaxBarWidth) {
+    fail.push("could not read MAX_BAR_WIDTH from rust/src/hudcfg.rs");
+  } else {
+    const sliderMax = html.match(/id="bar-width"[^>]*\smax="(\d+)"/)?.[1];
+    if (sliderMax !== rustMaxBarWidth) {
+      fail.push(
+        `bar-width slider max="${sliderMax}" must match MAX_BAR_WIDTH ${rustMaxBarWidth}`,
+      );
+    }
+    if (!js.includes(`clamp(field.barWidth && field.barWidth.value, 0, ${rustMaxBarWidth}, 5)`)) {
+      fail.push(`site app must clamp barWidth to 0..${rustMaxBarWidth}`);
+    }
+  }
+}
+
+// Glyph width rule must exist on both surfaces, not just in the renderer.
+if (!js.includes("isDoubleWidth")) {
+  fail.push("site app must reject double-width bar glyphs like hudcfg::is_double_width");
+}
+
 const installCommand = html.match(/id="install-step-install">([^<]+)</)?.[1];
 const updateCommand = html.match(/id="install-step-update">([^<]+)</)?.[1];
 if (!installCommand || installCommand !== updateCommand) {
