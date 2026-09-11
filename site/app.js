@@ -463,7 +463,7 @@
       thresholdCrit: clamp(field.thresholdCrit && field.thresholdCrit.value, 0, 100, 90),
       percentRound: readBool(field.percentRound, true),
       bar: readBool(field.bar, true),
-      barWidth: clamp(field.barWidth && field.barWidth.value, 0, 40, 5),
+      barWidth: clamp(field.barWidth ? field.barWidth.value : undefined, 0, 40, 5),
       barFilled: readGlyph(field.barFilled, "█"),
       barEmpty: readGlyph(field.barEmpty, "░"),
       tokenUnits: readBool(field.tokenUnits, true),
