@@ -986,6 +986,19 @@ function patchSource(sourceRoot) {
     changes.push("TUI ANSI status-line parser");
   }
 
+  const localSettings = path.join(sourceRoot, "codex-rs", "tui", "src", "local_settings.rs");
+  if (fs.existsSync(localSettings) && applyTextPatch(
+    localSettings,
+    "status_line_command: config.tui_status_line_command.clone(),",
+    `                status_line: config.tui_status_line.clone(),
+                status_line_use_colors: config.tui_status_line_use_colors,`,
+    `                status_line: config.tui_status_line.clone(),
+                status_line_command: config.tui_status_line_command.clone(),
+                status_line_use_colors: config.tui_status_line_use_colors,`,
+  )) {
+    changes.push("TUI local_settings status_line_command");
+  }
+
   if (applyTextPatch(
     pluginLoader,
     "remote_plugin_config.enabled &= configured_plugin.enabled;",
