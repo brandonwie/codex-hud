@@ -53,7 +53,10 @@ Valid ids (render in the order listed in `segments`):
 Aliases expanded before validation: `workspace` → `project,branch,runtime`;
 `context` → `ctx`; `tokens` → `tkn`.
 
-`runtime` (`node vX`) is available but **off by default** — add it to opt in.
+`runtime` (`node vX`) and `tkn` (`Tkn:904k(I:… O:… C:…)`) are available but
+**off by default** — add them to opt in. A config that names
+`["model", "project", "branch", "ctx", "5h", "7d", "tkn"]` with
+`format.bar = false` reproduces the pre-0.6 footer byte for byte.
 
 `5h` and `7d` are filled from Codex's rate-limit windows matched by window
 length (300 and 10080 minutes respectively) rather than by payload position;
@@ -143,6 +146,10 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | Key            | Default | Meaning                                                  |
 | -------------- | ------- | -------------------------------------------------------- |
 | `percentRound` | `true`  | Round percentages to whole numbers.                      |
+| `bar`          | `true`  | Draw the bargraph on `ctx` / `5h` / `7d`.                |
+| `barWidth`     | `5`     | Bargraph width in cells; `0` disables it, max `40`.      |
+| `barFilled`    | `"█"`   | Glyph for the used part of the bar.                      |
+| `barEmpty`     | `"░"`   | Glyph for the remaining part of the bar.                 |
 | `tokenUnits`   | `true`  | Use `k`/`M` abbreviation for token counts.               |
 | `tokenUsage`   | `true`  | `false` → total only, hide `(I:.. O:.. C:..)`.           |
 | `pace`         | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
@@ -172,7 +179,7 @@ those variables are absent and the renderer reads Codex's `config.toml`
 
 ```js
 {
-  segments: ["model", "project", "branch", "ctx", "5h", "7d", "tkn"],
+  segments: ["model", "project", "branch", "ctx", "5h", "7d"],
   space: false,
   separators: { segment: "|", tokenPart: ",", labelValue: ":", open: "(", close: ")" },
   labels: { ctx: "Ctx", "5h": "5h", "7d": "7d", tkn: "Tkn", tokenInput: "I:", tokenOutput: "O:", tokenCache: "C:" },
@@ -184,7 +191,8 @@ those variables are absent and the renderer reads Codex's `config.toml`
   },
   thresholds: { percent: { warn: 70, crit: 90 }, pace: { warn: 0, crit: 15 } },
   format: {
-    percentRound: true, tokenUnits: true, tokenUsage: true, pace: true, pacePrefix: true,
+    percentRound: true, bar: true, barWidth: 5, barFilled: "█", barEmpty: "░",
+    tokenUnits: true, tokenUsage: true, pace: true, pacePrefix: true,
     identityShort: true, fastMode: false,
     paceSlowPrefix: "🐢", paceNormalPrefix: "👾", paceFastPrefix: "🔥",
   },
@@ -225,10 +233,17 @@ fixtures lock them; do not "clean them up":
 7. **Segment order is exactly `config.segments`**; alias expansion happens before
    rendering; arrays replace (never concat) on merge.
 8. **Missing data renders `label:?`** (e.g. `5h:?`, `Tkn:?`), not an omitted
-   segment.
-9. **Identity atoms use the normal segment separator:** model, effort, and a
-   non-default service tier are independently colorized pieces; `default` and
-   `standard` tiers are omitted without leaving a separator gap.
+   segment — and carries **no bar**, because an unknown percent has no fill.
+9. **The bargraph sits between `separators.labelValue` and the percent**, with a
+   single space after it: `Ctx:` + bar + `" "` + `21%`. Fill is
+   `round(percent / 100 * barWidth)` (half away from zero, matching JS
+   `Math.round` for the positive values involved), clamped to `0..barWidth`, and
+   it takes the **same threshold color as the percent it precedes**. A
+   multi-char `barFilled` / `barEmpty` is narrowed to its first scalar so the
+   bar can never exceed `barWidth` cells.
+10. **Identity atoms use the normal segment separator:** model, effort, and a
+    non-default service tier are independently colorized pieces; `default` and
+    `standard` tiers are omitted without leaving a separator gap.
 
 ## Enforcement
 

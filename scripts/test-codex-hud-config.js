@@ -63,7 +63,7 @@ function readmeFormatKeys() {
     .map((match) => match[1]);
 }
 
-const DEFAULT_SEGMENTS = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
+const DEFAULT_SEGMENTS = ["model", "project", "branch", "ctx", "5h", "7d"];
 
 // Isolated CODEX_HOME with no sessions/config so config resolution is deterministic.
 const home = tmpdir();
@@ -85,6 +85,10 @@ try {
     assert.strictEqual(config.config.format.effortShort, undefined);
     assert.strictEqual(config.config.format.fastMode, false);
     assert.strictEqual(config.config.format.tokenUsage, true);
+    assert.strictEqual(config.config.format.bar, true);
+    assert.strictEqual(config.config.format.barWidth, 5);
+    assert.strictEqual(config.config.format.barFilled, "█");
+    assert.strictEqual(config.config.format.barEmpty, "░");
     assert.strictEqual(config.config.format.pace, true);
     assert.strictEqual(config.config.format.pacePrefix, true);
     assert.strictEqual(config.config.format.paceSlowPrefix, "🐢");
@@ -99,7 +103,7 @@ try {
     assert.doesNotMatch(line.stdout, / \| /);
     assert.doesNotMatch(line.stdout, /: /);
     assert.match(line.stdout, /Ctx/);
-    assert.match(line.stdout, /Tkn/);
+    assert.doesNotMatch(line.stdout, /Tkn/, "tkn is not a default segment");
   }
 
   // 2. space=true restores padded segment and label separators.

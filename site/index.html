@@ -481,6 +481,25 @@
               <span>Token units</span>
             </label>
             <label class="toggle">
+              <input id="bar" data-setting type="checkbox" checked>
+              <span>Usage bargraph</span>
+            </label>
+            <div class="range-control">
+              <label for="bar-width">Bar width</label>
+              <output id="bar-width-out" for="bar-width">5</output>
+              <input id="bar-width" data-setting type="range" min="0" max="20" value="5">
+            </div>
+            <div class="compact-grid">
+              <label>
+                Bar filled
+                <input id="bar-filled" data-setting type="text" value="█" maxlength="1" autocomplete="off">
+              </label>
+              <label>
+                Bar empty
+                <input id="bar-empty" data-setting type="text" value="░" maxlength="1" autocomplete="off">
+              </label>
+            </div>
+            <label class="toggle">
               <input id="show-token-usage" data-setting type="checkbox" checked>
               <span>Token detail</span>
             </label>
