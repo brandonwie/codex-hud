@@ -30,7 +30,7 @@ De forma predeterminada es un complemento de la `[tui].status_line` nativa de Co
 La línea de estado compacta, impresa con `--line` (renderizada como pie de página dentro de la TUI solo en modo parcheado):
 
 ```text
-5.6-sol|h|f|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.6-sol|h|f|codex-hud|git(main*)|Ctx:█░░░░ 21%|5h:█░░░░ 17%(5h,🐢100%)|7d:█░░░░ 16%(5.1d,👾27%)
 ```
 
 > Los segmentos, las etiquetas, los colores y los umbrales de esa línea son todos configurables; consulta [Configuración](#configuración).
@@ -112,7 +112,7 @@ Captura de terminal de la línea de estado compacta (`--line`):
 
 ```text
 $ ./rust/target/release/codex-hud --line
-5.6-sol|h|f|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.6-sol|h|f|codex-hud|git(main)|Ctx:███░░ 50%|5h:░░░░░ 4%(4.0h,🐢21%)|7d:█░░░░ 20%(4.9d,👾30%)
 ```
 
 The default status-line renderer is `codex-hud`, this repo's small Rust binary. Two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the in-repo status-line renderer.
@@ -156,8 +156,9 @@ separator = "|"
 # Qué segmentos mostrar, en orden. Ids:
 #   model, project, branch, runtime, ctx, 5h, 7d, tkn
 # Alias: workspace = project + branch + runtime; context = ctx; tokens = tkn.
-# (runtime / "node vX" está disponible pero desactivado por defecto; agrégalo para activarlo.)
-segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]
+# (runtime / "node vX" y tkn / "Tkn:904k(...)" están disponibles pero
+# desactivados por defecto; agrégalos para activarlos.)
+segments = ["model", "project", "branch", "ctx", "5h", "7d"]
 
 # Renombra la etiqueta de un segmento (las claves son ids de segmento).
 [labels]
@@ -181,6 +182,10 @@ crit = 90
 # Conmutadores de formato.
 [format]
 percentRound = true # false -> one decimal place
+bar = true          # false -> oculta la barra de ctx/5h/7d, conserva el %
+barWidth = 5        # ancho de la barra en celdas (0 la desactiva, máx. 40)
+barFilled = "█"     # glifo de la parte usada de la barra
+barEmpty = "░"      # glifo de la parte restante de la barra
 tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> solo total, oculta (I:.. O:.. C:..)
 pace = true     # false -> hide the pace % in 5h/7d
@@ -256,7 +261,7 @@ npm run patch:codex
 
 The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and stages the executable under `~/.local/bin/codex-hud-codex.d/<version>/codex`. The staged payload must pass a `--version` health check **before** anything is activated; only then is `~/.local/bin/codex-hud-codex` atomically retargeted to the new payload, and the previous version is kept on disk for rollback. A failed build is kept aside as `<version>.failed` and the active runtime is left untouched. It also writes `~/.local/bin/codex-hud-tui` in patched mode, a launcher that passes the colored status-line command through Codex's `-c tui.status_line_command=...` override without changing `~/.codex/config.toml`. With the default `--renderer auto`, the injected command is `'~/.local/bin/codex-hud' --line --color`; if that Rust renderer is missing or fails its health check, the patched install stops instead of falling back to another renderer. The executable path and `argv[0]` both keep Codex-visible names, so terminal integrations such as Herdr can still recognize the pane as a Codex session.
 
-Patched mode also passes live session state to the HUD renderer through four stable environment variables: `CODEX_HUD_MODEL`, `CODEX_HUD_EFFORT`, `CODEX_HUD_SERVICE_TIER`, and `CODEX_HUD_ROLLOUT_PATH`. Each patched session therefore keeps its own identity, context, and token totals. A fresh session may briefly have no effort value or rollout path; until Codex finishes opening the rollout, the HUD shows `Ctx:?` and `Tkn:?` as unknown placeholders instead of borrowing another session's values. Live `/model`, reasoning, and `/fast` changes are reflected immediately, but Codex's `/model` flow can persist the model and effort to global `~/.codex/config.toml`. For a session-only identity, launch with `codex -m <model> -c 'model_reasoning_effort="<effort>"'`. The `5h` and `7d` segments remain account-wide, so movement in both HUDs is expected and is not session bleed. The installer and `npm run doctor` also verify that the deployed `~/.local/bin/codex-hud` actually consumes these variables: a renderer built before this contract fails the patched-mode install health check (with a `npm run build:rust` hint) instead of silently falling back to `config.toml` identity and another session's usage.
+Patched mode also passes live session state to the HUD renderer through four stable environment variables: `CODEX_HUD_MODEL`, `CODEX_HUD_EFFORT`, `CODEX_HUD_SERVICE_TIER`, and `CODEX_HUD_ROLLOUT_PATH`. Each patched session therefore keeps its own identity, context, and token totals. A fresh session may briefly have no effort value or rollout path; until Codex finishes opening the rollout, the HUD shows `Ctx:?` and `5h:?` as unknown placeholders instead of borrowing another session's values. Live `/model`, reasoning, and `/fast` changes are reflected immediately, but Codex's `/model` flow can persist the model and effort to global `~/.codex/config.toml`. For a session-only identity, launch with `codex -m <model> -c 'model_reasoning_effort="<effort>"'`. The `5h` and `7d` segments remain account-wide, so movement in both HUDs is expected and is not session bleed. The installer and `npm run doctor` also verify that the deployed `~/.local/bin/codex-hud` actually consumes these variables: a renderer built before this contract fails the patched-mode install health check (with a `npm run build:rust` hint) instead of silently falling back to `config.toml` identity and another session's usage.
 
 El modo de lanzador seguro no toca tu comando `codex` habitual:
 

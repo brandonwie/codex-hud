@@ -1,3 +1,4 @@
+use crate::compat;
 use crate::util;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
@@ -11,7 +12,7 @@ const MAX_PACE_PREFIX_UTF16_UNITS: usize = 8;
 
 pub fn default_config() -> Value {
     json!({
-        "segments": ["model", "project", "branch", "ctx", "5h", "7d", "tkn"],
+        "segments": ["model", "project", "branch", "ctx", "5h", "7d"],
         "space": false,
         "separators": { "segment": "|", "tokenPart": ",", "labelValue": ":", "open": "(", "close": ")" },
         "labels": { "ctx": "Ctx", "5h": "5h", "7d": "7d", "tkn": "Tkn", "tokenInput": "I:", "tokenOutput": "O:", "tokenCache": "C:" },
@@ -36,6 +37,10 @@ pub fn default_config() -> Value {
         "thresholds": { "percent": { "warn": 70, "crit": 90 }, "pace": { "warn": 0, "crit": 15 } },
         "format": {
             "percentRound": true,
+            "bar": true,
+            "barWidth": 5,
+            "barFilled": "█",
+            "barEmpty": "░",
             "tokenUnits": true,
             "tokenUsage": true,
             "pace": true,
@@ -47,6 +52,45 @@ pub fn default_config() -> Value {
             "paceFastPrefix": "🔥"
         }
     })
+}
+
+/// A bar wider than this is a config mistake, not an intent.
+pub const MAX_BAR_WIDTH: i64 = 40;
+
+/// True when `ch` is East Asian Wide or Fullwidth, i.e. two terminal cells.
+///
+/// Ambiguous-width scalars are deliberately NOT rejected: the default bar
+/// glyphs `█` / `░` are themselves ambiguous (one cell outside a CJK locale),
+/// so rejecting that class would reject the defaults. Unicode TR11:
+/// https://www.unicode.org/reports/tr11/
+fn is_double_width(ch: char) -> bool {
+    let cp = ch as u32;
+    if cp < 0x1100 {
+        return false;
+    }
+    (0x1100..=0x115F).contains(&cp)
+        || cp == 0x2329
+        || cp == 0x232A
+        || ((0x2E80..=0xA4CF).contains(&cp) && cp != 0x303F)
+        || (0xAC00..=0xD7A3).contains(&cp)
+        || (0xF900..=0xFAFF).contains(&cp)
+        || (0xFE10..=0xFE19).contains(&cp)
+        || (0xFE30..=0xFE6F).contains(&cp)
+        || (0xFF00..=0xFF60).contains(&cp)
+        || (0xFFE0..=0xFFE6).contains(&cp)
+        || (0x1F300..=0x1FAFF).contains(&cp)
+        || (0x20000..=0x3FFFD).contains(&cp)
+}
+
+/// First Unicode scalar of `value`, so a multi-char glyph setting cannot widen
+/// the bar past `barWidth` cells — and only when that scalar occupies a single
+/// terminal cell, because a wide glyph would double the bar's rendered width.
+fn first_char(value: &str) -> Result<Option<String>, ()> {
+    match value.chars().next() {
+        None => Ok(None),
+        Some(ch) if is_double_width(ch) => Err(()),
+        Some(ch) => Ok(Some(ch.to_string())),
+    }
 }
 
 fn truncate_js_utf16_units(value: &str, max_units: usize) -> String {
@@ -501,6 +545,7 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
         }
         for key in [
             "percentRound",
+            "bar",
             "tokenUnits",
             "identityShort",
             "modelShort",
@@ -531,6 +576,40 @@ pub fn validate_and_coerce(raw: &Value, warnings: &mut Vec<String>, source: &str
                 Some(_) => note(
                     warnings,
                     format!("format.{} must be a boolean; ignored", source_key),
+                ),
+                None => {}
+            }
+        }
+        if let Some(value) = format.get("barWidth") {
+            match compat::as_finite_number(Some(value)) {
+                Some(n) => {
+                    let clamped = n.round().clamp(0.0, MAX_BAR_WIDTH as f64) as i64;
+                    coerced.insert("barWidth".into(), Value::from(clamped));
+                }
+                None => note(
+                    warnings,
+                    "format.barWidth must be a number; ignored".to_string(),
+                ),
+            }
+        }
+        for key in ["barFilled", "barEmpty"] {
+            match format.get(key) {
+                Some(Value::String(s)) => match first_char(s) {
+                    Ok(Some(ch)) => {
+                        coerced.insert(key.into(), Value::String(ch));
+                    }
+                    Ok(None) => note(
+                        warnings,
+                        format!("format.{} must not be empty; ignored", key),
+                    ),
+                    Err(()) => note(
+                        warnings,
+                        format!("format.{} must be a single-width character; ignored", key),
+                    ),
+                },
+                Some(_) => note(
+                    warnings,
+                    format!("format.{} must be a string; ignored", key),
                 ),
                 None => {}
             }
@@ -620,8 +699,9 @@ separator = "|"
 # Which segments to show, in order. Remove, reorder, or add any of these ids:
 #   model, project, branch, runtime, ctx, 5h, 7d, tkn
 # Aliases: "workspace" = project + branch + runtime; "context" = ctx; "tokens" = tkn.
-# (runtime / "node vX" is available but off by default — add it to opt in.)
-segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]
+# (runtime / "node vX" and tkn / "Tkn:904k(...)" are available but off by
+# default — add them to opt in.)
+segments = ["model", "project", "branch", "ctx", "5h", "7d"]
 
 # Rename the label shown for a segment. Keys are segment ids.
 [labels]
@@ -655,6 +735,10 @@ crit = 15
 # Value formatting toggles.
 [format]
 percentRound = true   # false -> one decimal place
+bar = true            # false -> hide the ctx/5h/7d bargraph, keep the %
+barWidth = 5          # bargraph width in cells (0 disables it, max 40)
+barFilled = "█"        # glyph for the used part of the bargraph
+barEmpty = "░"         # glyph for the remaining part of the bargraph
 tokenUnits = true     # false -> raw integers (no k/M)
 tokenUsage = true     # false -> total only, hide (I:.. O:.. C:..)
 pace = true           # false -> hide the pace % in 5h/7d
@@ -723,6 +807,85 @@ mod tests {
         assert_eq!(format.get("paceNormalPrefix"), Some(&json!("abcdefgh")));
         assert_eq!(format.get("paceFastPrefix"), Some(&json!("🔥🔥🔥🔥")));
         assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn validate_and_coerce_clamps_bar_width_and_narrows_glyphs_to_one_char() {
+        let raw = json!({
+            "format": {
+                "bar": false,
+                "barWidth": 999.6,
+                "barFilled": "▰▰▰",
+                "barEmpty": ""
+            }
+        });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let format = coerced
+            .get("format")
+            .and_then(|f| f.as_object())
+            .expect("coerced format object");
+
+        assert_eq!(format.get("bar"), Some(&json!(false)));
+        assert_eq!(format.get("barWidth"), Some(&json!(MAX_BAR_WIDTH)));
+        assert_eq!(format.get("barFilled"), Some(&json!("▰")));
+        assert!(!format.contains_key("barEmpty"));
+        assert!(warnings
+            .iter()
+            .any(|w| w == "test.toml: format.barEmpty must not be empty; ignored"));
+    }
+
+    #[test]
+    fn validate_and_coerce_rejects_double_width_bar_glyphs() {
+        let raw = json!({ "format": { "barFilled": "界", "barEmpty": "🟩" } });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let format = coerced
+            .get("format")
+            .and_then(|f| f.as_object())
+            .expect("coerced format object");
+
+        assert!(!format.contains_key("barFilled"));
+        assert!(!format.contains_key("barEmpty"));
+        for key in ["barFilled", "barEmpty"] {
+            assert!(warnings.iter().any(|w| w
+                == &format!(
+                    "test.toml: format.{} must be a single-width character; ignored",
+                    key
+                )));
+        }
+        // The defaults are East Asian Ambiguous, not Wide, and must stay legal.
+        assert!(!is_double_width('█'));
+        assert!(!is_double_width('░'));
+    }
+
+    #[test]
+    fn validate_and_coerce_rejects_non_numeric_bar_width() {
+        let raw = json!({ "format": { "barWidth": "wide" } });
+        let mut warnings = Vec::new();
+        let coerced = validate_and_coerce(&raw, &mut warnings, "test.toml");
+        let format = coerced
+            .get("format")
+            .and_then(|f| f.as_object())
+            .expect("coerced format object");
+
+        assert!(!format.contains_key("barWidth"));
+        assert!(warnings
+            .iter()
+            .any(|w| w == "test.toml: format.barWidth must be a number; ignored"));
+    }
+
+    #[test]
+    fn default_config_drops_tkn_from_segments_but_keeps_it_known() {
+        let segments = default_config()
+            .get("segments")
+            .and_then(|s| s.as_array())
+            .expect("default segments")
+            .clone();
+
+        assert!(!segments.iter().any(|s| s == "tkn"));
+        assert!(KNOWN_SEGMENTS.contains(&"tkn"));
+        assert_eq!(segment_alias("tokens"), vec!["tkn".to_string()]);
     }
 
     #[test]

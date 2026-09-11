@@ -31,6 +31,10 @@
     fastMode: byId("fast-mode"),
     serviceTier: byId("service-tier"),
     percentRound: byId("percent-round"),
+    bar: byId("bar"),
+    barWidth: byId("bar-width"),
+    barFilled: byId("bar-filled"),
+    barEmpty: byId("bar-empty"),
     tokenUnits: byId("token-units"),
     pace: byId("show-pace"),
     pacePrefix: byId("pace-prefix"),
@@ -51,6 +55,7 @@
     sevenDay: byId("seven-day-out"),
     fiveHourPace: byId("five-hour-pace-out"),
     sevenDayPace: byId("seven-day-pace-out"),
+    barWidth: byId("bar-width-out"),
     line: byId("hud-line"),
     heroLine: byId("hero-hud-line"),
     config: byId("config-code"),
@@ -102,7 +107,7 @@
     neonViolet: "#b79aff",
   };
 
-  const defaultSegments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"];
+  const defaultSegments = ["model", "project", "branch", "ctx", "5h", "7d"];
   const orderedSegments = ["model", "project", "branch", "runtime", "ctx", "5h", "7d", "tkn"];
 
   // Mirror of default_config().thresholds.pace.crit in rust/src/hudcfg.rs
@@ -122,6 +127,37 @@
   };
 
   const readBool = (element, fallback) => (element ? Boolean(element.checked) : fallback);
+  // Mirrors hudcfg::is_double_width(): East Asian Wide / Fullwidth scalars take
+  // two terminal cells and would double the bar's rendered width. Ambiguous
+  // scalars are allowed — the default glyphs █ / ░ are themselves ambiguous.
+  const isDoubleWidth = (ch) => {
+    const cp = ch.codePointAt(0);
+    if (cp < 0x1100) return false;
+    return (
+      (cp >= 0x1100 && cp <= 0x115f)
+      || cp === 0x2329
+      || cp === 0x232a
+      || (cp >= 0x2e80 && cp <= 0xa4cf && cp !== 0x303f)
+      || (cp >= 0xac00 && cp <= 0xd7a3)
+      || (cp >= 0xf900 && cp <= 0xfaff)
+      || (cp >= 0xfe10 && cp <= 0xfe19)
+      || (cp >= 0xfe30 && cp <= 0xfe6f)
+      || (cp >= 0xff00 && cp <= 0xff60)
+      || (cp >= 0xffe0 && cp <= 0xffe6)
+      || (cp >= 0x1f300 && cp <= 0x1faff)
+      || (cp >= 0x20000 && cp <= 0x3fffd)
+    );
+  };
+
+  // Mirrors hudcfg::first_char(): a multi-char glyph would widen the bar past
+  // barWidth cells, so only the first scalar is kept, and only when it occupies
+  // a single cell.
+  const readGlyph = (element, fallback) => {
+    const value = String(element && element.value ? element.value : "");
+    const first = Array.from(value)[0];
+    if (!first || isDoubleWidth(first)) return fallback;
+    return first;
+  };
 
   // Case-insensitive to match the Rust renderer (format_model_name uses
   // eq_ignore_ascii_case("gpt-")), so "GPT-5.5" and "gpt-5.5" both shorten.
@@ -223,11 +259,26 @@
     append(line, text, "separator", state, "label");
   };
 
+  // Mirrors rust/src/render.rs render_bar(): filled run sized from the percent,
+  // colored by the same threshold class as the percent it precedes.
+  const barText = (percent, state) => {
+    if (!state.bar || state.barWidth <= 0) return "";
+    const width = Math.round(state.barWidth);
+    const ratio = Math.min(1, Math.max(0, percent / 100));
+    const filled = Math.round(ratio * width);
+    return `${state.barFilled.repeat(filled)}${state.barEmpty.repeat(width - filled)}`;
+  };
+
   const appendMetric = (line, label, percent, detail, state) => {
     const labelSeparator = state.space ? ": " : ":";
     const colorKey = percentClass(percent, state);
     append(line, label, "label", state, "label");
     append(line, labelSeparator, "label", state, "label");
+    const bar = barText(percent, state);
+    if (bar) {
+      append(line, bar, colorKey, state, colorKey);
+      append(line, " ", "label", state, "label");
+    }
     append(line, formatPercent(percent, state), colorKey, state, colorKey);
     if (!detail) return;
     append(line, "(", "label", state, "label");
@@ -349,6 +400,10 @@
     "",
     "[format]",
     `percentRound = ${state.percentRound}`,
+    `bar = ${state.bar}`,
+    `barWidth = ${state.barWidth}`,
+    `barFilled = ${tomlString(state.barFilled)}`,
+    `barEmpty = ${tomlString(state.barEmpty)}`,
     `tokenUnits = ${state.tokenUnits}`,
     `tokenUsage = ${state.tokenUsage}`,
     `pace = ${state.pace}`,
@@ -407,6 +462,10 @@
       thresholdWarn: clamp(field.thresholdWarn && field.thresholdWarn.value, 0, 100, 70),
       thresholdCrit: clamp(field.thresholdCrit && field.thresholdCrit.value, 0, 100, 90),
       percentRound: readBool(field.percentRound, true),
+      bar: readBool(field.bar, true),
+      barWidth: clamp(field.barWidth ? field.barWidth.value : undefined, 0, 40, 5),
+      barFilled: readGlyph(field.barFilled, "█"),
+      barEmpty: readGlyph(field.barEmpty, "░"),
       tokenUnits: readBool(field.tokenUnits, true),
       tokenUsage: readBool(field.tokenUsage, true),
       pace: readBool(field.pace, true),
@@ -429,6 +488,7 @@
     if (output.context) output.context.textContent = formatPercent(state.context, state);
     if (output.fiveHour) output.fiveHour.textContent = formatPercent(state.fiveHour, state);
     if (output.sevenDay) output.sevenDay.textContent = formatPercent(state.sevenDay, state);
+    if (output.barWidth) output.barWidth.textContent = String(state.barWidth);
     if (output.fiveHourPace) output.fiveHourPace.textContent = `${Math.round(state.fiveHourPace)}%`;
     if (output.sevenDayPace) output.sevenDayPace.textContent = `${Math.round(state.sevenDayPace)}%`;
     if (output.paceState) {

@@ -34,7 +34,7 @@ By default it is a companion to Codex's native `[tui].status_line`, because stoc
 The compact status line, printed by `--line` (rendered as an in-TUI footer only in patched mode):
 
 ```text
-5.6-sol|h|f|codex-hud|git(main*)|Ctx:21%|5h:17%(5h,🐢100%)|7d:16%(5.1d,👾27%)|Tkn:904k(I:533k,O:5k,C:366k)
+5.6-sol|h|f|codex-hud|git(main*)|Ctx:█░░░░ 21%|5h:█░░░░ 17%(5h,🐢100%)|7d:█░░░░ 16%(5.1d,👾27%)
 ```
 
 > The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and non-default service tier are separate atoms; compact mode uses the normalized tier's first character (`fast` → `f`, `priority` → `p`).
@@ -118,7 +118,7 @@ Terminal capture of the compact status line (`--line`):
 
 ```text
 $ ./rust/target/release/codex-hud --line
-5.6-sol|h|f|codex-hud|git(main)|Ctx:50%|5h:4%(4.0h,🐢21%)|7d:20%(4.9d,👾30%)|Tkn:5.6M(I:2.9M,O:20k,C:2.7M)
+5.6-sol|h|f|codex-hud|git(main)|Ctx:███░░ 50%|5h:░░░░░ 4%(4.0h,🐢21%)|7d:█░░░░ 20%(4.9d,👾30%)
 ```
 
 Run `./rust/target/release/codex-hud --line --color` locally to see the same line with ANSI color styling.
@@ -164,8 +164,9 @@ separator = "|"
 # Which segments to show, in order. Ids:
 #   model, project, branch, runtime, ctx, 5h, 7d, tkn
 # Aliases: workspace = project + branch + runtime; context = ctx; tokens = tkn.
-# (runtime / "node vX" is available but off by default — add it to opt in.)
-segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]
+# (runtime / "node vX" and tkn / "Tkn:904k(...)" are off by default — add them
+# to opt in.)
+segments = ["model", "project", "branch", "ctx", "5h", "7d"]
 
 # Rename a segment's label (keys are segment ids).
 [labels]
@@ -189,6 +190,10 @@ crit = 90
 # Formatting toggles.
 [format]
 percentRound = true # false -> one decimal place
+bar = true          # false -> hide the ctx/5h/7d bargraph, keep the %
+barWidth = 5        # bargraph width in cells (0 disables it, max 40)
+barFilled = "█"     # glyph for the used part of the bargraph
+barEmpty = "░"      # glyph for the remaining part of the bargraph
 tokenUnits = true   # false -> raw integers (no k/M)
 tokenUsage = true   # false -> total only, hide (I:.. O:.. C:..)
 pace = true         # false -> hide the pace % in 5h/7d
@@ -286,7 +291,7 @@ The installer first looks for a target-specific archive under the `codex-runtime
 
 The source patch also keeps local plugin disablement as a kill switch for remotely installed plugins. A remote bundle loads only when both the account-side state and `plugins.<id>.enabled` permit it, so turning a plugin off in `/plugins` removes its bundled skills and tools from the next Codex session without weakening workspace or administrator disables.
 
-Patched mode also passes live session state to the HUD renderer through four stable environment variables: `CODEX_HUD_MODEL`, `CODEX_HUD_EFFORT`, `CODEX_HUD_SERVICE_TIER`, and `CODEX_HUD_ROLLOUT_PATH`. Each patched session therefore keeps its own identity, context, and token totals. A fresh session may briefly have no effort value or rollout path; until Codex finishes opening the rollout, the HUD shows `Ctx:?` and `Tkn:?` as unknown placeholders instead of borrowing another session's values. Live `/model`, reasoning, and `/fast` changes are reflected immediately, but Codex's `/model` flow can persist the model and effort to global `~/.codex/config.toml`. For a session-only identity, launch with `codex -m <model> -c 'model_reasoning_effort="<effort>"'`. The `5h` and `7d` segments remain account-wide, so movement in both HUDs is expected and is not session bleed. The installer and `npm run doctor` also verify that the deployed `~/.local/bin/codex-hud` actually consumes these variables: a renderer built before this contract fails the patched-mode install health check (with a `npm run build:rust` hint) instead of silently falling back to `config.toml` identity and another session's usage.
+Patched mode also passes live session state to the HUD renderer through four stable environment variables: `CODEX_HUD_MODEL`, `CODEX_HUD_EFFORT`, `CODEX_HUD_SERVICE_TIER`, and `CODEX_HUD_ROLLOUT_PATH`. Each patched session therefore keeps its own identity, context, and token totals. A fresh session may briefly have no effort value or rollout path; until Codex finishes opening the rollout, the HUD shows `Ctx:?` and `5h:?` as unknown placeholders instead of borrowing another session's values. Live `/model`, reasoning, and `/fast` changes are reflected immediately, but Codex's `/model` flow can persist the model and effort to global `~/.codex/config.toml`. For a session-only identity, launch with `codex -m <model> -c 'model_reasoning_effort="<effort>"'`. The `5h` and `7d` segments remain account-wide, so movement in both HUDs is expected and is not session bleed. The installer and `npm run doctor` also verify that the deployed `~/.local/bin/codex-hud` actually consumes these variables: a renderer built before this contract fails the patched-mode install health check (with a `npm run build:rust` hint) instead of silently falling back to `config.toml` identity and another session's usage.
 
 Safe launcher mode leaves your normal `codex` command alone:
 

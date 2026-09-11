@@ -360,8 +360,9 @@ const RENDERER_CAPABILITY_PROBE_PREFIX = `${RENDERER_CAPABILITY_PROBE_MODEL}|max
 // parses --help fine but silently ignores CODEX_HUD_* variables, falling back
 // to config.toml identity and the newest-global rollout. Run the binary twice
 // with sentinel identity values and a decoy newest rollout in a fully isolated
-// environment (temp CODEX_HOME, CODEX_HUD_CONFIG cleared, neutral cwd so no
-// ./.codex/codex-hud.toml or git root config leaks in). The outputs must prove
+// environment (temp CODEX_HOME, CODEX_HUD_CONFIG pointed at a probe-owned file
+// so no ./.codex/codex-hud.toml or git root config leaks in and the probe does
+// not ride on whatever the shipped defaults happen to be). The outputs must prove
 // that model, effort, and service tier came from env while an empty rollout
 // path suppresses session context/tokens instead of falling back to the decoy.
 function verifyRendererSessionCapability(binPath, options = {}) {
@@ -392,8 +393,17 @@ function verifyRendererSessionCapability(binPath, options = {}) {
       })}\n`,
     );
 
+    // Pin the segments and turn the bargraph off so the probe asserts on a
+    // stable footer even when the shipped defaults change.
+    const probeConfig = path.join(probeHome, "codex-hud-probe.toml");
+    fs.writeFileSync(
+      probeConfig,
+      'segments = ["model", "ctx", "tkn"]\n[format]\nbar = false\n',
+      "utf8",
+    );
+
     const env = { ...(options.env || process.env) };
-    delete env.CODEX_HUD_CONFIG;
+    env.CODEX_HUD_CONFIG = probeConfig;
     env.CODEX_HOME = probeHome;
     env.CODEX_HUD_MODEL = RENDERER_CAPABILITY_PROBE_MODEL;
     env.CODEX_HUD_EFFORT = "max";

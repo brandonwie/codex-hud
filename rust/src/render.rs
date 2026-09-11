@@ -302,6 +302,16 @@ impl<'a> RenderCtx<'a> {
     fn format_flag(&self, key: &str) -> bool {
         compat::truthy(compat::get(self.config.get("format"), key))
     }
+    fn format_number(&self, key: &str, default: f64) -> f64 {
+        compat::as_finite_number(compat::get(self.config.get("format"), key)).unwrap_or(default)
+    }
+    fn format_glyph(&self, key: &str, default: &str) -> String {
+        compat::get(self.config.get("format"), key)
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.chars().next())
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| default.to_string())
+    }
     fn format_text(&self, key: &str) -> String {
         compat::get(self.config.get("format"), key)
             .and_then(|v| v.as_str())
@@ -413,6 +423,42 @@ fn pace_state_prefix(percent: Option<f64>, pace: Option<f64>, ctx: &RenderCtx) -
 }
 
 /// Port of renderMetric().
+/// Bargraph for a percent segment, plus its trailing space.
+///
+/// Empty when `format.bar` is off, when the width is zero, or when the percent
+/// is unknown — an unknown segment renders `label:?` with nothing before it.
+fn render_bar(percent: Option<f64>, ctx: &RenderCtx) -> String {
+    if !ctx.format_flag("bar") {
+        return String::new();
+    }
+    let Some(percent) = percent.filter(|p| p.is_finite()) else {
+        return String::new();
+    };
+    let width = ctx
+        .format_number("barWidth", 5.0)
+        .round()
+        .clamp(0.0, hudcfg::MAX_BAR_WIDTH as f64) as usize;
+    if width == 0 {
+        return String::new();
+    }
+    let ratio = (percent / 100.0).clamp(0.0, 1.0);
+    let filled = (ratio * width as f64).round() as usize;
+    let bar = format!(
+        "{}{}",
+        ctx.format_glyph("barFilled", "\u{2588}").repeat(filled),
+        ctx.format_glyph("barEmpty", "\u{2591}")
+            .repeat(width - filled)
+    );
+    format!(
+        "{} ",
+        colorize(
+            &bar,
+            color_by_percent_cfg(Some(percent), ctx),
+            ctx.color_enabled
+        )
+    )
+}
+
 fn render_metric(label: &str, percent: Option<f64>, detail: &str, ctx: &RenderCtx) -> String {
     let e = ctx.color_enabled;
     let s = ctx.separators;
@@ -432,9 +478,10 @@ fn render_metric(label: &str, percent: Option<f64>, detail: &str, ctx: &RenderCt
         )
     };
     format!(
-        "{}{}{}{}",
+        "{}{}{}{}{}",
         label_text,
         colorize(&s.label_value, ctx.color_of("label"), e),
+        render_bar(percent, ctx),
         percent_text,
         detail_text
     )
@@ -504,9 +551,10 @@ fn render_rate(label: &str, window: Option<&Value>, ctx: &RenderCtx) -> String {
         e,
     );
     format!(
-        "{}{}{}{}",
+        "{}{}{}{}{}",
         label_text,
         colorize(&s.label_value, ctx.color_of("label"), e),
+        render_bar(used_percent, ctx),
         percent_text,
         detail
     )
@@ -1129,5 +1177,43 @@ mod tests {
         });
 
         assert_eq!(status_model(&data), Some("codex-cli|m".to_string()));
+    }
+
+    #[test]
+    fn render_footer_draws_percent_bars_and_omits_them_for_unknown_data() {
+        let mut config = hudcfg::default_config();
+        config["segments"] = json!(["ctx", "5h", "7d"]);
+        let data = json!({
+            "usage": {
+                "context": { "usedPercent": 21 },
+                "rateLimits": {
+                    "primary": { "usedPercent": 95 },
+                    "secondary": null
+                }
+            }
+        });
+
+        assert_eq!(
+            render_footer(&data, &config, false),
+            "Ctx:█░░░░ 21%|5h:█████ 95%|7d:?"
+        );
+
+        config["format"]["bar"] = json!(false);
+        assert_eq!(render_footer(&data, &config, false), "Ctx:21%|5h:95%|7d:?");
+    }
+
+    #[test]
+    fn render_footer_honors_bar_width_and_glyph_overrides() {
+        let mut config = hudcfg::default_config();
+        config["segments"] = json!(["ctx"]);
+        config["format"]["barWidth"] = json!(4);
+        config["format"]["barFilled"] = json!("▰");
+        config["format"]["barEmpty"] = json!("▱");
+        let data = json!({ "usage": { "context": { "usedPercent": 50 } } });
+
+        assert_eq!(render_footer(&data, &config, false), "Ctx:▰▰▱▱ 50%");
+
+        config["format"]["barWidth"] = json!(0);
+        assert_eq!(render_footer(&data, &config, false), "Ctx:50%");
     }
 }

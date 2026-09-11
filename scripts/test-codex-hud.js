@@ -272,17 +272,18 @@ try {
   assert.strictEqual(sessionOneLine.status, 0, sessionOneLine.stderr);
   assert.strictEqual(sessionTwoLine.status, 0, sessionTwoLine.stderr);
   assert.match(sessionOneLine.stdout, /^5\.7-env\|max\|/, "session one must show its own effort despite rolloutB being newer");
-  assert.match(sessionOneLine.stdout, /Ctx:75%/, "session one must use rolloutA context (750/1000)");
+  assert.match(sessionOneLine.stdout, /Ctx:████░ 75%/, "session one must use rolloutA context (750/1000)");
   assert.match(sessionTwoLine.stdout, /^5\.7-env\|xh\|/, "session two must show its own effort");
-  assert.match(sessionTwoLine.stdout, /Ctx:21%/, "session two must use rolloutB context (210/1000)");
-  assert.match(sessionOneLine.stdout, /5h:17%/, "rate limits stay account-global (newest rollout) for session one");
-  assert.match(sessionTwoLine.stdout, /5h:17%/, "rate limits stay account-global (newest rollout) for session two");
+  assert.match(sessionTwoLine.stdout, /Ctx:█░░░░ 21%/, "session two must use rolloutB context (210/1000)");
+  assert.match(sessionOneLine.stdout, /5h:█░░░░ 17%/, "rate limits stay account-global (newest rollout) for session one");
+  assert.match(sessionTwoLine.stdout, /5h:█░░░░ 17%/, "rate limits stay account-global (newest rollout) for session two");
 
   const text = run([], { env: fixtureEnv });
   assert.strictEqual(text.status, 0, text.stderr);
   assert.match(text.stdout, new RegExp(`Codex HUD ${expectedVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   assert.match(text.stdout, /Workspace/);
-  assert.match(text.stdout, /usage: .+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+/);
+  assert.match(text.stdout, /usage: .+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+/);
+  assert.doesNotMatch(text.stdout, /Tkn:/, "tkn is off by default");
   const textLines = text.stdout.trimEnd().split(/\r?\n/);
   assert(textLines.length > 8, "default HUD output should stay multiline");
   assert(textLines.some((line) => line === "Codex"), "default HUD should include a Codex section");
@@ -301,7 +302,7 @@ try {
   // loose for the live branch and optional dirty marker.
   assert.match(
     line.stdout.trim(),
-    /^5\.6-sol\|h\|f\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,🐢100%\)\|7d:16%\(5\.1d,👾27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
+    /^5\.6-sol\|h\|f\|codex-hud\|git\(.+\*?\)\|Ctx:█░░░░ 21%\|5h:█░░░░ 17%\(5h,🐢100%\)\|7d:█░░░░ 16%\(5\.1d,👾27%\)$/
   );
   assert.doesNotMatch(line.stdout, /now/);
 
@@ -315,8 +316,30 @@ try {
   assert.strictEqual(shortLine.status, 0, shortLine.stderr);
   assert.match(
     shortLine.stdout.trim(),
-    /^gpt-5\.6-sol\|high\|fast\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,slow-100%\)\|7d:16%\(5\.1d,ok-27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
+    /^gpt-5\.6-sol\|high\|fast\|codex-hud\|git\(.+\*?\)\|Ctx:█░░░░ 21%\|5h:█░░░░ 17%\(5h,slow-100%\)\|7d:█░░░░ 16%\(5\.1d,ok-27%\)$/
   );
+
+  // tkn is off by default; a config that names it restores the pre-0.6 footer,
+  // and bar = false restores the bar-less percents.
+  const legacyCfg = path.join(tmpCodexHome, "legacy.toml");
+  fs.writeFileSync(
+    legacyCfg,
+    'segments = ["model", "project", "branch", "ctx", "5h", "7d", "tkn"]\n[format]\nbar = false\n',
+    "utf8"
+  );
+  const legacyLine = run(["--line"], { env: { ...fixtureEnv, CODEX_HUD_CONFIG: legacyCfg } });
+  assert.strictEqual(legacyLine.status, 0, legacyLine.stderr);
+  assert.match(
+    legacyLine.stdout.trim(),
+    /^5\.6-sol\|h\|f\|codex-hud\|git\(.+\*?\)\|Ctx:21%\|5h:17%\(5h,🐢100%\)\|7d:16%\(5\.1d,👾27%\)\|Tkn:904k\(I:533k,O:5k,C:366k\)$/
+  );
+  assert.doesNotMatch(legacyLine.stdout, /[█░]/, "bar = false must remove the bargraph glyphs");
+
+  const barCfg = path.join(tmpCodexHome, "bar.toml");
+  fs.writeFileSync(barCfg, '[format]\nbarWidth = 4\nbarFilled = "▰"\nbarEmpty = "▱"\n', "utf8");
+  const barLine = run(["--line"], { env: { ...fixtureEnv, CODEX_HUD_CONFIG: barCfg } });
+  assert.strictEqual(barLine.status, 0, barLine.stderr);
+  assert.match(barLine.stdout, /Ctx:▰▱▱▱ 21%/, "barWidth and glyph overrides must reach the renderer");
 
   const spacedCfg = path.join(tmpCodexHome, "spaced.toml");
   fs.writeFileSync(spacedCfg, "space = true\n", "utf8");
@@ -338,14 +361,20 @@ try {
   if (/git\([^)]*\*/.test(colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, ""))) {
     assert.match(colorLine.stdout, /\x1b\[38;5;215m\*\x1b\[0m/);
   }
-  assert.match(colorLine.stdout, /Tkn\x1b\[0m\x1b\[38;5;245m:\x1b\[0m\x1b\[38;5;215m[^(\n]+\x1b\[0m/);
-  assert.match(colorLine.stdout, /\(I:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
-  assert.match(colorLine.stdout, /,O:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
-  assert.match(colorLine.stdout, /,C:\x1b\[0m\x1b\[38;5;45m[^)\n]+\x1b\[0m/);
+  assert.match(colorLine.stdout, /\x1b\[38;5;85m█░░░░\x1b\[0m \x1b\[38;5;85m21%\x1b\[0m/);
+
+  const legacyColorLine = run(["--line", "--color"], {
+    env: { ...fixtureEnv, CODEX_HUD_CONFIG: legacyCfg },
+  });
+  assert.strictEqual(legacyColorLine.status, 0, legacyColorLine.stderr);
+  assert.match(legacyColorLine.stdout, /Tkn\x1b\[0m\x1b\[38;5;245m:\x1b\[0m\x1b\[38;5;215m[^(\n]+\x1b\[0m/);
+  assert.match(legacyColorLine.stdout, /\(I:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
+  assert.match(legacyColorLine.stdout, /,O:\x1b\[0m\x1b\[38;5;45m[^,\n]+\x1b\[0m/);
+  assert.match(legacyColorLine.stdout, /,C:\x1b\[0m\x1b\[38;5;45m[^)\n]+\x1b\[0m/);
   assert.match(colorLine.stdout, /\x1b\[38;5;245m,\x1b\[0m\x1b\[38;5;85m(?:🐢|👾|🔥)\d+%\x1b\[0m\x1b\[38;5;245m\)\x1b\[0m/);
   assert.match(
     colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
-    /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+\|Tkn:.+$/
+    /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+$/
   );
 } finally {
   fs.rmSync(tmpCodexHome, { recursive: true, force: true });

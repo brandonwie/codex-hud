@@ -164,6 +164,10 @@ const readmeConfigControls = [
   ["thresholds.percent.warn", "threshold-warn"],
   ["thresholds.percent.crit", "threshold-crit"],
   ["format.percentRound", "percent-round"],
+  ["format.bar", "bar"],
+  ["format.barWidth", "bar-width"],
+  ["format.barFilled", "bar-filled"],
+  ["format.barEmpty", "bar-empty"],
   ["format.tokenUnits", "token-units"],
   ["format.tokenUsage", "show-token-usage"],
   ["format.pace", "show-pace"],
@@ -178,6 +182,57 @@ const readmeConfigControls = [
 for (const [setting, id] of readmeConfigControls) {
   if (!html.includes(`id="${id}"`)) fail.push(`missing site control for ${setting}`);
   if (!js.includes(`byId("${id}")`)) fail.push(`site app does not read ${setting}`);
+}
+
+// The bar-width slider must be able to reach every value the renderer accepts.
+// Control presence alone would not catch a slider capped below MAX_BAR_WIDTH.
+{
+  const rustMaxBarWidth = read("rust/src/hudcfg.rs").match(
+    /pub const MAX_BAR_WIDTH: i64 = (\d+);/,
+  )?.[1];
+  if (!rustMaxBarWidth) {
+    fail.push("could not read MAX_BAR_WIDTH from rust/src/hudcfg.rs");
+  } else {
+    const sliderMax = html.match(/id="bar-width"[^>]*\smax="(\d+)"/)?.[1];
+    if (sliderMax !== rustMaxBarWidth) {
+      fail.push(
+        `bar-width slider max="${sliderMax}" must match MAX_BAR_WIDTH ${rustMaxBarWidth}`,
+      );
+    }
+    if (!js.includes(`clamp(field.barWidth ? field.barWidth.value : undefined, 0, ${rustMaxBarWidth}, 5)`)) {
+      fail.push(`site app must clamp barWidth to 0..${rustMaxBarWidth}`);
+    }
+  }
+}
+
+// The site's initial checkbox state IS the site's default config, so it must
+// equal the renderer's default segments. Presence-only control parity missed
+// this once already (tkn stayed checked after it left the renderer default).
+const rustDefaultSegments = (() => {
+  const raw = read("rust/src/hudcfg.rs").match(/"segments": \[([^\]]*)\]/)?.[1];
+  if (!raw) {
+    fail.push("could not read the default segments from rust/src/hudcfg.rs");
+    return [];
+  }
+  return raw.split(",").map((part) => part.trim().replace(/^"|"$/g, "")).filter(Boolean);
+})();
+
+for (const [setting, id] of readmeConfigControls) {
+  if (!setting.startsWith("segments.")) continue;
+  const segment = setting.slice("segments.".length);
+  const isChecked = new RegExp(`id="${id}"[^>]*\\schecked`).test(html);
+  const shouldBeChecked = rustDefaultSegments.includes(segment);
+  if (isChecked !== shouldBeChecked) {
+    fail.push(
+      `site control ${id} is ${isChecked ? "checked" : "unchecked"} but the renderer default ` +
+        `${shouldBeChecked ? "includes" : "omits"} segment "${segment}"`,
+    );
+  }
+}
+
+// Glyph width rule must exist on both surfaces, not just in the renderer.
+if (!js.includes("isDoubleWidth")) {
+  fail.push("site app must reject double-width bar glyphs like hudcfg::is_double_width");
 }
 
 const installCommand = html.match(/id="install-step-install">([^<]+)</)?.[1];
@@ -354,7 +409,7 @@ const runInteractiveSmoke = () => {
     "segment-ctx": createElement("segment-ctx", { checked: true }),
     "segment-5h": createElement("segment-5h", { checked: true }),
     "segment-7d": createElement("segment-7d", { checked: true }),
-    "segment-tkn": createElement("segment-tkn", { checked: true }),
+    "segment-tkn": createElement("segment-tkn"),
     "label-ctx": createElement("label-ctx", { value: "Ctx" }),
     "color-model": createElement("color-model", { value: "neonViolet" }),
     "color-branch": createElement("color-branch", { value: "#5fafff" }),
@@ -368,6 +423,11 @@ const runInteractiveSmoke = () => {
     "identity-full": createElement("identity-full"),
     "fast-mode": createElement("fast-mode"),
     "percent-round": createElement("percent-round", { checked: true }),
+    bar: createElement("bar", { checked: true }),
+    "bar-width": createElement("bar-width", { value: "5" }),
+    "bar-width-out": createElement("bar-width-out"),
+    "bar-filled": createElement("bar-filled", { value: "█" }),
+    "bar-empty": createElement("bar-empty", { value: "░" }),
     "token-units": createElement("token-units", { checked: true }),
     "show-pace": createElement("show-pace", { checked: true }),
     "pace-prefix": createElement("pace-prefix", { checked: true }),
@@ -458,8 +518,17 @@ const runInteractiveSmoke = () => {
   vm.runInNewContext(js, context, { filename: "site/app.js" });
 
   const initialLine = elements["hud-line"].textContent;
-  if (!/^5\.6-sol\|h\|f\|codex-hud\|git\(main\*\)\|Ctx:32%\|5h:6%\(4\.7h,👾\d+%\)\|7d:4%\(6\.7d,👾\d+%\)\|Tkn:42k\(I:24k,O:1k,C:17k\)$/.test(initialLine)) {
+  if (!/^5\.6-sol\|h\|f\|codex-hud\|git\(main\*\)\|Ctx:██░░░ 32%\|5h:░░░░░ 6%\(4\.7h,👾\d+%\)\|7d:░░░░░ 4%\(6\.7d,👾\d+%\)$/.test(initialLine)) {
     fail.push("interactive preview must match dense live HUD grammar");
+  }
+  // The untouched form is what a first-time visitor sees; it must equal the
+  // renderer default, tkn included (i.e. absent).
+  if (initialLine.includes("Tkn")) {
+    fail.push("untouched site defaults must not render the tkn segment");
+  }
+  const initialConfig = elements["config-code"].textContent;
+  if (!initialConfig.includes(`segments = ${JSON.stringify(rustDefaultSegments).replace(/","/g, '", "')}`)) {
+    fail.push("untouched site defaults must generate the renderer default segments");
   }
   if (/\b(?:CTX|5H|7D|TKN):/.test(initialLine)) {
     fail.push("interactive preview must preserve live label casing");
@@ -478,12 +547,48 @@ const runInteractiveSmoke = () => {
   }
 
   elements.context.value = "88";
+  // Bar controls: off, zero width, custom glyphs, and the double-width reject.
+  elements.bar.checked = false;
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (/[█░]/.test(elements["hud-line"].textContent)) {
+    fail.push("bar = false must remove the bargraph from the preview");
+  }
+  if (!elements["config-code"].textContent.includes("bar = false")) {
+    fail.push("bar toggle must reach the generated config");
+  }
+  elements.bar.checked = true;
+  elements["bar-width"].value = "0";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (/[█░]/.test(elements["hud-line"].textContent)) {
+    fail.push("barWidth = 0 must disable the bargraph");
+  }
+  elements["bar-width"].value = "10";
+  elements["bar-filled"].value = "▰";
+  elements["bar-empty"].value = "▱";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  const wideBar = elements["hud-line"].textContent.match(/Ctx:([▰▱]+) /)?.[1];
+  if (!wideBar || wideBar.length !== 10) {
+    fail.push("barWidth and glyph overrides must reach the preview");
+  }
+  if (elements["bar-width-out"].textContent !== "10") {
+    fail.push("bar width readout must track the slider");
+  }
+  elements["bar-filled"].value = "界";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  if (!/Ctx:█+▱* /.test(elements["hud-line"].textContent)) {
+    fail.push("a double-width glyph must fall back to the default, like hudcfg::first_char");
+  }
+  elements["bar-width"].value = "5";
+  elements["bar-filled"].value = "█";
+  elements["bar-empty"].value = "░";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+
   elements.context.dispatchEvent({ type: "input" });
 
   if (!elements["hud-line"].textContent.includes("5.6-sol|h|f|")) {
     fail.push("interactive preview must keep README model and effort defaults in HUD line");
   }
-  if (!elements["hud-line"].textContent.includes("Ctx:88%")) {
+  if (!elements["hud-line"].textContent.includes("Ctx:████░ 88%")) {
     fail.push("interactive preview must update context percentage");
   }
   if (elements["hud-line"].textContent.includes("CTX:88%")) {
@@ -555,7 +660,7 @@ const runInteractiveSmoke = () => {
 
   elements["five-hour"].value = "35";
   elements["five-hour"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,👾20%)")) {
+  if (!elements["hud-line"].textContent.includes("5h:██░░░ 35%(3.3h,👾20%)")) {
     fail.push("5h usage must not change the separate 5h pace percentage");
   }
   if (elements["hud-line"].textContent.includes("117%")) {
@@ -567,7 +672,7 @@ const runInteractiveSmoke = () => {
 
   elements["five-hour-pace"].value = "87";
   elements["five-hour-pace"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5h:35%(3.3h,🐢87%)")) {
+  if (!elements["hud-line"].textContent.includes("5h:██░░░ 35%(3.3h,🐢87%)")) {
     fail.push("5h pace control must update pace independently from usage");
   }
 
@@ -575,18 +680,18 @@ const runInteractiveSmoke = () => {
   elements["five-hour"].value = "20";
   elements["five-hour-pace"].value = "35";
   elements["hud-form"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5h:20%(4h,👾35%)")) {
+  if (!elements["hud-line"].textContent.includes("5h:█░░░░ 20%(4h,👾35%)")) {
     fail.push("pace diff of -15 must stay in the normal band (👾)");
   }
   elements["five-hour-pace"].value = "36";
   elements["hud-form"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5h:20%(4h,🐢36%)")) {
+  if (!elements["hud-line"].textContent.includes("5h:█░░░░ 20%(4h,🐢36%)")) {
     fail.push("pace diff of -16 must cross into slow (🐢)");
   }
   elements["five-hour"].value = "36";
   elements["five-hour-pace"].value = "20";
   elements["hud-form"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5h:36%(3.2h,🔥20%)")) {
+  if (!elements["hud-line"].textContent.includes("5h:██░░░ 36%(3.2h,🔥20%)")) {
     fail.push("pace diff of +16 must cross into fast (🔥)");
   }
 
@@ -600,6 +705,7 @@ const runInteractiveSmoke = () => {
   }
 
   elements.space.checked = true;
+  elements["segment-tkn"].checked = true;
   elements.separator.value = "·";
   elements["segment-runtime"].checked = false;
   elements["label-ctx"].value = "CTX";
@@ -625,13 +731,13 @@ const runInteractiveSmoke = () => {
   if (customLine.includes("node v24")) {
     fail.push("runtime segment must be removable with its checkbox");
   }
-  if (!customLine.includes("gpt-5.6-sol · high · fast · codex-hud · git(main*) · CTX: 88%")) {
+  if (!customLine.includes("gpt-5.6-sol · high · fast · codex-hud · git(main*) · CTX: ████░ 88%")) {
     fail.push("interactive preview must apply spacing, separator, labels, precision, and full identity");
   }
-  if (!elements["hero-hud-line"].textContent.includes("gpt-5.6-sol · high · fast · codex-hud · git(main*) · CTX: 88%")) {
+  if (!elements["hero-hud-line"].textContent.includes("gpt-5.6-sol · high · fast · codex-hud · git(main*) · CTX: ████░ 88%")) {
     fail.push("hero preview must apply the same panel settings as the result preview");
   }
-  if (!customLine.includes("5h: 6%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
+  if (!customLine.includes("5h: ░░░░░ 6%(4.7h)") || customLine.includes(",S") || customLine.includes(",N")) {
     fail.push("interactive preview must hide pace detail when format.pace is false");
   }
   if (!customLine.endsWith("Tkn: 42000")) {
@@ -664,7 +770,7 @@ const runInteractiveSmoke = () => {
   elements["seven-day"].value = "34";
   elements["seven-day-pace"].value = "100";
   elements["hud-form"].dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("7d: 34%(4.6d,S100%)")) {
+  if (!elements["hud-line"].textContent.includes("7d: ██░░░ 34%(4.6d,S100%)")) {
     fail.push("7d pace control must stay separate from usage and cap at 100%");
   }
   if (elements["hud-line"].textContent.includes("113%")) {
