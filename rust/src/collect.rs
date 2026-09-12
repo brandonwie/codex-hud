@@ -259,9 +259,7 @@ fn read_tail_text(path: &Path, max_lines: usize) -> Option<String> {
         return None;
     }
     if position > 0 {
-        let Some(first_newline) = bytes.iter().position(|byte| *byte == b'\n') else {
-            return None;
-        };
+        let first_newline = bytes.iter().position(|byte| *byte == b'\n')?;
         bytes.drain(..=first_newline);
     }
     Some(match String::from_utf8(bytes) {

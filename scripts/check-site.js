@@ -664,14 +664,14 @@ const runInteractiveSmoke = () => {
   }
   elements["fast-mode"].checked = false;
   elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("5.6-sol|xh|s|codex-hud")) {
-    fail.push("fastMode=false must show the compact standard service-tier atom");
+  if (!elements["hud-line"].textContent.includes("5.6-sol|xh|codex-hud")) {
+    fail.push("fastMode=false must hide the compact standard service tier");
   }
   elements["identity-short"].checked = false;
   elements["identity-full"].checked = true;
   elements.effort.dispatchEvent({ type: "input" });
-  if (!elements["hud-line"].textContent.includes("gpt-5.6-sol|xhigh|standard|codex-hud")) {
-    fail.push("fastMode=false must show the full standard service-tier atom");
+  if (!elements["hud-line"].textContent.includes("gpt-5.6-sol|xhigh|codex-hud")) {
+    fail.push("fastMode=false must hide the full standard service tier");
   }
   elements["identity-short"].checked = true;
   elements["identity-full"].checked = false;

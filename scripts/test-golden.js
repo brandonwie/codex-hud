@@ -193,7 +193,7 @@ const LINE_CASES = [
   { name: "flex-service-tier", over: { config: { serviceTier: "flex" } } },
   { name: "priority-service-tier", over: { config: { serviceTier: "priority" } } },
   { name: "future-service-tier", over: { config: { serviceTier: "FutureTier" } } },
-  { name: "default-service-tier-standard", over: { config: { serviceTier: "default" } } },
+  { name: "default-service-tier-hidden", over: { config: { serviceTier: "default" } } },
   { name: "fast-mode-override", over: { hud: { config: { format: { fastMode: true } } } } },
 ];
 

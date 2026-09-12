@@ -168,7 +168,8 @@ try {
   assert.strictEqual(JSON.parse(noConfigJson.stdout).config.serviceTier, "standard");
   const noConfigLine = run(["--line"], { env: noConfigEnv, unsetEnv: sessionEnvKeys });
   assert.strictEqual(noConfigLine.status, 0, noConfigLine.stderr);
-  assert.match(noConfigLine.stdout, /(^|\|)s\|codex-hud\|/);
+  assert.doesNotMatch(noConfigLine.stdout, /(^|\|)s(?:\||$)/);
+  assert.match(noConfigLine.stdout, /\|codex-hud\|/);
 
   const envIdentityLine = run(["--line"], {
     env: {
@@ -179,7 +180,7 @@ try {
     },
   });
   assert.strictEqual(envIdentityLine.status, 0, envIdentityLine.stderr);
-  assert.match(envIdentityLine.stdout, /^5\.7-env\|xh\|s\|codex-hud\|/);
+  assert.match(envIdentityLine.stdout, /^5\.7-env\|xh\|codex-hud\|/);
   assert.doesNotMatch(envIdentityLine.stdout, /^5\.7-env\|xh\|f\|/);
 
   for (const [serviceTier, shortTier] of [["fast", "f"], ["flex", "f"], ["priority", "p"]]) {
@@ -259,8 +260,8 @@ try {
     assert.strictEqual(hiddenEffortLine.status, 0, hiddenEffortLine.stderr);
     assert.match(
       hiddenEffortLine.stdout,
-      /^5\.7-env\|s\|codex-hud\|/,
-      `EFFORT=${JSON.stringify(hiddenEffort)} must hide the effort atom while showing standard tier`,
+      /^5\.7-env\|codex-hud\|/,
+      `EFFORT=${JSON.stringify(hiddenEffort)} and standard tier must hide both atoms`,
     );
   }
 
@@ -345,7 +346,7 @@ try {
     },
   });
   assert.strictEqual(fullStandardLine.status, 0, fullStandardLine.stderr);
-  assert.match(fullStandardLine.stdout, /^gpt-5\.7-env\|xhigh\|standard\|codex-hud\|/);
+  assert.match(fullStandardLine.stdout, /^gpt-5\.7-env\|xhigh\|codex-hud\|/);
 
   // tkn is off by default; a config that names it restores the pre-0.6 footer,
   // and bar = false restores the bar-less percents.

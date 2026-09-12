@@ -159,7 +159,7 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `pace`         | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
 | `pacePrefix`   | `true`  | `false` → hide the pace icon (🐢/👾/🔥), keep the `%`.   |
 | `identityShort` | `true` | `true` → `5.6-sol|h|f`; `false` → `gpt-5.6-sol|high|fast`. |
-| `fastMode`     | `false` | `false` → resolved tier (off is standard/s); `true` → force fast/f. |
+| `fastMode`     | `false` | `false` → resolved tier (standard hidden); `true` → force fast/f. |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
 | `paceNormalPrefix` | `"👾"` | Prefix when usage is within `±pace.crit` of pace.     |
 | `paceFastPrefix` | `"🔥"` | Prefix when usage is more than `pace.crit` ahead of pace. |
@@ -167,9 +167,9 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 **Identity atoms.** The model, reasoning effort, and service tier
 render as separate atoms using the configured segment separator. Compact mode
 maps known values (`xhigh` → `xh`, `high` → `h`, `medium` → `m`, `low` → `l`,
-`minimal` → `min`, `standard` → `s`, `fast` → `f`, `flex` → `f`); full mode
-preserves their canonical lowercase names. `default` is rendered as the
-canonical `standard` tier. A genuinely unavailable session tier is omitted.
+`minimal` → `min`, `fast` → `f`, `flex` → `f`); full mode preserves
+their canonical lowercase names. `default` and `standard` tiers are hidden.
+A genuinely unavailable session tier is also omitted.
 The legacy `modelShort` and `effortShort` booleans are still accepted
 as per-field compatibility overrides when present, but are no longer emitted.
 
@@ -252,9 +252,9 @@ fixtures lock them; do not "clean them up":
    cells. East Asian **Ambiguous** scalars stay legal — the defaults `█` / `░`
    are themselves ambiguous.
 10. **Identity atoms use the normal segment separator:** model, effort, and
-    service tier are independently colorized pieces. Known standard service is
-    rendered as `s`/`standard`; an unavailable session tier is omitted without
-    leaving a separator gap.
+    visible service tiers are independently colorized pieces. Standard/default
+    service and an unavailable session tier are omitted without leaving a
+    separator gap.
 
 ## Enforcement
 

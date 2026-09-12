@@ -37,7 +37,7 @@ The compact status line, printed by `--line` (rendered as an in-TUI footer only 
 5.6-sol|h|f|codex-hud|git(main*)|Ctx:█░░░░ 21%|5h:█░░░░ 17%(5h,🐢100%)|7d:█░░░░ 16%(5.1d,👾27%)
 ```
 
-> The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and service tier are separate atoms; compact mode uses the normalized tier's first character (`standard` → `s`, `fast` → `f`, `priority` → `p`).
+> The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and non-standard service tiers are separate atoms. Standard/default service is hidden; compact mode shortens visible tiers such as `fast` → `f` and `priority` → `p`.
 
 > The `5h` and `7d` segments use the newest eligible account-wide rate-limit snapshot in Codex rollout events. Eligible snapshots belong to the `codex` limit bucket or use the legacy format without a limit ID; the newest event timestamp wins, and other named buckets are ignored. Both windows come from that one snapshot and are matched by length (300 and 10080 minutes); a missing window is omitted. Values refresh only when a matching rollout event is available.
 
@@ -199,13 +199,13 @@ tokenUsage = true   # false -> total only, hide (I:.. O:.. C:..)
 pace = true         # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> hide the pace icon (🐢/👾/🔥), keep the %
 identityShort = true # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
-fastMode = false # false -> resolved tier (off is standard/s); true -> force fast/f
+fastMode = false # false -> resolved tier (standard hidden); true -> force fast/f
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"
 ```
 
-Model, reasoning effort, and service tier use the normal segment separator. Compact mode maps known reasoning names such as `high` to `h` and shortens any normalized service tier to its first character (`standard` → `s`, `fast` → `f`, `priority` → `p`); full mode keeps values such as `gpt-5.6-sol|high|standard`. A service tier that is genuinely unavailable is omitted. Older `modelShort` and `effortShort` keys remain accepted as compatibility overrides, but new configs should use `identityShort`.
+Model, reasoning effort, and visible service tiers use the normal segment separator. Standard/default service is hidden. Compact mode maps known reasoning names such as `high` to `h` and shortens visible tiers to their first character (`fast` → `f`, `priority` → `p`); full mode keeps values such as `gpt-5.6-sol|high|fast`. A service tier that is genuinely unavailable is also omitted. Older `modelShort` and `effortShort` keys remain accepted as compatibility overrides, but new configs should use `identityShort`.
 
 Pace markers compare usage against even burn rate: slow is more than `thresholds.pace.crit` behind pace, fast is more than `thresholds.pace.crit` ahead, and the middle band is normal. Run `codex-hud --print-config` to see the full resolved option set.
 

@@ -81,8 +81,7 @@
 
   const formatServiceTier = (value, short) => {
     const normalized = String(value || "").trim().toLowerCase();
-    if (!normalized) return null;
-    if (normalized === "default" || normalized === "standard") return short ? "s" : "standard";
+    if (!normalized || normalized === "default" || normalized === "standard") return null;
     if (short) return Array.from(normalized)[0];
     return normalized;
   };
