@@ -656,13 +656,25 @@ const runInteractiveSmoke = () => {
   elements["identity-full"].checked = false;
   elements.effort.dispatchEvent({ type: "input" });
 
-  elements["service-tier"].value = "default";
+  elements["service-tier"].value = "standard";
   elements["fast-mode"].checked = true;
   elements.effort.dispatchEvent({ type: "input" });
   if (!elements["hud-line"].textContent.includes("5.6-sol|xh|f|codex-hud")) {
     fail.push("fastMode must force the compact fast service-tier atom");
   }
   elements["fast-mode"].checked = false;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.6-sol|xh|s|codex-hud")) {
+    fail.push("fastMode=false must show the compact standard service-tier atom");
+  }
+  elements["identity-short"].checked = false;
+  elements["identity-full"].checked = true;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("gpt-5.6-sol|xhigh|standard|codex-hud")) {
+    fail.push("fastMode=false must show the full standard service-tier atom");
+  }
+  elements["identity-short"].checked = true;
+  elements["identity-full"].checked = false;
 
   // Auto-detect: service_tier = "fast" renders the tier atom without the manual override.
   elements["service-tier"].value = "fast";

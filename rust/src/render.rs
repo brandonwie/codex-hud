@@ -222,7 +222,9 @@ fn format_model_name(raw: String, format: Option<&Value>) -> String {
 fn format_service_tier(value: &str, short: bool) -> Option<String> {
     let normalized = value.trim().to_lowercase();
     match normalized.as_str() {
-        "" | "default" | "standard" => None,
+        "" => None,
+        "default" | "standard" if short => Some("s".to_string()),
+        "default" | "standard" => Some("standard".to_string()),
         _ if short => normalized
             .chars()
             .next()
@@ -1139,7 +1141,13 @@ mod tests {
     }
 
     #[test]
-    fn format_service_tier_shortens_any_non_default_value_to_first_character() {
+    fn format_service_tier_shows_standard_and_shortens_other_values() {
+        assert_eq!(format_service_tier("default", true).as_deref(), Some("s"));
+        assert_eq!(format_service_tier("standard", true).as_deref(), Some("s"));
+        assert_eq!(
+            format_service_tier("standard", false).as_deref(),
+            Some("standard")
+        );
         assert_eq!(format_service_tier("fast", true).as_deref(), Some("f"));
         assert_eq!(format_service_tier("flex", true).as_deref(), Some("f"));
         assert_eq!(format_service_tier("priority", true).as_deref(), Some("p"));
@@ -1154,7 +1162,7 @@ mod tests {
     }
 
     #[test]
-    fn render_footer_omits_default_tier_and_shortens_known_efforts() {
+    fn render_footer_shows_default_as_standard_and_shortens_known_efforts() {
         let data = json!({
             "config": {
                 "model": "gpt-5.6-sol",
@@ -1165,7 +1173,7 @@ mod tests {
         let mut config = hudcfg::default_config();
         config["segments"] = json!(["model"]);
 
-        assert_eq!(render_footer(&data, &config, false), "5.6-sol|h");
+        assert_eq!(render_footer(&data, &config, false), "5.6-sol|h|s");
     }
 
     #[test]

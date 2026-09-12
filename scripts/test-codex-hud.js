@@ -160,6 +160,16 @@ try {
     return JSON.parse(result.stdout);
   }
 
+  const noConfigHome = path.join(tmpCodexHome, "no-config");
+  fs.mkdirSync(noConfigHome);
+  const noConfigEnv = { CODEX_HOME: noConfigHome, CODEX_HUD_NOW_MS: String(nowMs) };
+  const noConfigJson = run(["--json"], { env: noConfigEnv, unsetEnv: sessionEnvKeys });
+  assert.strictEqual(noConfigJson.status, 0, noConfigJson.stderr);
+  assert.strictEqual(JSON.parse(noConfigJson.stdout).config.serviceTier, "standard");
+  const noConfigLine = run(["--line"], { env: noConfigEnv, unsetEnv: sessionEnvKeys });
+  assert.strictEqual(noConfigLine.status, 0, noConfigLine.stderr);
+  assert.match(noConfigLine.stdout, /(^|\|)s\|codex-hud\|/);
+
   const envIdentityLine = run(["--line"], {
     env: {
       ...fixtureEnv,
@@ -169,19 +179,25 @@ try {
     },
   });
   assert.strictEqual(envIdentityLine.status, 0, envIdentityLine.stderr);
-  assert.match(envIdentityLine.stdout, /^5\.7-env\|xh\|codex-hud\|/);
+  assert.match(envIdentityLine.stdout, /^5\.7-env\|xh\|s\|codex-hud\|/);
   assert.doesNotMatch(envIdentityLine.stdout, /^5\.7-env\|xh\|f\|/);
 
-  const tierIdentityLine = run(["--line"], {
-    env: {
-      ...fixtureEnv,
-      CODEX_HUD_MODEL: "gpt-5.7-env",
-      CODEX_HUD_EFFORT: "xhigh",
-      CODEX_HUD_SERVICE_TIER: "priority",
-    },
-  });
-  assert.strictEqual(tierIdentityLine.status, 0, tierIdentityLine.stderr);
-  assert.match(tierIdentityLine.stdout, /^5\.7-env\|xh\|p\|codex-hud\|/);
+  for (const [serviceTier, shortTier] of [["fast", "f"], ["flex", "f"], ["priority", "p"]]) {
+    const tierIdentityLine = run(["--line"], {
+      env: {
+        ...fixtureEnv,
+        CODEX_HUD_MODEL: "gpt-5.7-env",
+        CODEX_HUD_EFFORT: "xhigh",
+        CODEX_HUD_SERVICE_TIER: serviceTier,
+      },
+    });
+    assert.strictEqual(tierIdentityLine.status, 0, tierIdentityLine.stderr);
+    assert.match(
+      tierIdentityLine.stdout,
+      new RegExp(`^5\\.7-env\\|xh\\|${shortTier}\\|codex-hud\\|`),
+      `${serviceTier} must preserve its compact service-tier atom`,
+    );
+  }
 
   const newestUsage = runJsonWithEnv(fixtureEnv).usage;
   assert.strictEqual(newestUsage.context.usedTokens, 210, "absent rollout env should use newest context");
@@ -243,8 +259,8 @@ try {
     assert.strictEqual(hiddenEffortLine.status, 0, hiddenEffortLine.stderr);
     assert.match(
       hiddenEffortLine.stdout,
-      /^5\.7-env\|codex-hud\|/,
-      `EFFORT=${JSON.stringify(hiddenEffort)} must hide the effort atom`,
+      /^5\.7-env\|s\|codex-hud\|/,
+      `EFFORT=${JSON.stringify(hiddenEffort)} must hide the effort atom while showing standard tier`,
     );
   }
 
@@ -318,6 +334,18 @@ try {
     shortLine.stdout.trim(),
     /^gpt-5\.6-sol\|high\|fast\|codex-hud\|git\(.+\*?\)\|Ctx:█░░░░ 21%\|5h:█░░░░ 17%\(5h,slow-100%\)\|7d:█░░░░ 16%\(5\.1d,ok-27%\)$/
   );
+
+  const fullStandardLine = run(["--line"], {
+    env: {
+      ...fixtureEnv,
+      CODEX_HUD_CONFIG: formatCfg,
+      CODEX_HUD_MODEL: "gpt-5.7-env",
+      CODEX_HUD_EFFORT: "xhigh",
+      CODEX_HUD_SERVICE_TIER: "",
+    },
+  });
+  assert.strictEqual(fullStandardLine.status, 0, fullStandardLine.stderr);
+  assert.match(fullStandardLine.stdout, /^gpt-5\.7-env\|xhigh\|standard\|codex-hud\|/);
 
   // tkn is off by default; a config that names it restores the pre-0.6 footer,
   // and bar = false restores the bar-less percents.

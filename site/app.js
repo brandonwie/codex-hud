@@ -81,7 +81,8 @@
 
   const formatServiceTier = (value, short) => {
     const normalized = String(value || "").trim().toLowerCase();
-    if (!normalized || normalized === "default" || normalized === "standard") return null;
+    if (!normalized) return null;
+    if (normalized === "default" || normalized === "standard") return short ? "s" : "standard";
     if (short) return Array.from(normalized)[0];
     return normalized;
   };
@@ -429,7 +430,7 @@
     const effort = readText(field.effort, "high");
     const identityShort = readBool(field.identityShort, true);
     const fastModeOverride = readBool(field.fastMode, false);
-    const serviceTier = fastModeOverride ? "fast" : readText(field.serviceTier, "default");
+    const serviceTier = fastModeOverride ? "fast" : readText(field.serviceTier, "standard");
     const configColors = {
       model: readText(field.colorModel, "neonViolet"),
       branch: readText(field.colorBranch, "neonViolet"),

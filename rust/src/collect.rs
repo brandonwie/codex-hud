@@ -684,6 +684,25 @@ fn resolve_reasoning_identity(
     }
 }
 
+fn resolve_service_tier_identity(
+    env_value: Option<&str>,
+    session_mode: bool,
+    config_value: Option<String>,
+) -> Option<String> {
+    if let Some(value) = env_value {
+        let trimmed = value.trim();
+        return Some(if trimmed.is_empty() {
+            "standard".to_string()
+        } else {
+            trimmed.to_string()
+        });
+    }
+    if session_mode {
+        return None;
+    }
+    resolve_identity_value(None, false, config_value).or_else(|| Some("standard".to_string()))
+}
+
 /// Port of collect(): the full HUD data object.
 pub fn collect() -> Value {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -711,7 +730,7 @@ pub fn collect() -> Value {
         session_mode,
         hudcfg::merged_config_value(&configs, "model_reasoning_effort"),
     );
-    let service_tier = resolve_identity_value(
+    let service_tier = resolve_service_tier_identity(
         env_service_tier.as_deref(),
         session_mode,
         hudcfg::merged_config_value(&configs, "service_tier"),
@@ -921,6 +940,22 @@ mod tests {
         assert_eq!(
             resolve_reasoning_identity(None, false, Some("none".to_string())).as_deref(),
             Some("none")
+        );
+    }
+
+    #[test]
+    fn service_tier_identity_distinguishes_known_standard_from_unknown() {
+        assert_eq!(
+            resolve_service_tier_identity(Some(""), true, Some("fast".to_string())).as_deref(),
+            Some("standard")
+        );
+        assert_eq!(
+            resolve_service_tier_identity(None, false, None).as_deref(),
+            Some("standard")
+        );
+        assert_eq!(
+            resolve_service_tier_identity(None, true, Some("fast".to_string())),
+            None
         );
     }
 

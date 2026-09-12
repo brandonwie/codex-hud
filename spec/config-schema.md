@@ -82,7 +82,7 @@ values refresh only when a newer eligible rollout event is available.
 
 When `space = true`: `segment` becomes `" " + segment.trim() + " "` and
 `labelValue` becomes `labelValue.trimEnd() + " "`. Model, reasoning effort,
-and non-default service tier are separate identity atoms, so the configured
+and service tier are separate identity atoms, so the configured
 segment separator is used between them too.
 
 ### Labels
@@ -159,17 +159,18 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `pace`         | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
 | `pacePrefix`   | `true`  | `false` → hide the pace icon (🐢/👾/🔥), keep the `%`.   |
 | `identityShort` | `true` | `true` → `5.6-sol|h|f`; `false` → `gpt-5.6-sol|high|fast`. |
-| `fastMode`     | `false` | `true` → force the fast service-tier atom (manual override). |
+| `fastMode`     | `false` | `false` → resolved tier (off is standard/s); `true` → force fast/f. |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
 | `paceNormalPrefix` | `"👾"` | Prefix when usage is within `±pace.crit` of pace.     |
 | `paceFastPrefix` | `"🔥"` | Prefix when usage is more than `pace.crit` ahead of pace. |
 
-**Identity atoms.** The model, reasoning effort, and non-default service tier
+**Identity atoms.** The model, reasoning effort, and service tier
 render as separate atoms using the configured segment separator. Compact mode
 maps known values (`xhigh` → `xh`, `high` → `h`, `medium` → `m`, `low` → `l`,
-`minimal` → `min`, `fast` → `f`, `flex` → `fl`); full mode preserves their
-canonical lowercase names. The `default` and `standard` service tiers are
-omitted. The legacy `modelShort` and `effortShort` booleans are still accepted
+`minimal` → `min`, `standard` → `s`, `fast` → `f`, `flex` → `f`); full mode
+preserves their canonical lowercase names. `default` is rendered as the
+canonical `standard` tier. A genuinely unavailable session tier is omitted.
+The legacy `modelShort` and `effortShort` booleans are still accepted
 as per-field compatibility overrides when present, but are no longer emitted.
 
 `format.fastMode` forces the tier atom to `fast` regardless of the resolved
@@ -250,9 +251,10 @@ fixtures lock them; do not "clean them up":
    (config warning, default kept), so the bar can never exceed `barWidth`
    cells. East Asian **Ambiguous** scalars stay legal — the defaults `█` / `░`
    are themselves ambiguous.
-10. **Identity atoms use the normal segment separator:** model, effort, and a
-    non-default service tier are independently colorized pieces; `default` and
-    `standard` tiers are omitted without leaving a separator gap.
+10. **Identity atoms use the normal segment separator:** model, effort, and
+    service tier are independently colorized pieces. Known standard service is
+    rendered as `s`/`standard`; an unavailable session tier is omitted without
+    leaving a separator gap.
 
 ## Enforcement
 

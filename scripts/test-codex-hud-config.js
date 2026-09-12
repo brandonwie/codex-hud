@@ -292,7 +292,7 @@ try {
     assert.ok(Array.isArray(data.hud.config.segments));
   }
 
-  // 12. Codex service_tier flows into collected config.serviceTier; absent -> null.
+  // 12. Codex service_tier flows into collected config.serviceTier; absent -> standard.
   {
     const tierHome = tmpdir();
     writeConfig(tierHome, "config.toml", 'service_tier = "fast"\n');
@@ -309,8 +309,8 @@ try {
     assert.strictEqual(withoutTier.status, 0, withoutTier.stderr);
     assert.strictEqual(
       JSON.parse(withoutTier.stdout).config.serviceTier,
-      null,
-      "absent service_tier -> config.serviceTier null",
+      "standard",
+      "absent service_tier -> config.serviceTier standard",
     );
     fs.rmSync(tierHome, { recursive: true, force: true });
     fs.rmSync(plainHome, { recursive: true, force: true });
