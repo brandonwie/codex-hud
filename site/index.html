@@ -146,7 +146,7 @@
                 "name": "Does each patched Codex session keep its own HUD data?",
                 "acceptedAnswer": {
                   "@type": "Answer",
-                  "text": "Yes. Patched mode binds model, reasoning effort, service tier, context, and token totals to each session. A fresh session can briefly show no effort plus Ctx:? and Tkn:? until its rollout opens. The 5h and 7d limits remain account-wide, so shared movement is expected and is not session bleed."
+                  "text": "Yes. Patched mode binds model, reasoning effort, service tier, context, and token totals to each session. Until a fresh session's rollout opens, unavailable segments are omitted. The 5h and 7d limits use the newest eligible account-wide rate-limit event from either the codex bucket or a legacy unnamed snapshot, and refresh only when a matching rollout event is available."
                 }
               },
               {
@@ -703,7 +703,7 @@
         </details>
         <details>
           <summary>Does each patched Codex session keep its own HUD data?</summary>
-          <p>Yes. Patched mode binds model, reasoning effort, service tier, context, and token totals to each session. A fresh session can briefly show no effort plus <code>Ctx:?</code> and <code>Tkn:?</code> until its rollout opens. The <code>5h</code> and <code>7d</code> limits remain account-wide, so shared movement is expected and is not session bleed.</p>
+          <p>Yes. Patched mode binds model, reasoning effort, service tier, context, and token totals to each session. Until a fresh session's rollout opens, unavailable segments are omitted. The <code>5h</code> and <code>7d</code> limits use the newest eligible account-wide rate-limit event from either the <code>codex</code> bucket or a legacy unnamed snapshot, and refresh only when a matching rollout event is available.</p>
         </details>
         <details>
           <summary>How can I use a model and effort for one session only?</summary>

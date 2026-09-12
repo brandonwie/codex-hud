@@ -65,9 +65,27 @@ function readmeFormatKeys() {
 
 const DEFAULT_SEGMENTS = ["model", "project", "branch", "ctx", "5h", "7d"];
 
-// Isolated CODEX_HOME with no sessions/config so config resolution is deterministic.
+// Isolated CODEX_HOME with one deterministic usage sample and no config.
 const home = tmpdir();
+const rollout = path.join(home, "sessions", "2026", "06", "08", "rollout-config-test.jsonl");
+fs.mkdirSync(path.dirname(rollout), { recursive: true });
+fs.writeFileSync(
+  rollout,
+  `${JSON.stringify({
+    timestamp: "2026-06-08T00:00:00.000Z",
+    payload: {
+      type: "token_count",
+      info: {
+        last_token_usage: { total_tokens: 210 },
+        total_token_usage: { total_tokens: 210 },
+        model_context_window: 1000,
+      },
+    },
+  })}\n`,
+  "utf8",
+);
 const baseEnv = { CODEX_HOME: home };
+const emptyHome = tmpdir();
 
 try {
   // 1. No config -> built-in defaults (runtime not in default), nothing applied.
@@ -104,6 +122,10 @@ try {
     assert.doesNotMatch(line.stdout, /: /);
     assert.match(line.stdout, /Ctx/);
     assert.doesNotMatch(line.stdout, /Tkn/, "tkn is not a default segment");
+
+    const emptyLine = run(["--line"], { CODEX_HOME: emptyHome });
+    assert.strictEqual(emptyLine.status, 0, emptyLine.stderr);
+    assert.doesNotMatch(emptyLine.stdout, /(?:Ctx|5h|7d|Tkn):/);
   }
 
   // 2. space=true restores padded segment and label separators.
@@ -295,6 +317,7 @@ try {
   }
 } finally {
   fs.rmSync(home, { recursive: true, force: true });
+  fs.rmSync(emptyHome, { recursive: true, force: true });
 }
 
 console.log("codex-hud config tests passed");

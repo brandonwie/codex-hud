@@ -3,6 +3,7 @@ use crate::hudcfg;
 use crate::util;
 use serde_json::{json, Map, Value};
 use std::ffi::OsStr;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 // SSoT: Cargo.toml owns the version; release tooling bumps it there only.
@@ -226,18 +227,47 @@ fn mtime_ms(path: &Path) -> i64 {
         .unwrap_or(0)
 }
 
-/// Port of readTailLines(): last maxLines lines of a trimmed file.
-pub fn read_tail_lines(path: &Path, max_lines: usize) -> Vec<String> {
-    let Some(text) = util::read_text(path) else {
-        return Vec::new();
+/// Read a bounded tail while preserving complete UTF-8 lines.
+fn read_tail_text(path: &Path, max_lines: usize) -> Option<String> {
+    if max_lines == 0 {
+        return Some(String::new());
+    }
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return None;
     };
-    let lines: Vec<&str> = text
-        .trim()
-        .split('\n')
-        .map(|l| l.strip_suffix('\r').unwrap_or(l))
-        .collect();
-    let start = lines.len().saturating_sub(max_lines);
-    lines[start..].iter().map(|l| l.to_string()).collect()
+    let Ok(mut position) = file.seek(SeekFrom::End(0)) else {
+        return None;
+    };
+    let end = position;
+    let mut newline_count = 0;
+    const BLOCK_SIZE: u64 = 64 * 1024;
+    let mut block = vec![0; BLOCK_SIZE as usize];
+    while position > 0 && newline_count <= max_lines {
+        let chunk_len = position.min(BLOCK_SIZE);
+        position -= chunk_len;
+        if file.seek(SeekFrom::Start(position)).is_err() {
+            return None;
+        }
+        let chunk = &mut block[..chunk_len as usize];
+        if file.read_exact(chunk).is_err() {
+            return None;
+        }
+        newline_count += chunk.iter().filter(|byte| **byte == b'\n').count();
+    }
+    let mut bytes = vec![0; (end - position) as usize];
+    if file.seek(SeekFrom::Start(position)).is_err() || file.read_exact(&mut bytes).is_err() {
+        return None;
+    }
+    if position > 0 {
+        let Some(first_newline) = bytes.iter().position(|byte| *byte == b'\n') else {
+            return None;
+        };
+        bytes.drain(..=first_newline);
+    }
+    Some(match String::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(error) => String::from_utf8_lossy(error.as_bytes()).into_owned(),
+    })
 }
 
 /// Port of parseTokenCount(): one rollout JSONL line -> token_count event.
@@ -262,12 +292,15 @@ pub fn parse_token_count(line: &str) -> Option<Value> {
 
 /// Port of percentFromTokens().
 pub fn percent_from_tokens(usage: Option<&Value>, context_window: Option<&Value>) -> Value {
-    let total = compat::js_number(compat::get(
+    let total = compat::as_finite_number(compat::get(
         usage.filter(|u| compat::truthy(Some(u))),
         "total_tokens",
     ));
-    let window = compat::js_number(context_window);
-    if !total.is_finite() || !window.is_finite() || window <= 0.0 {
+    let window = compat::as_finite_number(context_window);
+    let (Some(total), Some(window)) = (total, window) else {
+        return Value::Null;
+    };
+    if window <= 0.0 {
         return Value::Null;
     }
     compat::number_value(compat::js_round(total / window * 100.0).max(0.0))
@@ -281,14 +314,14 @@ pub fn rate_window(raw: Option<&Value>) -> Value {
     let used_raw = raw
         .get("used_percent")
         .filter(|v| !v.is_null())
-        .or_else(|| raw.get("used_percentage"));
-    let used_percent = compat::js_number(used_raw);
-    let window_minutes = compat::js_number(raw.get("window_minutes"));
-    let resets_at = compat::js_number(raw.get("resets_at"));
+        .or_else(|| raw.get("used_percentage").filter(|v| !v.is_null()));
+    let used_percent = compat::as_finite_number(used_raw);
+    let window_minutes = compat::as_finite_number(raw.get("window_minutes"));
+    let resets_at = compat::as_finite_number(raw.get("resets_at"));
     json!({
-        "usedPercent": if used_percent.is_finite() { compat::number_value(compat::js_round(used_percent)) } else { Value::Null },
-        "windowMinutes": if window_minutes.is_finite() { compat::number_value(window_minutes) } else { Value::Null },
-        "resetsAt": if resets_at.is_finite() { compat::number_value(resets_at) } else { Value::Null },
+        "usedPercent": used_percent.map(|value| compat::number_value(compat::js_round(value))).unwrap_or(Value::Null),
+        "windowMinutes": window_minutes.map(compat::number_value).unwrap_or(Value::Null),
+        "resetsAt": resets_at.map(compat::number_value).unwrap_or(Value::Null),
     })
 }
 
@@ -313,7 +346,7 @@ fn window_minutes_of(window: &Value) -> f64 {
 /// Pass 1 — exact recognized durations claim slots in payload order
 /// (primary first); a duplicate claim on an already-taken slot is dropped and
 /// never overflows into the other slot. Unrecognized durations are not
-/// classified (the slot stays null and renders `?`).
+/// classified (the slot stays null and its segment is omitted).
 /// Pass 2 — a window with missing/non-finite `window_minutes` falls back to
 /// its own original position's slot, only if that slot is still empty. This
 /// preserves the legacy positional behavior for payloads without durations.
@@ -352,12 +385,7 @@ pub fn classify_rate_windows(primary: Value, secondary: Value) -> (Value, Value)
 }
 
 fn token_number(value: Option<&Value>) -> Option<f64> {
-    let n = compat::js_number(value);
-    if n.is_finite() && n >= 0.0 {
-        Some(n)
-    } else {
-        None
-    }
+    compat::as_finite_number(value).filter(|number| *number >= 0.0)
 }
 
 /// Port of tokenSummary().
@@ -373,11 +401,12 @@ pub fn token_summary(raw: Option<&Value>) -> Value {
         .or_else(|| raw.get("cache_read_input_tokens"));
     let cache = token_number(cache_raw);
     let fallback_total = token_number(raw.get("total_tokens"));
-    let component_total: f64 = [input, output, cache].iter().flatten().sum();
+    let components = [input, output, cache];
+    let component_total: f64 = components.iter().flatten().sum();
     let total = if component_total > 0.0 {
         Some(component_total)
     } else {
-        fallback_total
+        fallback_total.or_else(|| components.iter().any(Option::is_some).then_some(0.0))
     };
 
     let Some(total) = total else {
@@ -412,13 +441,24 @@ fn latest_usage_from_files(
     let mut latest_context = Value::Null;
     let mut latest_tokens = Value::Null;
     let mut latest_rate_limits = Value::Null;
+    let mut latest_rate_timestamp: Option<String> = None;
     let mut source_file = Value::Null;
 
     for file in files.iter().take(50) {
-        let mut lines = read_tail_lines(file, 1200);
-        lines.reverse();
-
-        for line in &lines {
+        let Some(tail) = read_tail_text(file, 1200) else {
+            continue;
+        };
+        let mut found_account_rate_in_file = false;
+        for raw_line in tail.trim().lines().rev().take(1200) {
+            let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
+            let needs_context_tokens =
+                include_context_tokens && (latest_context.is_null() || latest_tokens.is_null());
+            let may_have_rate_limits = include_rate_limits
+                && !found_account_rate_in_file
+                && line.contains("\"rate_limits\"");
+            if !needs_context_tokens && !may_have_rate_limits {
+                continue;
+            }
             let Some(token_count) = parse_token_count(line) else {
                 continue;
             };
@@ -427,22 +467,17 @@ fn latest_usage_from_files(
             if include_context_tokens && latest_context.is_null() {
                 if let Some(info) = info {
                     let last_usage = info.get("last_token_usage");
-                    let used_tokens = if compat::truthy(last_usage) {
-                        let n = compat::js_number(compat::get(last_usage, "total_tokens"));
-                        if n.is_nan() {
-                            Value::Null
-                        } else {
-                            compat::number_value(n)
-                        }
-                    } else {
-                        Value::Null
-                    };
-                    let window_n = compat::js_number(info.get("model_context_window"));
-                    let window_tokens = if window_n.is_finite() && window_n != 0.0 {
-                        compat::number_value(window_n)
-                    } else {
-                        Value::Null
-                    };
+                    let used_tokens = compat::as_finite_number(compat::get(
+                        last_usage.filter(|usage| compat::truthy(Some(usage))),
+                        "total_tokens",
+                    ))
+                    .filter(|value| *value >= 0.0)
+                    .map(compat::number_value)
+                    .unwrap_or(Value::Null);
+                    let window_tokens = compat::as_finite_number(info.get("model_context_window"))
+                        .filter(|value| *value > 0.0)
+                        .map(compat::number_value)
+                        .unwrap_or(Value::Null);
                     let used_percent =
                         percent_from_tokens(last_usage, info.get("model_context_window"));
                     let candidate = json!({
@@ -471,40 +506,60 @@ fn latest_usage_from_files(
                 }
             }
 
-            if include_rate_limits && latest_rate_limits.is_null() {
+            if include_rate_limits {
                 let rate_limits = token_count
                     .get("rateLimits")
                     .filter(|r| compat::truthy(Some(r)));
                 if let Some(rate_limits) = rate_limits {
+                    match rate_limits.get("limit_id") {
+                        None | Some(Value::Null) => {}
+                        Some(Value::String(limit_id)) if limit_id.trim().is_empty() => {}
+                        Some(Value::String(limit_id)) if limit_id.eq_ignore_ascii_case("codex") => {
+                        }
+                        _ => continue,
+                    }
                     let primary = rate_window(rate_limits.get("primary"));
                     let secondary = rate_window(rate_limits.get("secondary"));
-                    if primary.is_null() && secondary.is_null() {
-                        continue;
-                    }
+                    found_account_rate_in_file = true;
                     // Slots are duration-classified (short=5h, weekly=7d) and
                     // re-exposed under the legacy primary/secondary keys so the
-                    // renderer stays untouched. See classify_rate_windows().
+                    // renderer receives stable slots. See classify_rate_windows().
                     // The newest sample wins even when both windows are
-                    // unrecognized (both slots null -> renders 5h:?|7d:?):
-                    // falling through to an older line would show stale usage.
+                    // unavailable; falling through to an older line would show
+                    // stale usage instead of omitting the missing segments.
                     let (primary, secondary) = classify_rate_windows(primary, secondary);
                     let or_null = |v: Option<&Value>| match v {
                         Some(value) if compat::truthy(Some(value)) => value.clone(),
                         _ => Value::Null,
                     };
-                    latest_rate_limits = json!({
-                        "primary": primary,
-                        "secondary": secondary,
-                        "planType": or_null(rate_limits.get("plan_type")),
-                        "limitId": or_null(rate_limits.get("limit_id")),
-                        "timestamp": token_count.get("timestamp").cloned().unwrap_or(Value::Null),
-                    });
+                    let timestamp = token_count
+                        .get("timestamp")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    let is_newer = latest_rate_limits.is_null()
+                        || match (&timestamp, &latest_rate_timestamp) {
+                            (Some(candidate), Some(latest)) => candidate > latest,
+                            (Some(_), None) => true,
+                            _ => false,
+                        };
+                    if is_newer {
+                        latest_rate_limits = json!({
+                            "primary": primary,
+                            "secondary": secondary,
+                            "planType": or_null(rate_limits.get("plan_type")),
+                            "limitId": or_null(rate_limits.get("limit_id")),
+                            "timestamp": token_count.get("timestamp").cloned().unwrap_or(Value::Null),
+                        });
+                        latest_rate_timestamp = timestamp;
+                    }
                 }
             }
 
             let context_tokens_done =
                 !include_context_tokens || (!latest_context.is_null() && !latest_tokens.is_null());
-            let rate_limits_done = !include_rate_limits || !latest_rate_limits.is_null();
+            // Rate-limit freshness is determined by event timestamps across the
+            // bounded file scan, not by a rollout file's mutable mtime.
+            let rate_limits_done = !include_rate_limits;
             if context_tokens_done && rate_limits_done {
                 return usage_value(
                     source_file,
@@ -743,6 +798,48 @@ mod tests {
         fs::write(path, format!("{rollout}\n")).expect("write rollout");
     }
 
+    fn write_rate_rollout(path: &Path, timestamp: &str, limit_id: Option<&str>, used_percent: i64) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create rollout parent");
+        }
+        let mut rate_limits = json!({
+            "primary": {
+                "used_percent": used_percent,
+                "window_minutes": 10080,
+                "resets_at": 1780848000
+            }
+        });
+        if let Some(limit_id) = limit_id {
+            rate_limits["limit_id"] = json!(limit_id);
+        }
+        let rollout = json!({
+            "timestamp": timestamp,
+            "payload": {
+                "type": "token_count",
+                "rate_limits": rate_limits
+            }
+        });
+        fs::write(path, format!("{rollout}\n")).expect("write rollout");
+    }
+
+    #[test]
+    fn read_tail_text_keeps_complete_utf8_and_crlf_lines() {
+        let dir = temp_dir("tail-lines");
+        let path = dir.join("rollout.jsonl");
+        let content = format!("{}\r\nkeep-α\r\nkeep-β\r\n", "界".repeat(30_000));
+        fs::write(&path, content).expect("write tail fixture");
+
+        let tail = read_tail_text(&path, 2).expect("read tail");
+        let lines: Vec<&str> = tail
+            .trim()
+            .lines()
+            .map(|line| line.strip_suffix('\r').unwrap_or(line))
+            .collect();
+
+        assert_eq!(lines, vec!["keep-α", "keep-β"]);
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
     #[test]
     fn resolve_identity_value_uses_session_env_before_config() {
         struct Case {
@@ -851,6 +948,187 @@ mod tests {
             global_rates["rateLimits"]["primary"]["usedPercent"],
             json!(17)
         );
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
+    }
+
+    #[test]
+    fn latest_usage_uses_newest_account_rate_snapshot_and_ignores_named_buckets() {
+        let codex_home = temp_dir("usage-account-rates");
+        let named = codex_home.join("named.jsonl");
+        let stale_account = codex_home.join("stale-account.jsonl");
+        let fresh_account = codex_home.join("fresh-account.jsonl");
+        write_rate_rollout(
+            &named,
+            "2026-06-08T03:00:00.000Z",
+            Some("codex_other_model"),
+            0,
+        );
+        write_rate_rollout(&stale_account, "2026-06-08T01:00:00.000Z", Some("codex"), 3);
+        write_rate_rollout(&fresh_account, "2026-06-08T02:00:00.000Z", Some("codex"), 4);
+
+        let usage = latest_usage_from_files(&[named, stale_account, fresh_account], false, true);
+
+        assert_eq!(usage["rateLimits"]["limitId"], json!("codex"));
+        assert_eq!(usage["rateLimits"]["secondary"]["usedPercent"], json!(4));
+        assert_eq!(
+            usage["rateLimits"]["timestamp"],
+            json!("2026-06-08T02:00:00.000Z")
+        );
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
+    }
+
+    #[test]
+    fn latest_usage_accepts_newer_legacy_account_snapshot_without_limit_id() {
+        let codex_home = temp_dir("usage-legacy-rate");
+        let legacy = codex_home.join("legacy.jsonl");
+        let account = codex_home.join("account.jsonl");
+        write_rate_rollout(&legacy, "2026-06-08T03:00:00.000Z", None, 8);
+        write_rate_rollout(&account, "2026-06-08T02:00:00.000Z", Some("codex"), 4);
+
+        let usage = latest_usage_from_files(&[legacy, account], false, true);
+
+        assert_eq!(usage["rateLimits"]["limitId"], Value::Null);
+        assert_eq!(usage["rateLimits"]["secondary"]["usedPercent"], json!(8));
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
+    }
+
+    #[test]
+    fn latest_explicit_account_snapshot_with_no_windows_clears_older_values() {
+        let codex_home = temp_dir("usage-empty-account-rate");
+        let empty = codex_home.join("empty.jsonl");
+        let older = codex_home.join("older.jsonl");
+        let empty_event = json!({
+            "timestamp": "2026-06-08T03:00:00.000Z",
+            "payload": {
+                "type": "token_count",
+                "rate_limits": { "limit_id": "codex", "primary": null, "secondary": null }
+            }
+        });
+        fs::write(&empty, format!("{empty_event}\n")).expect("write empty rollout");
+        write_rate_rollout(&older, "2026-06-08T02:00:00.000Z", Some("codex"), 4);
+
+        let usage = latest_usage_from_files(&[empty, older], false, true);
+
+        assert_eq!(usage["rateLimits"]["primary"], Value::Null);
+        assert_eq!(usage["rateLimits"]["secondary"], Value::Null);
+        assert_eq!(
+            usage["rateLimits"]["timestamp"],
+            json!("2026-06-08T03:00:00.000Z")
+        );
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
+    }
+
+    #[test]
+    fn latest_legacy_account_snapshot_with_no_windows_clears_older_values() {
+        let codex_home = temp_dir("usage-empty-legacy-rate");
+        let empty = codex_home.join("empty.jsonl");
+        let older = codex_home.join("older.jsonl");
+        let empty_event = json!({
+            "timestamp": "2026-06-08T03:00:00.000Z",
+            "payload": { "type": "token_count", "rate_limits": {} }
+        });
+        fs::write(&empty, format!("{empty_event}\n")).expect("write empty rollout");
+        write_rate_rollout(&older, "2026-06-08T02:00:00.000Z", Some("codex"), 4);
+
+        let usage = latest_usage_from_files(&[empty, older], false, true);
+
+        assert_eq!(usage["rateLimits"]["primary"], Value::Null);
+        assert_eq!(usage["rateLimits"]["secondary"], Value::Null);
+        assert_eq!(
+            usage["rateLimits"]["timestamp"],
+            json!("2026-06-08T03:00:00.000Z")
+        );
+        fs::remove_dir_all(codex_home).expect("remove temp dir");
+    }
+
+    #[test]
+    fn rate_window_omits_unavailable_fields_but_preserves_numeric_zero() {
+        let unavailable = rate_window(Some(&json!({
+            "used_percent": null,
+            "used_percentage": null,
+            "window_minutes": "",
+            "resets_at": false
+        })));
+        assert_eq!(unavailable["usedPercent"], Value::Null);
+        assert_eq!(unavailable["windowMinutes"], Value::Null);
+        assert_eq!(unavailable["resetsAt"], Value::Null);
+
+        let zero = rate_window(Some(&json!({
+            "used_percent": 0,
+            "window_minutes": 0,
+            "resets_at": 0
+        })));
+        assert_eq!(zero["usedPercent"], json!(0));
+        assert_eq!(zero["windowMinutes"], json!(0));
+        assert_eq!(zero["resetsAt"], json!(0));
+    }
+
+    #[test]
+    fn usage_parsers_reject_non_numeric_values_and_preserve_explicit_zero() {
+        let null_usage = json!({ "total_tokens": null });
+        let string_usage = json!({ "total_tokens": "0" });
+        assert_eq!(
+            percent_from_tokens(Some(&null_usage), Some(&json!(1000))),
+            Value::Null
+        );
+        assert_eq!(
+            percent_from_tokens(Some(&string_usage), Some(&json!(1000))),
+            Value::Null
+        );
+        assert_eq!(
+            percent_from_tokens(Some(&json!({ "total_tokens": 0 })), Some(&json!(1000))),
+            json!(0)
+        );
+
+        let tokens = token_summary(Some(&json!({
+            "total_tokens": null,
+            "input_tokens": 0,
+            "output_tokens": null,
+            "cached_input_tokens": ""
+        })));
+        assert_eq!(tokens["total"], json!(0));
+        assert_eq!(tokens["input"], json!(0));
+        assert_eq!(tokens["output"], Value::Null);
+        assert_eq!(tokens["cache"], Value::Null);
+    }
+
+    #[test]
+    fn latest_usage_omits_unavailable_context_fields_and_keeps_zero_tokens() {
+        let codex_home = temp_dir("usage-null-fields");
+        let unavailable = codex_home.join("unavailable.jsonl");
+        let unavailable_event = json!({
+            "timestamp": "2026-06-08T03:00:00.000Z",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "last_token_usage": { "total_tokens": null },
+                    "total_token_usage": {
+                        "total_tokens": 0,
+                        "input_tokens": 0,
+                        "output_tokens": null,
+                        "cached_input_tokens": ""
+                    },
+                    "model_context_window": false
+                }
+            }
+        });
+        fs::write(&unavailable, format!("{unavailable_event}\n"))
+            .expect("write unavailable rollout");
+
+        let usage = latest_usage_from_files(&[unavailable], true, false);
+
+        assert_eq!(usage["context"], Value::Null);
+        assert_eq!(usage["tokens"]["total"], json!(0));
+        assert_eq!(usage["tokens"]["input"], json!(0));
+        assert_eq!(usage["tokens"]["output"], Value::Null);
+        assert_eq!(usage["tokens"]["cache"], Value::Null);
+
+        let zero = codex_home.join("zero.jsonl");
+        write_usage_rollout(&zero, "2026-06-08T04:00:00.000Z", 0, 1000, 0, 0);
+        let zero_usage = latest_usage_from_files(&[zero], true, false);
+        assert_eq!(zero_usage["context"]["usedPercent"], json!(0));
+        assert_eq!(zero_usage["context"]["usedTokens"], json!(0));
+        assert_eq!(zero_usage["tokens"]["total"], json!(0));
         fs::remove_dir_all(codex_home).expect("remove temp dir");
     }
 

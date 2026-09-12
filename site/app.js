@@ -300,19 +300,23 @@
   };
 
   const appendTokenUsage = (line, state) => {
+    if (!Number.isFinite(tokenPreview.total)) return false;
     const labelSeparator = state.space ? ": " : ":";
     append(line, "Tkn", "label", state, "label");
     append(line, labelSeparator, "label", state, "label");
     append(line, formatToken(tokenPreview.total, state), "token-total", state, "tokenTotal");
-    if (!state.tokenUsage) return;
-    append(line, "(", "label", state, "label");
-    append(line, "I:", "label", state, "label");
-    append(line, formatToken(tokenPreview.input, state), "token-value", state, "tokenInput");
-    append(line, ",O:", "label", state, "label");
-    append(line, formatToken(tokenPreview.output, state), "token-value", state, "tokenOutput");
-    append(line, ",C:", "label", state, "label");
-    append(line, formatToken(tokenPreview.cache, state), "token-value", state, "tokenCache");
-    append(line, ")", "label", state, "label");
+    if (!state.tokenUsage) return true;
+    const parts = [
+      ["I:", tokenPreview.input, "tokenInput"],
+      ["O:", tokenPreview.output, "tokenOutput"],
+      ["C:", tokenPreview.cache, "tokenCache"],
+    ].filter(([, value]) => Number.isFinite(value));
+    parts.forEach(([label, value, colorKey], index) => {
+      append(line, index === 0 ? `(${label}` : `,${label}`, "label", state, "label");
+      append(line, formatToken(value, state), "token-value", state, colorKey);
+    });
+    if (parts.length > 0) append(line, ")", "label", state, "label");
+    return true;
   };
 
   const renderSegment = (line, segment, state) => {
@@ -340,10 +344,12 @@
       return true;
     }
     if (segment === "ctx") {
+      if (!Number.isFinite(state.context)) return false;
       appendMetric(line, state.labelCtx, state.context, null, state);
       return true;
     }
     if (segment === "5h") {
+      if (!Number.isFinite(state.fiveHour)) return false;
       appendMetric(line, "5h", state.fiveHour, {
         remaining: remaining(state.fiveHour, 5),
         pace: paceDetail(state.fiveHourPace, state.fiveHour, state),
@@ -351,6 +357,7 @@
       return true;
     }
     if (segment === "7d") {
+      if (!Number.isFinite(state.sevenDay)) return false;
       appendMetric(line, "7d", state.sevenDay, {
         remaining: remaining(state.sevenDay, 7 * 24),
         pace: paceDetail(state.sevenDayPace, state.sevenDay, state),
@@ -358,8 +365,7 @@
       return true;
     }
     if (segment === "tkn") {
-      appendTokenUsage(line, state);
-      return true;
+      return appendTokenUsage(line, state);
     }
     return false;
   };
@@ -371,8 +377,11 @@
 
     let rendered = 0;
     for (const segment of state.segments) {
+      const fragment = document.createDocumentFragment();
+      if (!renderSegment(fragment, segment, state)) continue;
       if (rendered > 0) appendSeparator(target, state);
-      if (renderSegment(target, segment, state)) rendered += 1;
+      target.append(fragment);
+      rendered += 1;
     }
   };
 
@@ -475,9 +484,9 @@
       paceSlowPrefix: readText(field.paceSlowPrefix, "🐢"),
       paceNormalPrefix: readText(field.paceNormalPrefix, "👾"),
       paceFastPrefix: readText(field.paceFastPrefix, "🔥"),
-      context: clamp(field.context && field.context.value, 0, 100, 32),
-      fiveHour: clamp(field.fiveHour && field.fiveHour.value, 0, 100, 6),
-      sevenDay: clamp(field.sevenDay && field.sevenDay.value, 0, 100, 4),
+      context: clamp(field.context && field.context.value, 0, 100, Number.NaN),
+      fiveHour: clamp(field.fiveHour && field.fiveHour.value, 0, 100, Number.NaN),
+      sevenDay: clamp(field.sevenDay && field.sevenDay.value, 0, 100, Number.NaN),
       fiveHourPace: clamp(field.fiveHourPace && field.fiveHourPace.value, 0, 100, 20),
       sevenDayPace: clamp(field.sevenDayPace && field.sevenDayPace.value, 0, 100, 13),
     };
@@ -485,9 +494,15 @@
 
   const render = () => {
     const state = readState();
-    if (output.context) output.context.textContent = formatPercent(state.context, state);
-    if (output.fiveHour) output.fiveHour.textContent = formatPercent(state.fiveHour, state);
-    if (output.sevenDay) output.sevenDay.textContent = formatPercent(state.sevenDay, state);
+    if (output.context) {
+      output.context.textContent = Number.isFinite(state.context) ? formatPercent(state.context, state) : "";
+    }
+    if (output.fiveHour) {
+      output.fiveHour.textContent = Number.isFinite(state.fiveHour) ? formatPercent(state.fiveHour, state) : "";
+    }
+    if (output.sevenDay) {
+      output.sevenDay.textContent = Number.isFinite(state.sevenDay) ? formatPercent(state.sevenDay, state) : "";
+    }
     if (output.barWidth) output.barWidth.textContent = String(state.barWidth);
     if (output.fiveHourPace) output.fiveHourPace.textContent = `${Math.round(state.fiveHourPace)}%`;
     if (output.sevenDayPace) output.sevenDayPace.textContent = `${Math.round(state.sevenDayPace)}%`;

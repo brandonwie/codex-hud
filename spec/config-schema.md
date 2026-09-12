@@ -56,15 +56,19 @@ Aliases expanded before validation: `workspace` → `project,branch,runtime`;
 `runtime` (`node vX`) and `tkn` (`Tkn:904k(I:… O:… C:…)`) are available but
 **off by default** — add them to opt in. A config that names
 `["model", "project", "branch", "ctx", "5h", "7d", "tkn"]` with
-`format.bar = false` reproduces the pre-0.6 footer byte for byte.
+`format.bar = false` reproduces the pre-0.6 footer byte for byte when every
+configured segment value is available.
 
-`5h` and `7d` are filled from Codex's rate-limit windows matched by window
-length (300 and 10080 minutes respectively) rather than by payload position;
-a window that carries no length at all falls back to its own original payload
-position, and only when that slot is still empty. When the payload omits a
-window, that segment renders `?` instead of showing the other window's value.
-A window with an unrecognized length is dropped entirely (it fills no slot),
-so its segment also renders `?`.
+`5h` and `7d` are filled from the newest eligible account-wide rate-limit
+snapshot in Codex rollout events. A snapshot is eligible when
+`limit_id = "codex"` or when its limit ID is missing, null, or empty for legacy
+compatibility; every other named bucket is ignored, and the newest eligible
+event timestamp wins. Both windows come from that one snapshot and are matched
+by window length (300 and 10080
+minutes respectively) rather than by payload position; a window that carries
+no length at all falls back to its own original payload position, and only when
+that slot is still empty. A missing or unrecognized window is omitted, and
+values refresh only when a newer eligible rollout event is available.
 
 ### Separators
 
@@ -232,8 +236,10 @@ fixtures lock them; do not "clean them up":
    `pace` color wins over the computed delta color).
 7. **Segment order is exactly `config.segments`**; alias expansion happens before
    rendering; arrays replace (never concat) on merge.
-8. **Missing data renders `label:?`** (e.g. `5h:?`, `Tkn:?`), not an omitted
-   segment — and carries **no bar**, because an unknown percent has no fill.
+8. **Missing, null, or non-numeric segment data omits its configured segment**;
+   separators collapse around the remaining segments. Inside `tkn`, unavailable
+   optional `I:` / `O:` / `C:` parts are omitted independently while the total
+   remains visible when available.
 9. **The bargraph sits between `separators.labelValue` and the percent**, with a
    single space after it: `Ctx:` + bar + `" "` + `21%`. Fill is
    `round(percent / 100 * barWidth)` (half away from zero, matching JS

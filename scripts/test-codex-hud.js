@@ -376,6 +376,57 @@ try {
     colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
     /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+$/
   );
+
+  // Account limits come from the canonical `codex` bucket. A newer unrelated
+  // named bucket must not mask the account snapshot, and its absent 5h window
+  // must be omitted without leaving a placeholder or separator.
+  const bucketHome = path.join(tmpCodexHome, "bucket-case");
+  const accountRollout = path.join(bucketHome, "sessions", "2026", "06", "08", "rollout-account.jsonl");
+  const namedRollout = path.join(bucketHome, "sessions", "2026", "06", "09", "rollout-named.jsonl");
+  writeRollout(accountRollout, {
+    timestamp: "2026-06-08T02:00:00.000Z",
+    payload: {
+      type: "token_count",
+      rate_limits: {
+        limit_id: "codex",
+        primary: {
+          used_percent: 4,
+          window_minutes: 10080,
+          resets_at: Math.floor((nowMs + 7 * 24 * 3600000) / 1000),
+        },
+      },
+    },
+  });
+  writeRollout(namedRollout, {
+    timestamp: "2026-06-08T03:00:00.000Z",
+    payload: {
+      type: "token_count",
+      rate_limits: {
+        limit_id: "codex_other_model",
+        primary: { used_percent: 0, window_minutes: 300, resets_at: Math.floor(nowMs / 1000) },
+        secondary: { used_percent: 0, window_minutes: 10080, resets_at: Math.floor(nowMs / 1000) },
+      },
+    },
+  });
+  const bucketConfig = path.join(bucketHome, "codex-hud.toml");
+  fs.writeFileSync(
+    bucketConfig,
+    'segments = ["5h", "7d"]\n[format]\nbar = false\npace = false\n',
+    "utf8",
+  );
+  const bucketEnv = {
+    CODEX_HOME: bucketHome,
+    CODEX_HUD_CONFIG: bucketConfig,
+    CODEX_HUD_NOW_MS: String(nowMs),
+  };
+  const bucketUsage = runJsonWithEnv(bucketEnv).usage;
+  assert.strictEqual(bucketUsage.rateLimits.limitId, "codex");
+  assert.strictEqual(bucketUsage.rateLimits.primary, null);
+  assert.strictEqual(bucketUsage.rateLimits.secondary.usedPercent, 4);
+  const bucketLine = run(["--line"], { env: bucketEnv, unsetEnv: sessionEnvKeys });
+  assert.strictEqual(bucketLine.status, 0, bucketLine.stderr);
+  assert.match(bucketLine.stdout.trim(), /^7d:4%/);
+  assert.doesNotMatch(bucketLine.stdout, /5h|\?/);
 } finally {
   fs.rmSync(tmpCodexHome, { recursive: true, force: true });
 }

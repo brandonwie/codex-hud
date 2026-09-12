@@ -105,7 +105,7 @@ function fakeRendererRun(version) {
         const emptyRollout =
           Object.prototype.hasOwnProperty.call(probeEnv, "CODEX_HUD_ROLLOUT_PATH") &&
           probeEnv.CODEX_HUD_ROLLOUT_PATH === "";
-        const usage = emptyRollout ? "|Ctx:?|5h:?|7d:?|Tkn:?" : "|Ctx:90%|Tkn:999";
+        const usage = emptyRollout ? "" : "|Ctx:90%|Tkn:999";
         return `${probeEnv.CODEX_HUD_MODEL || "cfg-model"}|${probeEnv.CODEX_HUD_EFFORT || "cfg"}|${tier}proj${usage}\n`;
       }
       return `codex-hud ${version}\n`;
@@ -772,11 +772,11 @@ const rendererRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-renderer-t
 const rendererSource = path.join(rendererRoot, "source", "codex-hud");
 const missingSource = path.join(rendererRoot, "source", "not-built");
 // Session-capable fake: reflects the observable identity contract. Like the
-// real renderer, present-empty rollout state uses placeholders rather than the
-// decoy's concrete Ctx/Tkn values.
+// real renderer, present-empty rollout state omits unavailable segments rather
+// than showing the decoy's concrete Ctx/Tkn values.
 writeExecutable(
   rendererSource,
-  '#!/usr/bin/env bash\nif [ "$1" = "--line" ]; then\n  tier=""\n  if [ "$CODEX_HUD_SERVICE_TIER" = "flex" ]; then tier="f|"; fi\n  usage="|Ctx:90%|Tkn:999"\n  if [ "${CODEX_HUD_ROLLOUT_PATH+x}" = "x" ] && [ -z "$CODEX_HUD_ROLLOUT_PATH" ]; then usage="|Ctx:?|5h:?|7d:?|Tkn:?"; fi\n  echo "${CODEX_HUD_MODEL:-cfg-model}|${CODEX_HUD_EFFORT:-cfg}|${tier}proj${usage}"\nelse\n  echo "codex-hud 0.2.0"\nfi\n',
+  '#!/usr/bin/env bash\nif [ "$1" = "--line" ]; then\n  tier=""\n  if [ "$CODEX_HUD_SERVICE_TIER" = "flex" ]; then tier="f|"; fi\n  usage="|Ctx:90%|Tkn:999"\n  if [ "${CODEX_HUD_ROLLOUT_PATH+x}" = "x" ] && [ -z "$CODEX_HUD_ROLLOUT_PATH" ]; then usage=""; fi\n  echo "${CODEX_HUD_MODEL:-cfg-model}|${CODEX_HUD_EFFORT:-cfg}|${tier}proj${usage}"\nelse\n  echo "codex-hud 0.2.0"\nfi\n',
 );
 const rendererPrefix = path.join(rendererRoot, "bin");
 const rendererArgs = { prefix: rendererPrefix, renderer: "auto" };
@@ -940,7 +940,7 @@ const builtRenderer = path.join(__dirname, "..", "rust", "target", "release", re
 assert(fs.existsSync(builtRenderer), "build the release renderer before running installer tests");
 assert.doesNotThrow(
   () => verifyRendererSessionCapability(builtRenderer),
-  "the real renderer must pass with placeholder Ctx/Tkn values for an empty rollout path",
+  "the real renderer must pass with unavailable segments omitted for an empty rollout path",
 );
 assert.throws(
   () => verifyRendererSessionCapability(staleRenderer),
@@ -1933,7 +1933,7 @@ const capDoctorRun = (staleLine) => (command, commandArgs = [], commandOptions =
       const emptyRollout =
         Object.prototype.hasOwnProperty.call(probeEnv, "CODEX_HUD_ROLLOUT_PATH") &&
         probeEnv.CODEX_HUD_ROLLOUT_PATH === "";
-      const usage = emptyRollout ? "|Ctx:?|5h:?|7d:?|Tkn:?" : "|Ctx:90%|Tkn:999";
+      const usage = emptyRollout ? "" : "|Ctx:90%|Tkn:999";
       return `${probeEnv.CODEX_HUD_MODEL || "cfg-model"}|${probeEnv.CODEX_HUD_EFFORT || "cfg"}|${tier}proj${usage}\n`;
     }
     return "codex-hud 0.3.3\n";

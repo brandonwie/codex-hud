@@ -426,7 +426,7 @@ fn pace_state_prefix(percent: Option<f64>, pace: Option<f64>, ctx: &RenderCtx) -
 /// Bargraph for a percent segment, plus its trailing space.
 ///
 /// Empty when `format.bar` is off, when the width is zero, or when the percent
-/// is unknown — an unknown segment renders `label:?` with nothing before it.
+/// is unknown. Callers omit segments whose values are unavailable.
 fn render_bar(percent: Option<f64>, ctx: &RenderCtx) -> String {
     if !ctx.format_flag("bar") {
         return String::new();
@@ -589,45 +589,40 @@ fn render_token_usage(label: &str, tokens: Option<&Value>, ctx: &RenderCtx) -> S
             total
         );
     }
-    let input = colorize(
-        &format_token_count_cfg(count("input"), token_units),
-        ctx.color_of("tokenInput"),
-        e,
-    );
-    let output = colorize(
-        &format_token_count_cfg(count("output"), token_units),
-        ctx.color_of("tokenOutput"),
-        e,
-    );
-    let cache = colorize(
-        &format_token_count_cfg(count("cache"), token_units),
-        ctx.color_of("tokenCache"),
-        e,
-    );
+    let mut detail = String::new();
+    for (key, label_key, color_key) in [
+        ("input", "tokenInput", "tokenInput"),
+        ("output", "tokenOutput", "tokenOutput"),
+        ("cache", "tokenCache", "tokenCache"),
+    ] {
+        let Some(value) = count(key) else {
+            continue;
+        };
+        let separator = if detail.is_empty() {
+            &s.open
+        } else {
+            &s.token_part
+        };
+        detail.push_str(&colorize(
+            &format!("{}{}", separator, ctx.label_text(label_key)),
+            ctx.color_of("label"),
+            e,
+        ));
+        detail.push_str(&colorize(
+            &format_token_count_cfg(Some(value), token_units),
+            ctx.color_of(color_key),
+            e,
+        ));
+    }
+    if !detail.is_empty() {
+        detail.push_str(&colorize(&s.close, ctx.color_of("label"), e));
+    }
     format!(
-        "{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}",
         label_text,
         colorize(&s.label_value, ctx.color_of("label"), e),
         total,
-        colorize(
-            &format!("{}{}", s.open, ctx.label_text("tokenInput")),
-            ctx.color_of("label"),
-            e
-        ),
-        input,
-        colorize(
-            &format!("{}{}", s.token_part, ctx.label_text("tokenOutput")),
-            ctx.color_of("label"),
-            e
-        ),
-        output,
-        colorize(
-            &format!("{}{}", s.token_part, ctx.label_text("tokenCache")),
-            ctx.color_of("label"),
-            e
-        ),
-        cache,
-        colorize(&s.close, ctx.color_of("label"), e)
+        detail
     )
 }
 
@@ -688,29 +683,35 @@ fn render_segment(id: &str, data: &Value, ctx: &RenderCtx) -> Option<String> {
                 data.get("usage").filter(|u| compat::truthy(Some(u))),
                 "context",
             );
-            let used = compat::as_finite_number(compat::get(context, "usedPercent"));
-            Some(render_metric(&ctx.label, used, "", ctx))
+            let used = compat::as_finite_number(compat::get(context, "usedPercent"))?;
+            Some(render_metric(&ctx.label, Some(used), "", ctx))
         }
         "5h" => {
             let rl = compat::get(
                 data.get("usage").filter(|u| compat::truthy(Some(u))),
                 "rateLimits",
             );
-            Some(render_rate(&ctx.label, compat::get(rl, "primary"), ctx))
+            let window = compat::get(rl, "primary").filter(|w| compat::truthy(Some(w)))?;
+            compat::as_finite_number(window.get("usedPercent"))?;
+            Some(render_rate(&ctx.label, Some(window), ctx))
         }
         "7d" => {
             let rl = compat::get(
                 data.get("usage").filter(|u| compat::truthy(Some(u))),
                 "rateLimits",
             );
-            Some(render_rate(&ctx.label, compat::get(rl, "secondary"), ctx))
+            let window = compat::get(rl, "secondary").filter(|w| compat::truthy(Some(w)))?;
+            compat::as_finite_number(window.get("usedPercent"))?;
+            Some(render_rate(&ctx.label, Some(window), ctx))
         }
         "tkn" => {
             let tokens = compat::get(
                 data.get("usage").filter(|u| compat::truthy(Some(u))),
                 "tokens",
             );
-            Some(render_token_usage(&ctx.label, tokens, ctx))
+            let tokens = tokens.filter(|t| compat::truthy(Some(t)))?;
+            compat::as_finite_number(tokens.get("total"))?;
+            Some(render_token_usage(&ctx.label, Some(tokens), ctx))
         }
         _ => None,
     }
@@ -1180,7 +1181,7 @@ mod tests {
     }
 
     #[test]
-    fn render_footer_draws_percent_bars_and_omits_them_for_unknown_data() {
+    fn render_footer_draws_percent_bars_and_omits_unknown_metrics() {
         let mut config = hudcfg::default_config();
         config["segments"] = json!(["ctx", "5h", "7d"]);
         let data = json!({
@@ -1195,11 +1196,34 @@ mod tests {
 
         assert_eq!(
             render_footer(&data, &config, false),
-            "Ctx:█░░░░ 21%|5h:█████ 95%|7d:?"
+            "Ctx:█░░░░ 21%|5h:█████ 95%"
         );
 
         config["format"]["bar"] = json!(false);
-        assert_eq!(render_footer(&data, &config, false), "Ctx:21%|5h:95%|7d:?");
+        assert_eq!(render_footer(&data, &config, false), "Ctx:21%|5h:95%");
+    }
+
+    #[test]
+    fn render_footer_preserves_zero_values_and_omits_missing_token_parts() {
+        let mut config = hudcfg::default_config();
+        config["segments"] = json!(["ctx", "5h", "7d", "tkn"]);
+        config["format"]["bar"] = json!(false);
+        let data = json!({
+            "usage": {
+                "context": { "usedPercent": 0 },
+                "rateLimits": {
+                    "primary": { "usedPercent": 0 },
+                    "secondary": null
+                },
+                "tokens": { "total": 0, "input": 0, "output": null, "cache": null }
+            }
+        });
+
+        assert_eq!(
+            render_footer(&data, &config, false),
+            "Ctx:0%|5h:0%|Tkn:0(I:0)"
+        );
+        assert_eq!(render_footer(&json!({}), &config, false), "");
     }
 
     #[test]
