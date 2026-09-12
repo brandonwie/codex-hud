@@ -169,7 +169,7 @@ try {
   const noConfigLine = run(["--line"], { env: noConfigEnv, unsetEnv: sessionEnvKeys });
   assert.strictEqual(noConfigLine.status, 0, noConfigLine.stderr);
   assert.doesNotMatch(noConfigLine.stdout, /(^|\|)s(?:\||$)/);
-  assert.match(noConfigLine.stdout, /\|codex-hud\|/);
+  assert.match(noConfigLine.stdout, /(^|\|)codex-hud(?:\||$)/);
 
   const envIdentityLine = run(["--line"], {
     env: {
