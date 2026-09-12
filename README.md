@@ -37,9 +37,9 @@ The compact status line, printed by `--line` (rendered as an in-TUI footer only 
 5.6-sol|h|f|codex-hud|git(main*)|Ctx:█░░░░ 21%|5h:█░░░░ 17%(5h,🐢100%)|7d:█░░░░ 16%(5.1d,👾27%)
 ```
 
-> The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and non-default service tier are separate atoms; compact mode uses the normalized tier's first character (`fast` → `f`, `priority` → `p`).
+> The segments, labels, colors, thresholds, and compact/full identity format in that line are configurable — see [Configuration](#configuration). Model, reasoning effort, and non-standard service tiers are separate atoms. Standard/default service is hidden; compact mode shortens visible tiers such as `fast` → `f` and `priority` → `p`.
 
-> The `5h` and `7d` segments are matched to Codex's rate-limit windows by window length (300 and 10080 minutes), not by payload position — the backend can report either window in either slot, or only one of them. A segment whose window is missing from the payload renders `?` (e.g. `5h:?`) instead of borrowing the other window's value.
+> The `5h` and `7d` segments use the newest eligible account-wide rate-limit snapshot in Codex rollout events. Eligible snapshots belong to the `codex` limit bucket or use the legacy format without a limit ID; the newest event timestamp wins, and other named buckets are ignored. Both windows come from that one snapshot and are matched by length (300 and 10080 minutes); a missing window is omitted. Values refresh only when a matching rollout event is available.
 
 The default status-line renderer is `codex-hud`, a small native Rust binary (edition 2021, MIT): a single self-contained executable with no interpreter on the rendering path, a minimal dependency footprint (just `serde_json` and `toml`), zero `unsafe` code, and a size-optimized release build that comes in around 574 KB. For clarity, two different "Rust"s appear in this README: the upstream Codex CLI is itself a Rust program (the build target of the experimental patch below), while `codex-hud` is the separate in-repo status-line renderer.
 
@@ -199,13 +199,13 @@ tokenUsage = true   # false -> total only, hide (I:.. O:.. C:..)
 pace = true         # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> hide the pace icon (🐢/👾/🔥), keep the %
 identityShort = true # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
-fastMode = false # force the fast service-tier atom
+fastMode = false # false -> resolved tier (standard hidden); true -> force fast/f
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"
 ```
 
-Model, reasoning effort, and a non-default service tier use the normal segment separator. Compact mode maps known reasoning names such as `high` to `h` and shortens any normalized service tier to its first character (`fast` → `f`, `priority` → `p`); full mode keeps `gpt-5.6-sol|high|fast`. The `default` and `standard` tiers are omitted. Older `modelShort` and `effortShort` keys remain accepted as compatibility overrides, but new configs should use `identityShort`.
+Model, reasoning effort, and visible service tiers use the normal segment separator. Standard/default service is hidden. Compact mode maps known reasoning names such as `high` to `h` and shortens visible tiers to their first character (`fast` → `f`, `priority` → `p`); full mode keeps values such as `gpt-5.6-sol|high|fast`. A service tier that is genuinely unavailable is also omitted. Older `modelShort` and `effortShort` keys remain accepted as compatibility overrides, but new configs should use `identityShort`.
 
 Pace markers compare usage against even burn rate: slow is more than `thresholds.pace.crit` behind pace, fast is more than `thresholds.pace.crit` ahead, and the middle band is normal. Run `codex-hud --print-config` to see the full resolved option set.
 
@@ -291,7 +291,7 @@ The installer first looks for a target-specific archive under the `codex-runtime
 
 The source patch also keeps local plugin disablement as a kill switch for remotely installed plugins. A remote bundle loads only when both the account-side state and `plugins.<id>.enabled` permit it, so turning a plugin off in `/plugins` removes its bundled skills and tools from the next Codex session without weakening workspace or administrator disables.
 
-Patched mode also passes live session state to the HUD renderer through four stable environment variables: `CODEX_HUD_MODEL`, `CODEX_HUD_EFFORT`, `CODEX_HUD_SERVICE_TIER`, and `CODEX_HUD_ROLLOUT_PATH`. Each patched session therefore keeps its own identity, context, and token totals. A fresh session may briefly have no effort value or rollout path; until Codex finishes opening the rollout, the HUD shows `Ctx:?` and `5h:?` as unknown placeholders instead of borrowing another session's values. Live `/model`, reasoning, and `/fast` changes are reflected immediately, but Codex's `/model` flow can persist the model and effort to global `~/.codex/config.toml`. For a session-only identity, launch with `codex -m <model> -c 'model_reasoning_effort="<effort>"'`. The `5h` and `7d` segments remain account-wide, so movement in both HUDs is expected and is not session bleed. The installer and `npm run doctor` also verify that the deployed `~/.local/bin/codex-hud` actually consumes these variables: a renderer built before this contract fails the patched-mode install health check (with a `npm run build:rust` hint) instead of silently falling back to `config.toml` identity and another session's usage.
+Patched mode also passes live session state to the HUD renderer through four stable environment variables: `CODEX_HUD_MODEL`, `CODEX_HUD_EFFORT`, `CODEX_HUD_SERVICE_TIER`, and `CODEX_HUD_ROLLOUT_PATH`. Each patched session therefore keeps its own identity, context, and token totals. A fresh session may briefly have no effort value or rollout path; until Codex finishes opening the rollout, the HUD omits segments whose values are unavailable. Live `/model`, reasoning, and `/fast` changes are reflected immediately, but Codex's `/model` flow can persist the model and effort to global `~/.codex/config.toml`. For a session-only identity, launch with `codex -m <model> -c 'model_reasoning_effort="<effort>"'`. The `5h` and `7d` segments use the newest eligible account-wide rate-limit event: either the `codex` limit bucket or a legacy unnamed snapshot. Both windows come from that one snapshot, and a missing window is omitted; values refresh only as matching rollout events arrive. The installer and `npm run doctor` also verify that the deployed `~/.local/bin/codex-hud` actually consumes these variables: a renderer built before this contract fails the patched-mode install health check (with a `npm run build:rust` hint) instead of silently falling back to `config.toml` identity and another session's usage.
 
 Safe launcher mode leaves your normal `codex` command alone:
 

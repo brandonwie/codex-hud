@@ -354,7 +354,8 @@ function verifyRustRenderer(binPath, options = {}) {
 }
 
 const RENDERER_CAPABILITY_PROBE_MODEL = "__codex-hud-capability-probe__";
-const RENDERER_CAPABILITY_PROBE_PREFIX = `${RENDERER_CAPABILITY_PROBE_MODEL}|max|f|`;
+const RENDERER_CAPABILITY_PROBE_IDENTITY = `${RENDERER_CAPABILITY_PROBE_MODEL}|max|f`;
+const RENDERER_CAPABILITY_PROBE_PREFIX = `${RENDERER_CAPABILITY_PROBE_IDENTITY}|`;
 
 // Behavioral probe: a renderer built before the per-session env contract (#29)
 // parses --help fine but silently ignores CODEX_HUD_* variables, falling back
@@ -416,15 +417,18 @@ function verifyRendererSessionCapability(binPath, options = {}) {
     env.CODEX_HUD_ROLLOUT_PATH = "";
     const hiddenOutput = runCommand(binPath, ["--line"], { timeout: 10000, env, cwd: probeHome });
     const hiddenLine = (hiddenOutput || "").trim().split(/\r?\n/)[0] || "";
-    const decoyLeaked = hiddenLine.includes("|Ctx:90%|") || hiddenLine.includes("|Tkn:999");
+    const hiddenIdentityMatches =
+      hiddenLine === RENDERER_CAPABILITY_PROBE_IDENTITY ||
+      hiddenLine.startsWith(RENDERER_CAPABILITY_PROBE_PREFIX);
+    const unavailableUsageRendered = /(?:^|\|)(?:Ctx|5h|7d|Tkn):/.test(hiddenLine);
     if (
       !visibleLine.startsWith(RENDERER_CAPABILITY_PROBE_PREFIX) ||
-      !hiddenLine.startsWith(RENDERER_CAPABILITY_PROBE_PREFIX) ||
+      !hiddenIdentityMatches ||
       !decoyIsVisible ||
-      decoyLeaked
+      unavailableUsageRendered
     ) {
       throw new Error(
-        `renderer failed CODEX_HUD_* session capability probe (expected decoy Ctx:90%/Tkn:999 with rollout env absent, then no concrete decoy values with it empty); absent line: "${visibleLine}"; empty line: "${hiddenLine}"`,
+        `renderer failed CODEX_HUD_* session capability probe (expected decoy Ctx:90%/Tkn:999 with rollout env absent, then unavailable usage segments omitted with it empty); absent line: "${visibleLine}"; empty line: "${hiddenLine}"`,
       );
     }
   } finally {

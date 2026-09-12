@@ -182,7 +182,7 @@ Object.assign(ROLLOUTS, {
     secondary: { used_percent: 16, window_minutes: 10080, resets_at: WEEKLY_RESET_SEC },
   }),
   // Both durations unrecognized: newest sample still wins with both slots
-  // null (renders 5h:?|7d:?) instead of falling back to an older line.
+  // null (both segments omitted) instead of falling back to an older line.
   bothUnexpected: ratesRollout({
     primary: { used_percent: 4, window_minutes: 1440, resets_at: NOW_SEC },
     secondary: { used_percent: 6, window_minutes: 2880, resets_at: NOW_SEC },

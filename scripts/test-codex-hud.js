@@ -160,6 +160,17 @@ try {
     return JSON.parse(result.stdout);
   }
 
+  const noConfigHome = path.join(tmpCodexHome, "no-config");
+  fs.mkdirSync(noConfigHome);
+  const noConfigEnv = { CODEX_HOME: noConfigHome, CODEX_HUD_NOW_MS: String(nowMs) };
+  const noConfigJson = run(["--json"], { env: noConfigEnv, unsetEnv: sessionEnvKeys });
+  assert.strictEqual(noConfigJson.status, 0, noConfigJson.stderr);
+  assert.strictEqual(JSON.parse(noConfigJson.stdout).config.serviceTier, "standard");
+  const noConfigLine = run(["--line"], { env: noConfigEnv, unsetEnv: sessionEnvKeys });
+  assert.strictEqual(noConfigLine.status, 0, noConfigLine.stderr);
+  assert.doesNotMatch(noConfigLine.stdout, /(^|\|)s(?:\||$)/);
+  assert.match(noConfigLine.stdout, /\|codex-hud\|/);
+
   const envIdentityLine = run(["--line"], {
     env: {
       ...fixtureEnv,
@@ -172,16 +183,22 @@ try {
   assert.match(envIdentityLine.stdout, /^5\.7-env\|xh\|codex-hud\|/);
   assert.doesNotMatch(envIdentityLine.stdout, /^5\.7-env\|xh\|f\|/);
 
-  const tierIdentityLine = run(["--line"], {
-    env: {
-      ...fixtureEnv,
-      CODEX_HUD_MODEL: "gpt-5.7-env",
-      CODEX_HUD_EFFORT: "xhigh",
-      CODEX_HUD_SERVICE_TIER: "priority",
-    },
-  });
-  assert.strictEqual(tierIdentityLine.status, 0, tierIdentityLine.stderr);
-  assert.match(tierIdentityLine.stdout, /^5\.7-env\|xh\|p\|codex-hud\|/);
+  for (const [serviceTier, shortTier] of [["fast", "f"], ["flex", "f"], ["priority", "p"]]) {
+    const tierIdentityLine = run(["--line"], {
+      env: {
+        ...fixtureEnv,
+        CODEX_HUD_MODEL: "gpt-5.7-env",
+        CODEX_HUD_EFFORT: "xhigh",
+        CODEX_HUD_SERVICE_TIER: serviceTier,
+      },
+    });
+    assert.strictEqual(tierIdentityLine.status, 0, tierIdentityLine.stderr);
+    assert.match(
+      tierIdentityLine.stdout,
+      new RegExp(`^5\\.7-env\\|xh\\|${shortTier}\\|codex-hud\\|`),
+      `${serviceTier} must preserve its compact service-tier atom`,
+    );
+  }
 
   const newestUsage = runJsonWithEnv(fixtureEnv).usage;
   assert.strictEqual(newestUsage.context.usedTokens, 210, "absent rollout env should use newest context");
@@ -244,7 +261,7 @@ try {
     assert.match(
       hiddenEffortLine.stdout,
       /^5\.7-env\|codex-hud\|/,
-      `EFFORT=${JSON.stringify(hiddenEffort)} must hide the effort atom`,
+      `EFFORT=${JSON.stringify(hiddenEffort)} and standard tier must hide both atoms`,
     );
   }
 
@@ -319,6 +336,18 @@ try {
     /^gpt-5\.6-sol\|high\|fast\|codex-hud\|git\(.+\*?\)\|Ctx:█░░░░ 21%\|5h:█░░░░ 17%\(5h,slow-100%\)\|7d:█░░░░ 16%\(5\.1d,ok-27%\)$/
   );
 
+  const fullStandardLine = run(["--line"], {
+    env: {
+      ...fixtureEnv,
+      CODEX_HUD_CONFIG: formatCfg,
+      CODEX_HUD_MODEL: "gpt-5.7-env",
+      CODEX_HUD_EFFORT: "xhigh",
+      CODEX_HUD_SERVICE_TIER: "",
+    },
+  });
+  assert.strictEqual(fullStandardLine.status, 0, fullStandardLine.stderr);
+  assert.match(fullStandardLine.stdout, /^gpt-5\.7-env\|xhigh\|codex-hud\|/);
+
   // tkn is off by default; a config that names it restores the pre-0.6 footer,
   // and bar = false restores the bar-less percents.
   const legacyCfg = path.join(tmpCodexHome, "legacy.toml");
@@ -376,6 +405,57 @@ try {
     colorLine.stdout.replace(/\x1b\[[0-9;]*m/g, "").trim(),
     /^.+\|.+\|git\(.+\*?\)\|Ctx:.+\|5h:.+\|7d:.+$/
   );
+
+  // Account limits come from the canonical `codex` bucket. A newer unrelated
+  // named bucket must not mask the account snapshot, and its absent 5h window
+  // must be omitted without leaving a placeholder or separator.
+  const bucketHome = path.join(tmpCodexHome, "bucket-case");
+  const accountRollout = path.join(bucketHome, "sessions", "2026", "06", "08", "rollout-account.jsonl");
+  const namedRollout = path.join(bucketHome, "sessions", "2026", "06", "09", "rollout-named.jsonl");
+  writeRollout(accountRollout, {
+    timestamp: "2026-06-08T02:00:00.000Z",
+    payload: {
+      type: "token_count",
+      rate_limits: {
+        limit_id: "codex",
+        primary: {
+          used_percent: 4,
+          window_minutes: 10080,
+          resets_at: Math.floor((nowMs + 7 * 24 * 3600000) / 1000),
+        },
+      },
+    },
+  });
+  writeRollout(namedRollout, {
+    timestamp: "2026-06-08T03:00:00.000Z",
+    payload: {
+      type: "token_count",
+      rate_limits: {
+        limit_id: "codex_other_model",
+        primary: { used_percent: 0, window_minutes: 300, resets_at: Math.floor(nowMs / 1000) },
+        secondary: { used_percent: 0, window_minutes: 10080, resets_at: Math.floor(nowMs / 1000) },
+      },
+    },
+  });
+  const bucketConfig = path.join(bucketHome, "codex-hud.toml");
+  fs.writeFileSync(
+    bucketConfig,
+    'segments = ["5h", "7d"]\n[format]\nbar = false\npace = false\n',
+    "utf8",
+  );
+  const bucketEnv = {
+    CODEX_HOME: bucketHome,
+    CODEX_HUD_CONFIG: bucketConfig,
+    CODEX_HUD_NOW_MS: String(nowMs),
+  };
+  const bucketUsage = runJsonWithEnv(bucketEnv).usage;
+  assert.strictEqual(bucketUsage.rateLimits.limitId, "codex");
+  assert.strictEqual(bucketUsage.rateLimits.primary, null);
+  assert.strictEqual(bucketUsage.rateLimits.secondary.usedPercent, 4);
+  const bucketLine = run(["--line"], { env: bucketEnv, unsetEnv: sessionEnvKeys });
+  assert.strictEqual(bucketLine.status, 0, bucketLine.stderr);
+  assert.match(bucketLine.stdout.trim(), /^7d:4%/);
+  assert.doesNotMatch(bucketLine.stdout, /5h|\?/);
 } finally {
   fs.rmSync(tmpCodexHome, { recursive: true, force: true });
 }

@@ -35,7 +35,7 @@ Codex HUD 是一个本地 Codex 插件，为 OpenAI Codex CLI 会话渲染多行
 
 > 该行中的各段、标签、颜色和阈值都是可配置的 —— 参见[配置](#配置)。
 
-> `5h` 和 `7d` 段按窗口长度（分别为 300 分钟和 10080 分钟）与 Codex 的用量限额窗口匹配，而不是按 payload 中的位置 —— 后端可能把任一窗口放在任一位置上报，也可能只上报其中一个。payload 中缺少对应窗口的段会显示 `?`（例如 `5h:?`），而不会借用另一个窗口的值。
+> `5h` 和 `7d` 段使用 Codex rollout 事件中符合条件的最新账户级限额快照。`codex` 限额桶和没有限额 ID 的旧版快照均符合条件；以事件时间戳最新者为准，其他具名限额桶会被忽略。两个窗口都从同一份快照读取，并按时长（300 分钟和 10080 分钟）匹配；缺少某个窗口时会省略对应段。只有出现匹配的 rollout 事件时，数值才会更新。
 
 默认的状态行渲染器是 `codex-hud`，一个小巧的原生 Rust 二进制（edition 2021，MIT）：单个自包含的可执行文件，渲染路径上没有任何解释器，依赖极少（仅 `serde_json` 和 `toml`），零 `unsafe` 代码，并采用为体积优化的 release 构建，最终大小约 574 KB。为避免混淆，本 README 中出现了两个不同的「Rust」：上游 Codex CLI 本身就是一个 Rust 程序（即下文实验性补丁的构建目标），而 `codex-hud` 则是仓库内独立的状态行渲染器。
 
@@ -191,7 +191,7 @@ tokenUsage = true   # false -> 仅总计，隐藏 (I:.. O:.. C:..)
 pace = true     # false -> hide the pace % in 5h/7d
 pacePrefix = true   # false -> 隐藏节奏图标 (🐢/👾/🔥)，保留 %
 identityShort = true # false -> gpt-5.6-sol|high|fast instead of 5.6-sol|h|f
-fastMode = false
+fastMode = false # false -> resolved tier (standard hidden); true -> force fast/f
 paceSlowPrefix = "🐢"
 paceNormalPrefix = "👾"
 paceFastPrefix = "🔥"
@@ -261,7 +261,7 @@ npm run patch:codex
 
 The installer patches the matching OpenAI Codex tag, builds the Rust CLI, and stages the executable under `~/.local/bin/codex-hud-codex.d/<version>/codex`. The staged payload must pass a `--version` health check **before** anything is activated; only then is `~/.local/bin/codex-hud-codex` atomically retargeted to the new payload, and the previous version is kept on disk for rollback. A failed build is kept aside as `<version>.failed` and the active runtime is left untouched. It also writes `~/.local/bin/codex-hud-tui` in patched mode, a launcher that passes the colored status-line command through Codex's `-c tui.status_line_command=...` override without changing `~/.codex/config.toml`. With the default `--renderer auto`, the injected command is `'~/.local/bin/codex-hud' --line --color`; if that Rust renderer is missing or fails its health check, the patched install stops instead of falling back to another renderer. The executable path and `argv[0]` both keep Codex-visible names, so terminal integrations such as Herdr can still recognize the pane as a Codex session.
 
-Patched mode also passes live session state to the HUD renderer through four stable environment variables: `CODEX_HUD_MODEL`, `CODEX_HUD_EFFORT`, `CODEX_HUD_SERVICE_TIER`, and `CODEX_HUD_ROLLOUT_PATH`. Each patched session therefore keeps its own identity, context, and token totals. A fresh session may briefly have no effort value or rollout path; until Codex finishes opening the rollout, the HUD shows `Ctx:?` and `5h:?` as unknown placeholders instead of borrowing another session's values. Live `/model`, reasoning, and `/fast` changes are reflected immediately, but Codex's `/model` flow can persist the model and effort to global `~/.codex/config.toml`. For a session-only identity, launch with `codex -m <model> -c 'model_reasoning_effort="<effort>"'`. The `5h` and `7d` segments remain account-wide, so movement in both HUDs is expected and is not session bleed. The installer and `npm run doctor` also verify that the deployed `~/.local/bin/codex-hud` actually consumes these variables: a renderer built before this contract fails the patched-mode install health check (with a `npm run build:rust` hint) instead of silently falling back to `config.toml` identity and another session's usage.
+Patched mode also passes live session state to the HUD renderer through four stable environment variables: `CODEX_HUD_MODEL`, `CODEX_HUD_EFFORT`, `CODEX_HUD_SERVICE_TIER`, and `CODEX_HUD_ROLLOUT_PATH`. Each patched session therefore keeps its own identity, context, and token totals. A fresh session may briefly have no effort value or rollout path; until Codex finishes opening the rollout, the HUD omits segments whose values are unavailable. Live `/model`, reasoning, and `/fast` changes are reflected immediately, but Codex's `/model` flow can persist the model and effort to global `~/.codex/config.toml`. For a session-only identity, launch with `codex -m <model> -c 'model_reasoning_effort="<effort>"'`. The `5h` and `7d` segments use the newest eligible account-wide rate-limit event: either the `codex` limit bucket or a legacy unnamed snapshot. Both windows come from that one snapshot, and a missing window is omitted; values refresh only as matching rollout events arrive. The installer and `npm run doctor` also verify that the deployed `~/.local/bin/codex-hud` actually consumes these variables: a renderer built before this contract fails the patched-mode install health check (with a `npm run build:rust` hint) instead of silently falling back to `config.toml` identity and another session's usage.
 
 安全启动器模式不会动你常规的 `codex` 命令:
 

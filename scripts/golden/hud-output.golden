@@ -41,10 +41,10 @@
 \x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;203m█████\x1b[0m \x1b[38;5;203m90%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m16%\x1b[0m
 
 ### line | no-rates | color=false
-5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:?|7d:?
+5.5|xh|proj|git(main)|Ctx:█░░░░ 21%
 
 ### line | no-rates | color=true
-\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:?\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m
+\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m
 
 ### line | no-tokens | color=false
 5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:█░░░░ 17%|7d:█░░░░ 16%
@@ -101,34 +101,34 @@ gpt-5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:█░░░░ 17%|7d:█�
 \x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m2.0h\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m16%\x1b[0m
 
 ### line | pace-slow | color=false
-5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:█░░░░ 20%(0.8h,🐢50%)|7d:?
+5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:█░░░░ 20%(0.8h,🐢50%)
 
 ### line | pace-slow | color=true
-\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m20%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🐢50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m
+\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m20%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🐢50%\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | pace-normal | color=false
-5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:███░░ 50%(0.8h,👾50%)|7d:?
+5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:███░░ 50%(0.8h,👾50%)
 
 ### line | pace-normal | color=true
-\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m███░░\x1b[0m \x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m👾50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m
+\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m███░░\x1b[0m \x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m👾50%\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | pace-fast | color=false
-5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:████░ 80%(0.8h,🔥50%)|7d:?
+5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:████░ 80%(0.8h,🔥50%)
 
 ### line | pace-fast | color=true
-\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m████░\x1b[0m \x1b[38;5;215m80%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🔥50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m
+\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m████░\x1b[0m \x1b[38;5;215m80%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m🔥50%\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | pace-custom-prefixes | color=false
-5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:████░ 80%(0.8h,fast-50%)|7d:?
+5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:████░ 80%(0.8h,fast-50%)
 
 ### line | pace-custom-prefixes | color=true
-\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m████░\x1b[0m \x1b[38;5;215m80%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85mfast-50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m
+\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;215m████░\x1b[0m \x1b[38;5;215m80%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85mfast-50%\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | no-pace-prefix | color=false
-5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:███░░ 50%(0.8h,50%)|7d:?
+5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:███░░ 50%(0.8h,50%)
 
 ### line | no-pace-prefix | color=true
-\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m███░░\x1b[0m \x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:?\x1b[0m
+\x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m███░░\x1b[0m \x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m(\x1b[0m\x1b[38;5;245m0.8h\x1b[0m\x1b[38;5;245m,\x1b[0m\x1b[38;5;85m50%\x1b[0m\x1b[38;5;245m)\x1b[0m
 
 ### line | subset-segments | color=false
 5.5|xh|Ctx:█░░░░ 21%|Tkn:904k(I:533k,O:5k,C:366k)
@@ -196,10 +196,10 @@ Tkn:904k(I:533k,O:5k,C:366k)|git(main)|5.5|xh
 ### line | future-service-tier | color=true
 \x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mf\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m16%\x1b[0m
 
-### line | default-service-tier-omitted | color=false
+### line | default-service-tier-hidden | color=false
 5.5|xh|proj|git(main)|Ctx:█░░░░ 21%|5h:█░░░░ 17%|7d:█░░░░ 16%
 
-### line | default-service-tier-omitted | color=true
+### line | default-service-tier-hidden | color=true
 \x1b[38;5;135m5.5\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;135mxh\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;45mproj\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mgit(\x1b[0m\x1b[38;5;135mmain\x1b[0m\x1b[38;5;245m)\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245mCtx\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m21%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m5h\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m17%\x1b[0m\x1b[38;5;245m|\x1b[0m\x1b[38;5;245m7d\x1b[0m\x1b[38;5;245m:\x1b[0m\x1b[38;5;85m█░░░░\x1b[0m \x1b[38;5;85m16%\x1b[0m
 
 ### line | fast-mode-override | color=false
@@ -273,7 +273,7 @@ Codex
   sandbox: workspace-write / approval on-request
   status line: 2 items, colors on
   items: model, directory
-  usage: 5.5|xh|proj|git(main)|Ctx:?|5h:?|7d:?
+  usage: 5.5|xh|proj|git(main)
 
 Workspace
   cwd: /work/proj

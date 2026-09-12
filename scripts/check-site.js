@@ -84,10 +84,11 @@ const mustContain = [
   [html, '"@type": "SoftwareApplication"', "SoftwareApplication schema"],
   [html, '"@type": "FAQPage"', "FAQ schema"],
   [html, "Does each patched Codex session keep its own HUD data?", "session isolation FAQ"],
-  [html, "Ctx:?", "startup context placeholder guidance"],
-  [html, "Tkn:?", "startup token placeholder guidance"],
+  [html, "unavailable segments are omitted", "startup missing-value guidance"],
   [html, "model_reasoning_effort", "session-only model and effort guidance"],
-  [html, "remain account-wide", "shared usage-limit guidance"],
+  [html, "account-wide rate-limit event", "shared usage-limit guidance"],
+  [js, "if (!Number.isFinite(state.context)) return false", "missing context preview omission"],
+  [js, "].filter(([, value]) => Number.isFinite(value))", "missing token-part preview omission"],
   [html, 'id="hud-form"', "interactive form"],
   [html, 'aria-describedby="settings-help"', "form accessible description"],
   [html, 'id="hud-line"', "live HUD output"],
@@ -365,6 +366,10 @@ const createElement = (id, options = {}) => {
       toggle() {},
     },
     append(child) {
+      if (child && child.isFragment) {
+        for (const fragmentChild of child.children) this.append(fragmentChild);
+        return;
+      }
       if (child) this.children.push(child);
       this.textContent += child && child.textContent ? child.textContent : "";
     },
@@ -504,6 +509,11 @@ const runInteractiveSmoke = () => {
     createElement(tag) {
       return createElement(tag);
     },
+    createDocumentFragment() {
+      const fragment = createElement("fragment");
+      fragment.isFragment = true;
+      return fragment;
+    },
     execCommand() {
       return true;
     },
@@ -545,6 +555,20 @@ const runInteractiveSmoke = () => {
   if (initialAtoms.some((atom) => /^Ctx:\d+%$/.test(atom[0]))) {
     fail.push("interactive preview must not color an entire metric as one span");
   }
+
+  elements.context.value = "unavailable";
+  elements["five-hour"].value = "unavailable";
+  elements["hud-form"].dispatchEvent({ type: "input" });
+  const missingMetricLine = elements["hud-line"].textContent;
+  if (missingMetricLine.includes("Ctx") || missingMetricLine.includes("5h") || missingMetricLine.includes("||")) {
+    fail.push("unavailable preview metrics must be omitted without stray separators");
+  }
+  if (!missingMetricLine.includes("|7d:")) {
+    fail.push("an available metric after omitted metrics must still render");
+  }
+  elements.context.value = "32";
+  elements["five-hour"].value = "6";
+  elements["hud-form"].dispatchEvent({ type: "input" });
 
   elements.context.value = "88";
   // Bar controls: off, zero width, custom glyphs, and the double-width reject.
@@ -632,13 +656,25 @@ const runInteractiveSmoke = () => {
   elements["identity-full"].checked = false;
   elements.effort.dispatchEvent({ type: "input" });
 
-  elements["service-tier"].value = "default";
+  elements["service-tier"].value = "standard";
   elements["fast-mode"].checked = true;
   elements.effort.dispatchEvent({ type: "input" });
   if (!elements["hud-line"].textContent.includes("5.6-sol|xh|f|codex-hud")) {
     fail.push("fastMode must force the compact fast service-tier atom");
   }
   elements["fast-mode"].checked = false;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("5.6-sol|xh|codex-hud")) {
+    fail.push("fastMode=false must hide the compact standard service tier");
+  }
+  elements["identity-short"].checked = false;
+  elements["identity-full"].checked = true;
+  elements.effort.dispatchEvent({ type: "input" });
+  if (!elements["hud-line"].textContent.includes("gpt-5.6-sol|xhigh|codex-hud")) {
+    fail.push("fastMode=false must hide the full standard service tier");
+  }
+  elements["identity-short"].checked = true;
+  elements["identity-full"].checked = false;
 
   // Auto-detect: service_tier = "fast" renders the tier atom without the manual override.
   elements["service-tier"].value = "fast";

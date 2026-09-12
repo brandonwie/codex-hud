@@ -56,15 +56,19 @@ Aliases expanded before validation: `workspace` → `project,branch,runtime`;
 `runtime` (`node vX`) and `tkn` (`Tkn:904k(I:… O:… C:…)`) are available but
 **off by default** — add them to opt in. A config that names
 `["model", "project", "branch", "ctx", "5h", "7d", "tkn"]` with
-`format.bar = false` reproduces the pre-0.6 footer byte for byte.
+`format.bar = false` reproduces the pre-0.6 footer byte for byte when every
+configured segment value is available.
 
-`5h` and `7d` are filled from Codex's rate-limit windows matched by window
-length (300 and 10080 minutes respectively) rather than by payload position;
-a window that carries no length at all falls back to its own original payload
-position, and only when that slot is still empty. When the payload omits a
-window, that segment renders `?` instead of showing the other window's value.
-A window with an unrecognized length is dropped entirely (it fills no slot),
-so its segment also renders `?`.
+`5h` and `7d` are filled from the newest eligible account-wide rate-limit
+snapshot in Codex rollout events. A snapshot is eligible when
+`limit_id = "codex"` or when its limit ID is missing, null, or empty for legacy
+compatibility; every other named bucket is ignored, and the newest eligible
+event timestamp wins. Both windows come from that one snapshot and are matched
+by window length (300 and 10080
+minutes respectively) rather than by payload position; a window that carries
+no length at all falls back to its own original payload position, and only when
+that slot is still empty. A missing or unrecognized window is omitted, and
+values refresh only when a newer eligible rollout event is available.
 
 ### Separators
 
@@ -78,7 +82,7 @@ so its segment also renders `?`.
 
 When `space = true`: `segment` becomes `" " + segment.trim() + " "` and
 `labelValue` becomes `labelValue.trimEnd() + " "`. Model, reasoning effort,
-and non-default service tier are separate identity atoms, so the configured
+and service tier are separate identity atoms, so the configured
 segment separator is used between them too.
 
 ### Labels
@@ -155,17 +159,18 @@ Each value is a **palette name**, a **256-color code** (`0`–`255`), or a
 | `pace`         | `true`  | `false` → hide the pace `%` in `5h`/`7d`.                |
 | `pacePrefix`   | `true`  | `false` → hide the pace icon (🐢/👾/🔥), keep the `%`.   |
 | `identityShort` | `true` | `true` → `5.6-sol|h|f`; `false` → `gpt-5.6-sol|high|fast`. |
-| `fastMode`     | `false` | `true` → force the fast service-tier atom (manual override). |
+| `fastMode`     | `false` | `false` → resolved tier (standard hidden); `true` → force fast/f. |
 | `paceSlowPrefix` | `"🐢"` | Prefix when usage is more than `pace.crit` behind pace. |
 | `paceNormalPrefix` | `"👾"` | Prefix when usage is within `±pace.crit` of pace.     |
 | `paceFastPrefix` | `"🔥"` | Prefix when usage is more than `pace.crit` ahead of pace. |
 
-**Identity atoms.** The model, reasoning effort, and non-default service tier
+**Identity atoms.** The model, reasoning effort, and service tier
 render as separate atoms using the configured segment separator. Compact mode
 maps known values (`xhigh` → `xh`, `high` → `h`, `medium` → `m`, `low` → `l`,
-`minimal` → `min`, `fast` → `f`, `flex` → `fl`); full mode preserves their
-canonical lowercase names. The `default` and `standard` service tiers are
-omitted. The legacy `modelShort` and `effortShort` booleans are still accepted
+`minimal` → `min`, `fast` → `f`, `flex` → `f`); full mode preserves
+their canonical lowercase names. `default` and `standard` tiers are hidden.
+A genuinely unavailable session tier is also omitted.
+The legacy `modelShort` and `effortShort` booleans are still accepted
 as per-field compatibility overrides when present, but are no longer emitted.
 
 `format.fastMode` forces the tier atom to `fast` regardless of the resolved
@@ -232,8 +237,10 @@ fixtures lock them; do not "clean them up":
    `pace` color wins over the computed delta color).
 7. **Segment order is exactly `config.segments`**; alias expansion happens before
    rendering; arrays replace (never concat) on merge.
-8. **Missing data renders `label:?`** (e.g. `5h:?`, `Tkn:?`), not an omitted
-   segment — and carries **no bar**, because an unknown percent has no fill.
+8. **Missing, null, or non-numeric segment data omits its configured segment**;
+   separators collapse around the remaining segments. Inside `tkn`, unavailable
+   optional `I:` / `O:` / `C:` parts are omitted independently while the total
+   remains visible when available.
 9. **The bargraph sits between `separators.labelValue` and the percent**, with a
    single space after it: `Ctx:` + bar + `" "` + `21%`. Fill is
    `round(percent / 100 * barWidth)` (half away from zero, matching JS
@@ -244,9 +251,10 @@ fixtures lock them; do not "clean them up":
    (config warning, default kept), so the bar can never exceed `barWidth`
    cells. East Asian **Ambiguous** scalars stay legal — the defaults `█` / `░`
    are themselves ambiguous.
-10. **Identity atoms use the normal segment separator:** model, effort, and a
-    non-default service tier are independently colorized pieces; `default` and
-    `standard` tiers are omitted without leaving a separator gap.
+10. **Identity atoms use the normal segment separator:** model, effort, and
+    visible service tiers are independently colorized pieces. Standard/default
+    service and an unavailable session tier are omitted without leaving a
+    separator gap.
 
 ## Enforcement
 

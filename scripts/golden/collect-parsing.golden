@@ -141,7 +141,13 @@
       "output": 5000,
       "cache": 366000
     },
-    "rateLimits": null,
+    "rateLimits": {
+      "primary": null,
+      "secondary": null,
+      "planType": null,
+      "limitId": null,
+      "timestamp": "2026-06-08T00:00:00.000Z"
+    },
     "sourceFile": "<HOME>/sessions/2026/06/08/rollout-2026-06-08T00-00-00-test.jsonl"
   },
   "project": {
