@@ -1281,8 +1281,8 @@ const runtimeWorkflow = fs.readFileSync(path.join(__dirname, "..", ".github", "w
 assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_LTO: "off"'));
 assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_DEBUG: "none"'));
 assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_STRIP: "symbols"'));
-assert(runtimeWorkflow.includes("actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7"));
-assert(runtimeWorkflow.includes("actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f"));
+assert(runtimeWorkflow.includes("actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"));
+assert(runtimeWorkflow.includes("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"));
 assert(!runtimeWorkflow.includes("--retain-build"), "ephemeral runtime builds must not retain their source-local target tree");
 assert(runtimeWorkflow.includes(RUNTIME_MANIFEST_NAME), "runtime archives must carry semantic patch provenance");
 assert(runtimeWorkflow.includes("--clobber"), "re-runs must replace an identical-identity archive");

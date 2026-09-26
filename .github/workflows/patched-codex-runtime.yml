@@ -48,14 +48,14 @@ jobs:
       build: ${{ steps.plan.outputs.build }}
     steps:
       - name: Checkout
-        # Pinned from refs/tags/v6 on 2026-06-11.
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        # Pinned from refs/tags/v7.0.1 on 2026-09-26.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        # Pinned from refs/tags/v4 on 2026-06-11.
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        # Pinned from refs/tags/v7.0.0 on 2026-09-26.
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: "24"
 
@@ -90,27 +90,27 @@ jobs:
       CARGO_PROFILE_RELEASE_STRIP: "symbols"
     steps:
       - name: Checkout
-        # Pinned from refs/tags/v6 on 2026-06-11.
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        # Pinned from refs/tags/v7.0.1 on 2026-09-26.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Setup Node.js
-        # Pinned from refs/tags/v4 on 2026-06-11.
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        # Pinned from refs/tags/v7.0.0 on 2026-09-26.
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: "24"
           cache: npm
 
       - name: Setup Rust
-        # Pinned from refs/heads/stable on 2026-06-10.
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
+        # Pinned from refs/heads/stable on 2026-09-26.
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: stable
 
       - name: Restore Cargo cache
-        # Pinned from refs/tags/v5.0.4 on 2026-08-06.
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7
+        # Pinned from refs/tags/v6.1.0 on 2026-09-26.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             ~/.cargo/registry/index/
@@ -158,8 +158,8 @@ jobs:
 
       - name: Upload Cargo timings
         if: always()
-        # Pinned from refs/tags/v7.0.0 on 2026-08-06.
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+        # Pinned from refs/tags/v7.0.1 on 2026-09-26.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: codex-${{ needs.plan.outputs.codex_version }}-${{ matrix.target }}-cargo-timings
           path: ${{ runner.temp }}/cargo-target/cargo-timings/
