@@ -77,10 +77,11 @@ jobs:
     # The plan job maps each target to its native runner: macos-15 is Apple
     # Silicon, macos-15-intel is x86_64.
     runs-on: ${{ matrix.runner }}
-    # Hard cap. Cold-cache builds of the 126-crate Codex workspace have been
-    # observed past 64 minutes on the Intel runner; actions/cache only saves on
-    # success, so a cap below the cold-build time can never bootstrap the cache.
-    timeout-minutes: 90
+    # Hard cap. A cold Intel build of Codex 0.157.1 ran past 90 minutes (run
+    # 36226126180) while arm64 finished in 45. actions/cache only saves on
+    # success, so a cap below the cold-build time can never bootstrap the cache
+    # and every scheduled run would time out again.
+    timeout-minutes: 180
     env:
       CODEX_VERSION: ${{ needs.plan.outputs.codex_version }}
       CODEX_TARGET: ${{ matrix.target }}
