@@ -10,7 +10,9 @@ const {
   CODE_MODE_HOST_NAME,
   OPENAI_CODE_SIGNING_TEAM_ID,
   PATCH_SET_ID,
+  PUBLISHED_RUNTIME_TARGETS,
   RUNTIME_NOT_PUBLISHED,
+  RUNTIME_TARGET_UNSUPPORTED,
   KNOWN_RUNTIME_TARGETS,
   acquirePatchedRuntime,
   codeModeHostAsset,
@@ -1136,7 +1138,12 @@ assert.match(
 );
 
 // --- published runtimes only: no implicit source build on any platform ---
-for (const [platform, arch] of [["darwin", "arm64"], ["darwin", "x64"], ["linux", "x64"]]) {
+assert.deepStrictEqual([...PUBLISHED_RUNTIME_TARGETS], ["aarch64-apple-darwin"], "Intel macOS runtimes are retired");
+for (const [platform, arch, expectedCode] of [
+  ["darwin", "arm64", RUNTIME_NOT_PUBLISHED],
+  ["darwin", "x64", RUNTIME_TARGET_UNSUPPORTED],
+  ["linux", "x64", RUNTIME_TARGET_UNSUPPORTED],
+]) {
   let built = false;
   let thrown = null;
   try {
@@ -1154,15 +1161,20 @@ for (const [platform, arch] of [["darwin", "arm64"], ["darwin", "x64"], ["linux"
   }
   assert.strictEqual(built, false, `${platform}/${arch} must not compile Codex without --source-build`);
   assert(thrown, `${platform}/${arch} must fail when no runtime is published`);
-  assert.strictEqual(thrown.code, RUNTIME_NOT_PUBLISHED);
+  assert.strictEqual(thrown.code, expectedCode, `${platform}/${arch} error code`);
   assert.match(thrown.message, /--source-build/);
 }
-const unpublishedMac = runtimeNotPublishedError({ version: "0.157.1" }, { platform: "darwin", arch: "x64" });
-assert.match(unpublishedMac.message, new RegExp(`codex-hud-codex-v0\\.157\\.1-p${PATCH_SET_ID}-x86_64-apple-darwin\\.tar\\.gz`));
+const unpublishedMac = runtimeNotPublishedError({ version: "0.157.1" }, { platform: "darwin", arch: "arm64" });
+assert.strictEqual(unpublishedMac.code, RUNTIME_NOT_PUBLISHED, "a not-yet-published Apple Silicon runtime is pending, not unsupported");
+assert.match(unpublishedMac.message, new RegExp(`codex-hud-codex-v0\\.157\\.1-p${PATCH_SET_ID}-aarch64-apple-darwin\\.tar\\.gz`));
 assert.match(unpublishedMac.message, /codex-runtime-v0\.157\.1/);
+const retiredIntel = runtimeNotPublishedError({ version: "0.157.1" }, { platform: "darwin", arch: "x64" });
+assert.strictEqual(retiredIntel.code, RUNTIME_TARGET_UNSUPPORTED, "Intel never resolves, so sync must not report pending");
+assert.match(retiredIntel.message, /Intel macOS runtimes were retired on 2026-09-26/);
+assert.match(retiredIntel.message, /npm run install:launcher/);
 assert.match(
   runtimeNotPublishedError({ version: "0.157.1" }, { platform: "freebsd", arch: "x64" }).message,
-  /does not publish patched runtimes for freebsd\/x64/,
+  /freebsd\/x64 has no published runtime/,
 );
 let explicitBuild = false;
 const explicitResult = acquirePatchedRuntime({ version: "0.157.1", sourceBuild: true }, {
@@ -1297,9 +1309,9 @@ assert.strictEqual(
 );
 assert(runtimeWorkflow.includes("scripts/package-patched-runtime.js"), "CI must package through the shared packager");
 assert(runtimeWorkflow.includes("--target \"$CODEX_TARGET\""), "CI must pass the planned target to the packager");
-for (const target of ["aarch64-apple-darwin", "x86_64-apple-darwin"]) {
-  assert(runtimeWorkflow.includes(`- ${target}`), `runtime workflow must offer the ${target} target`);
-}
+assert(runtimeWorkflow.includes("- aarch64-apple-darwin"), "runtime workflow must offer the aarch64-apple-darwin target");
+assert(!runtimeWorkflow.includes("- x86_64-apple-darwin"), "Intel macOS runtimes are retired from dispatch");
+assert(!runtimeWorkflow.includes("macos-15-intel"), "no Intel runner is used");
 assert(
   !/x86_64-apple-darwin-\$\{\{ hashFiles/.test(runtimeWorkflow),
   "cache keys must derive from the planned target, not a hard-coded triple",
@@ -1322,30 +1334,33 @@ const {
 } = require("./plan-runtime-publish");
 assert.deepStrictEqual(
   PUBLISH_TARGETS.map((entry) => [entry.target, entry.runner]),
-  [["aarch64-apple-darwin", "macos-15"], ["x86_64-apple-darwin", "macos-15-intel"]],
+  [["aarch64-apple-darwin", "macos-15"]],
 );
+assert.deepStrictEqual(PUBLISH_TARGETS.map((entry) => entry.target), [...PUBLISHED_RUNTIME_TARGETS], "the planner follows the installer's target list");
 assert.strictEqual(
   latestStableCodexVersion(["rust-v0.157.1", "rust-v0.158.0-alpha.3", "rusty-v8-v150.4.0", "rust-v0.156.2", "rust-v0.99.9"]),
   "0.157.1",
 );
 assert.strictEqual(latestStableCodexVersion(["rust-v0.9.10", "rust-v0.10.0"]), "0.10.0", "versions compare numerically");
 assert.throws(() => latestStableCodexVersion(["rust-v0.158.0-alpha.1"]), /No stable/);
-assert.strictEqual(selectTargets("all").length, 2);
-assert.deepStrictEqual(selectTargets("x86_64-apple-darwin").map((entry) => entry.runner), ["macos-15-intel"]);
+assert.strictEqual(selectTargets("all").length, 1);
+assert.deepStrictEqual(selectTargets("aarch64-apple-darwin").map((entry) => entry.runner), ["macos-15"]);
+assert.throws(() => selectTargets("x86_64-apple-darwin"), /Unknown target/, "Intel is no longer a publish target");
 assert.throws(() => selectTargets("x86_64-unknown-linux-gnu"), /Unknown target/);
 const publishedArm = bundleNamesForPlan("0.157.1", "aarch64-apple-darwin");
 assert.deepStrictEqual(
-  missingRuntimeTargets("0.157.1", PUBLISH_TARGETS, [publishedArm.archiveName, publishedArm.checksumName]).map((entry) => entry.target),
-  ["x86_64-apple-darwin"],
+  missingRuntimeTargets("0.157.1", PUBLISH_TARGETS, [publishedArm.archiveName, publishedArm.checksumName]),
+  [],
+  "a published archive plus checksum means nothing to build",
 );
 assert.deepStrictEqual(
   missingRuntimeTargets("0.157.1", PUBLISH_TARGETS, [publishedArm.archiveName]).map((entry) => entry.target),
-  ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+  ["aarch64-apple-darwin"],
   "an archive without its checksum is not published",
 );
 assert.deepStrictEqual(
   missingRuntimeTargets("0.157.1", PUBLISH_TARGETS, ["codex-hud-codex-v0.157.1-aarch64-apple-darwin.tar.gz"]).length,
-  2,
+  1,
   "archives from another patch set do not count",
 );
 function bundleNamesForPlan(version, target) {
@@ -1470,6 +1485,21 @@ for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
   };
   const roundTripAsset = runtimeReleaseAsset(roundTripArgs, { platform: "darwin", arch });
   assert.strictEqual(roundTripAsset.archiveName, packaged.archiveName);
+  if (!PUBLISHED_RUNTIME_TARGETS.includes(target)) {
+    // The packager still names every known target, but a retired target is
+    // never downloaded: the installer reports it unsupported instead.
+    let retiredDownload = false;
+    assert.strictEqual(installPrebuiltBinary(roundTripArgs, {
+      platform: "darwin",
+      arch,
+      downloadFile() {
+        retiredDownload = true;
+        return false;
+      },
+    }), null);
+    assert.strictEqual(retiredDownload, false, `${target} is retired and must not hit the network`);
+    continue;
+  }
   const roundTripUrls = [];
   const roundTrip = installPrebuiltBinary(roundTripArgs, {
     platform: "darwin",
@@ -1569,11 +1599,11 @@ const prebuiltArgs = {
   runtimeReleaseRepo: "brandonwie/codex-hud",
   sourceBuild: false,
 };
-const prebuiltAsset = runtimeReleaseAsset(prebuiltArgs, { platform: "darwin", arch: "x64" });
+const prebuiltAsset = runtimeReleaseAsset(prebuiltArgs, { platform: "darwin", arch: "arm64" });
 assert.strictEqual(prebuiltAsset.tag, `codex-runtime-v${prebuiltVersion}`);
 assert.strictEqual(
   prebuiltAsset.archiveName,
-  `codex-hud-codex-v${prebuiltVersion}-p${PATCH_SET_ID}-x86_64-apple-darwin.tar.gz`,
+  `codex-hud-codex-v${prebuiltVersion}-p${PATCH_SET_ID}-aarch64-apple-darwin.tar.gz`,
 );
 assert.doesNotThrow(() => validateRuntimeArchiveEntries(
   `${prebuiltAsset.baseName}/\n${prebuiltAsset.baseName}/codex\n${prebuiltAsset.baseName}/LICENSE\n${prebuiltAsset.baseName}/NOTICE\n`,
@@ -1631,7 +1661,7 @@ const prebuiltSourceCommit = "a".repeat(40);
 const prebuiltHelperCalls = {};
 const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
   platform: "darwin",
-  arch: "x64",
+  arch: "arm64",
   codeModeHost: codeModeHostStub(prebuiltHelperCalls),
   downloadFile(url, destination) {
     downloadedUrls.push(url);
@@ -1665,7 +1695,7 @@ assert.strictEqual(prebuiltInstalled.patchSetId, PATCH_SET_ID);
 assert.strictEqual(prebuiltInstalled.sourceCommit, prebuiltSourceCommit);
 assert.strictEqual(downloadedUrls.length, 2);
 assert.deepStrictEqual(prebuiltHelperCalls.urls, [
-  `https://github.com/openai/codex/releases/download/rust-v${prebuiltVersion}/codex-code-mode-host-x86_64-apple-darwin.tar.gz`,
+  `https://github.com/openai/codex/releases/download/rust-v${prebuiltVersion}/codex-code-mode-host-aarch64-apple-darwin.tar.gz`,
 ]);
 assert.strictEqual(
   prebuiltInstalled.activeBinary,
@@ -1698,7 +1728,7 @@ const unavailableArgs = { ...prebuiltArgs, prefix: path.join(prebuiltRoot, "unav
 assert.strictEqual(
   installPrebuiltBinary(unavailableArgs, {
     platform: "darwin",
-    arch: "x64",
+    arch: "arm64",
     downloadFile: () => false,
   }),
   null,
@@ -1720,7 +1750,7 @@ const mismatchArgs = { ...prebuiltArgs, prefix: path.join(prebuiltRoot, "mismatc
 assert.throws(
   () => installPrebuiltBinary(mismatchArgs, {
     platform: "darwin",
-    arch: "x64",
+    arch: "arm64",
     downloadFile(url, destination) {
       fs.writeFileSync(
         destination,

@@ -2,8 +2,10 @@ name: Patched Codex Runtime
 
 # Publishes checksummed patched-Codex runtimes so codex-hud installs and syncs
 # never compile Codex. Every hour the plan job picks the latest stable upstream
-# Codex release and builds only the macOS targets whose archive for the current
-# patch set (scripts/codex-patch-set.js) is not yet published. GitHub disables
+# Codex release and builds the Apple Silicon runtime when its archive for the
+# current patch set (scripts/codex-patch-set.js) is not yet published. Intel
+# macOS runtimes were retired on 2026-09-26 (PUBLISHED_RUNTIME_TARGETS in
+# scripts/install-patched-codex.js). GitHub disables
 # scheduled workflows after 60 days without repository activity; re-enable this
 # workflow in the Actions tab if that happens.
 
@@ -26,7 +28,6 @@ on:
         options:
           - all
           - aarch64-apple-darwin
-          - x86_64-apple-darwin
 
 permissions:
   contents: write
@@ -74,14 +75,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
-    # The plan job maps each target to its native runner: macos-15 is Apple
-    # Silicon, macos-15-intel is x86_64.
+    # The plan job maps each target to its native runner (macos-15 is Apple
+    # Silicon).
     runs-on: ${{ matrix.runner }}
-    # Hard cap. A cold Intel build of Codex 0.157.1 ran past 90 minutes (run
-    # 36226126180) while arm64 finished in 45. actions/cache only saves on
-    # success, so a cap below the cold-build time can never bootstrap the cache
-    # and every scheduled run would time out again.
-    timeout-minutes: 180
+    # Hard cap at twice the cold build: the cold arm64 build of Codex 0.157.1
+    # took 45 minutes (run 36226126180). actions/cache only saves on success, so
+    # a cap below the cold-build time can never bootstrap the cache.
+    timeout-minutes: 90
     env:
       CODEX_VERSION: ${{ needs.plan.outputs.codex_version }}
       CODEX_TARGET: ${{ matrix.target }}

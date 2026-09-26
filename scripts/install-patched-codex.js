@@ -25,6 +25,7 @@ const CODE_MODE_HOST_NAME = "codex-code-mode-host";
 // this signature; a macOS helper signed by anyone else is refused.
 const OPENAI_CODE_SIGNING_TEAM_ID = "2DC432GLL2";
 const RUNTIME_NOT_PUBLISHED = "RUNTIME_NOT_PUBLISHED";
+const RUNTIME_TARGET_UNSUPPORTED = "RUNTIME_TARGET_UNSUPPORTED";
 const SAFE_COMMAND_NAME_RE = /^[A-Za-z0-9_-]+$/;
 const CODEX_VERSION_PATTERN = "\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?";
 const CODEX_VERSION_RE = new RegExp(`(${CODEX_VERSION_PATTERN})`);
@@ -53,9 +54,9 @@ Install the Codex HUD launcher.
 
 Default mode (stock) writes a launcher that delegates to your real Codex
 install, so Codex updates are picked up automatically. Patched mode
-(experimental) downloads a published, checksummed patched OpenAI Codex runtime
-with [tui].status_line_command support. It compiles Codex locally only when you
-pass --source-build.
+(experimental, Apple Silicon macOS) downloads a published, checksummed patched
+OpenAI Codex runtime with [tui].status_line_command support. It compiles Codex
+locally only when you pass --source-build.
 
 Options:
   --mode <stock|patched>    Install mode. Defaults to stock.
@@ -730,6 +731,10 @@ const CODE_MODE_HOST_TARGETS = {
 const KNOWN_RUNTIME_TARGETS = Object.freeze(
   Object.values(RUNTIME_TARGETS).flatMap((byArch) => Object.values(byArch)),
 );
+// Targets the Patched Codex Runtime workflow publishes. Intel macOS
+// (x86_64-apple-darwin) was retired on 2026-09-26: its cold builds ran past 90
+// minutes on the Intel runner, and no one outside the maintainer downloaded it.
+const PUBLISHED_RUNTIME_TARGETS = Object.freeze(["aarch64-apple-darwin"]);
 
 function runtimeTarget(platform = process.platform, arch = process.arch) {
   const targets = RUNTIME_TARGETS;
@@ -826,18 +831,33 @@ function sha256File(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
+// RUNTIME_NOT_PUBLISHED resolves on its own once CI publishes the runtime, so
+// codex:sync reports it as pending. RUNTIME_TARGET_UNSUPPORTED never resolves,
+// so codex:sync must fail loudly instead of promising an update.
 function runtimeNotPublishedError(args, options = {}) {
   const asset = runtimeReleaseAsset(args, options);
-  const message = asset
-    ? `No published codex-hud runtime for Codex ${args.version} on ${asset.target} (patch set ${PATCH_SET_ID}) yet; ` +
+  if (asset && PUBLISHED_RUNTIME_TARGETS.includes(asset.target)) {
+    const error = new Error(
+      `No published codex-hud runtime for Codex ${args.version} on ${asset.target} (patch set ${PATCH_SET_ID}) yet; ` +
       `expected ${asset.archiveName} in release ${asset.tag}. ` +
       "The Patched Codex Runtime workflow publishes it automatically after each Codex release, usually within a few hours. " +
       "If your codex-hud checkout is behind the latest release, update it first. " +
-      "To compile Codex locally instead, rerun with --source-build."
-    : `codex-hud does not publish patched runtimes for ${options.platform || process.platform}/${options.arch || process.arch}; ` +
-      `rerun with --source-build to compile Codex ${args.version} locally.`;
-  const error = new Error(message);
-  error.code = RUNTIME_NOT_PUBLISHED;
+      "To compile Codex locally instead, rerun with --source-build.",
+    );
+    error.code = RUNTIME_NOT_PUBLISHED;
+    return error;
+  }
+
+  const target = asset ? asset.target : `${options.platform || process.platform}/${options.arch || process.arch}`;
+  const reason = target === "x86_64-apple-darwin"
+    ? "Intel macOS runtimes were retired on 2026-09-26"
+    : `${target} has no published runtime`;
+  const error = new Error(
+    `codex-hud publishes patched runtimes only for Apple Silicon macOS (${PUBLISHED_RUNTIME_TARGETS.join(", ")}); ${reason}. ` +
+    "Use the default stock launcher ('npm run install:launcher'), " +
+    `or rerun with --source-build to compile Codex ${args.version} locally (unsupported).`,
+  );
+  error.code = RUNTIME_TARGET_UNSUPPORTED;
   return error;
 }
 
@@ -1069,7 +1089,7 @@ function installPrebuiltBinary(args, options = {}) {
     return null;
   }
   const asset = runtimeReleaseAsset(args, options);
-  if (!asset) {
+  if (!asset || !PUBLISHED_RUNTIME_TARGETS.includes(asset.target)) {
     return null;
   }
 
@@ -2689,7 +2709,9 @@ module.exports = {
   CODE_MODE_HOST_NAME,
   OPENAI_CODE_SIGNING_TEAM_ID,
   PATCH_SET_ID,
+  PUBLISHED_RUNTIME_TARGETS,
   RUNTIME_NOT_PUBLISHED,
+  RUNTIME_TARGET_UNSUPPORTED,
   RUNTIME_MANIFEST_NAME,
   acquirePatchedRuntime,
   activateStagedBinary,

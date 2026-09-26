@@ -8,17 +8,21 @@
 
 const { spawnSync } = require("child_process");
 
-const { validateCodexVersion } = require("./install-patched-codex");
+const { PUBLISHED_RUNTIME_TARGETS, validateCodexVersion } = require("./install-patched-codex");
 const { bundleNames } = require("./package-patched-runtime");
 
 const UPSTREAM_REPO = "openai/codex";
 const STABLE_TAG_RE = /^rust-v(\d+)\.(\d+)\.(\d+)$/;
-// macos-15 is Apple Silicon; the Intel target needs the macos-15-intel label,
-// which GitHub supports until August 2027.
-const PUBLISH_TARGETS = Object.freeze([
-  Object.freeze({ target: "aarch64-apple-darwin", runner: "macos-15" }),
-  Object.freeze({ target: "x86_64-apple-darwin", runner: "macos-15-intel" }),
-]);
+// Native runner per published target; macos-15 is Apple Silicon.
+const TARGET_RUNNERS = Object.freeze({ "aarch64-apple-darwin": "macos-15" });
+const PUBLISH_TARGETS = Object.freeze(
+  PUBLISHED_RUNTIME_TARGETS.map((target) => {
+    if (!TARGET_RUNNERS[target]) {
+      throw new Error(`No runner is mapped for published target ${target}`);
+    }
+    return Object.freeze({ target, runner: TARGET_RUNNERS[target] });
+  }),
+);
 
 function latestStableCodexVersion(tagNames) {
   const versions = tagNames
