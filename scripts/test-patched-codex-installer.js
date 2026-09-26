@@ -7,8 +7,16 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const {
-  PATCH_SET_REVISION,
+  CODE_MODE_HOST_NAME,
+  OPENAI_CODE_SIGNING_TEAM_ID,
+  PATCH_SET_ID,
+  RUNTIME_NOT_PUBLISHED,
   KNOWN_RUNTIME_TARGETS,
+  acquirePatchedRuntime,
+  codeModeHostAsset,
+  runtimeNotPublishedError,
+  stageCodeModeHost,
+  verifyOpenAiCodeSignature,
   RUNTIME_MANIFEST_NAME,
   builtBinaryPath,
   detectCodexVersion,
@@ -47,7 +55,6 @@ const {
   refreshPatchedLauncher,
   reviewLegacyBinEntry,
   sourceHasPatch,
-  sourceBuildFallbackAllowed,
   statusLineCommandFor,
   syncPatchedRuntime,
   uninstallDefaultShim,
@@ -79,6 +86,13 @@ function gitRepositorySnapshot(cwd) {
     index: read(["diff", "--cached", "--binary"]),
     status: read(["status", "--short"]),
   };
+}
+
+// A healthy installed runtime: the versioned payload plus the
+// codex-code-mode-host the installer places beside it.
+function writeRuntimePayload(payloadPath, contents) {
+  writeExecutable(payloadPath, contents);
+  writeExecutable(path.join(path.dirname(payloadPath), "codex-code-mode-host"), "#!/bin/sh\nexit 0\n");
 }
 
 function writeFile(root, relativePath, contents) {
@@ -514,16 +528,17 @@ const patchedScript = renderLauncherScript({
   stockVersion: "0.139.0",
   statusLineCommand: "'/tmp/test-prefix/codex-hud' --line --color",
   renderer: "rust",
-  patchSetRevision: PATCH_SET_REVISION,
+  patchSetId: PATCH_SET_ID,
   builtAt: "2026-06-10T00:00:00.000Z",
 });
 assert(patchedScript.includes("# codex-hud-launcher v2 mode=patched"));
 assert(patchedScript.includes("# patched_version=0.139.0"));
 assert(patchedScript.includes("# stock_realpath=/opt/homebrew/Cellar/codex/0.139.0/bin/codex"));
-assert(patchedScript.includes(`# patch_set_revision=${PATCH_SET_REVISION}`));
+assert(patchedScript.includes(`# patch_set_id=${PATCH_SET_ID}`));
 assert(patchedScript.includes("exec -a codex "), "patched launcher must preserve argv[0] as codex");
 assert(patchedScript.includes("--line --color"));
-assert(patchedScript.includes("stock Codex changed since this patched runtime was built"), "patched launcher must carry the staleness warning");
+assert(patchedScript.includes("stock Codex changed since this patched runtime was installed"), "patched launcher must carry the staleness warning");
+assert(patchedScript.includes("npm run codex:sync"), "the staleness warning must point to codex:sync, not a rebuild");
 
 // --- parseLauncherMetadata ---
 assert.deepStrictEqual(parseLauncherMetadata(stockScript), {
@@ -538,7 +553,7 @@ const patchedMetadata = parseLauncherMetadata(patchedScript);
 assert.strictEqual(patchedMetadata.format, "v2");
 assert.strictEqual(patchedMetadata.mode, "patched");
 assert.strictEqual(patchedMetadata.patchedVersion, "0.139.0");
-assert.strictEqual(patchedMetadata.patchSetRevision, PATCH_SET_REVISION);
+assert.strictEqual(patchedMetadata.patchSetId, PATCH_SET_ID);
 const legacyScript = "#!/usr/bin/env bash\nset -euo pipefail\n\nexec -a codex '/x/codex-hud-codex' \\\n  -c 'tui.status_line_command=\"node hud.js\"' \\\n  \"$@\"\n";
 assert.strictEqual(parseLauncherMetadata(legacyScript).format, "legacy");
 assert.strictEqual(parseLauncherMetadata("echo hello\n").format, "foreign");
@@ -973,6 +988,7 @@ const capabilityCliRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-capab
 try {
   const capabilityCliScript = path.join(capabilityCliRoot, "scripts", "install-patched-codex.js");
   writeFile(capabilityCliRoot, "scripts/install-patched-codex.js", fs.readFileSync(path.join(__dirname, "install-patched-codex.js"), "utf8"));
+  writeFile(capabilityCliRoot, "scripts/codex-patch-set.js", fs.readFileSync(path.join(__dirname, "codex-patch-set.js"), "utf8"));
   writeFile(capabilityCliRoot, "package.json", `${JSON.stringify({ version: repoPackageVersion })}\n`);
   writeExecutable(
     path.join(capabilityCliRoot, "rust", "target", "release", rendererBinaryName()),
@@ -1098,9 +1114,148 @@ assert.strictEqual(runtimeTarget("darwin", "arm64"), "aarch64-apple-darwin");
 assert.strictEqual(runtimeTarget("linux", "x64"), "x86_64-unknown-linux-gnu");
 assert.strictEqual(runtimeTarget("win32", "x64"), "x86_64-pc-windows-msvc");
 assert.strictEqual(runtimeTarget("freebsd", "x64"), null);
-assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: false }, { platform: "darwin", arch: "x64" }), false);
-assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: true }, { platform: "darwin", arch: "x64" }), true);
-assert.strictEqual(sourceBuildFallbackAllowed({ sourceBuild: false }, { platform: "darwin", arch: "arm64" }), true);
+
+// --- patch-set identity: content-derived, never hand-bumped ---
+const patchSetModule = require("./codex-patch-set");
+assert.match(PATCH_SET_ID, /^[0-9a-f]{12}$/);
+assert.strictEqual(PATCH_SET_ID, patchSetModule.PATCH_SET_ID);
+assert.strictEqual(
+  PATCH_SET_ID,
+  patchSetModule.computePatchSetId(fs.readFileSync(path.join(__dirname, "codex-patch-set.js"), "utf8")),
+  "the patch-set id must be the hash of the patch-set module itself",
+);
+assert.strictEqual(
+  patchSetModule.computePatchSetId("a\r\nb\n"),
+  patchSetModule.computePatchSetId("a\nb\n"),
+  "line endings must not change the patch-set id",
+);
+assert.notStrictEqual(patchSetModule.computePatchSetId("a\n"), patchSetModule.computePatchSetId("b\n"));
+assert.match(
+  runtimeReleaseAsset({ version: "0.157.1" }, { platform: "darwin", arch: "arm64" }).archiveName,
+  new RegExp(`^codex-hud-codex-v0\\.157\\.1-p${PATCH_SET_ID}-aarch64-apple-darwin\\.tar\\.gz$`),
+);
+
+// --- published runtimes only: no implicit source build on any platform ---
+for (const [platform, arch] of [["darwin", "arm64"], ["darwin", "x64"], ["linux", "x64"]]) {
+  let built = false;
+  let thrown = null;
+  try {
+    acquirePatchedRuntime({ version: "0.157.1", sourceBuild: false }, {
+      platform,
+      arch,
+      installPrebuiltBinary: () => null,
+      buildFromSource: () => {
+        built = true;
+        return { installed: {}, sourceDir: "/unused" };
+      },
+    });
+  } catch (error) {
+    thrown = error;
+  }
+  assert.strictEqual(built, false, `${platform}/${arch} must not compile Codex without --source-build`);
+  assert(thrown, `${platform}/${arch} must fail when no runtime is published`);
+  assert.strictEqual(thrown.code, RUNTIME_NOT_PUBLISHED);
+  assert.match(thrown.message, /--source-build/);
+}
+const unpublishedMac = runtimeNotPublishedError({ version: "0.157.1" }, { platform: "darwin", arch: "x64" });
+assert.match(unpublishedMac.message, new RegExp(`codex-hud-codex-v0\\.157\\.1-p${PATCH_SET_ID}-x86_64-apple-darwin\\.tar\\.gz`));
+assert.match(unpublishedMac.message, /codex-runtime-v0\.157\.1/);
+assert.match(
+  runtimeNotPublishedError({ version: "0.157.1" }, { platform: "freebsd", arch: "x64" }).message,
+  /does not publish patched runtimes for freebsd\/x64/,
+);
+let explicitBuild = false;
+const explicitResult = acquirePatchedRuntime({ version: "0.157.1", sourceBuild: true }, {
+  installPrebuiltBinary: () => null,
+  buildFromSource: () => {
+    explicitBuild = true;
+    return { installed: { target: "/x" }, sourceDir: "/src" };
+  },
+});
+assert.strictEqual(explicitBuild, true, "--source-build must compile when asked");
+assert.strictEqual(explicitResult.sourceDir, "/src");
+const prebuiltResult = acquirePatchedRuntime({ version: "0.157.1", sourceBuild: false }, {
+  installPrebuiltBinary: () => ({ assetName: "a.tar.gz", target: "/x" }),
+  buildFromSource: () => assert.fail("a published runtime must not trigger a build"),
+});
+assert.strictEqual(prebuiltResult.sourceDir, null);
+
+// --- codex-code-mode-host: OpenAI's signed helper from the same Codex release ---
+assert.deepStrictEqual(codeModeHostAsset("0.157.1", { platform: "darwin", arch: "arm64" }), {
+  target: "aarch64-apple-darwin",
+  baseName: "codex-code-mode-host-aarch64-apple-darwin",
+  archiveName: "codex-code-mode-host-aarch64-apple-darwin.tar.gz",
+  url: "https://github.com/openai/codex/releases/download/rust-v0.157.1/codex-code-mode-host-aarch64-apple-darwin.tar.gz",
+});
+assert.strictEqual(codeModeHostAsset("0.157.1", { platform: "linux", arch: "x64" }).target, "x86_64-unknown-linux-musl");
+assert.strictEqual(codeModeHostAsset("0.157.1", { platform: "win32", arch: "x64" }), null);
+
+function codeModeHostStub(calls = {}) {
+  return {
+    downloadFile(url, destination) {
+      calls.urls = [...(calls.urls || []), url];
+      fs.writeFileSync(destination, "helper archive fixture");
+      return true;
+    },
+    extractRuntimeArchive(_archivePath, destination, options) {
+      writeExecutable(path.join(destination, options.baseName), "#!/bin/sh\nexit 0\n");
+    },
+    verifyCodeSignature(binaryPath) {
+      calls.verified = [...(calls.verified || []), binaryPath];
+      return OPENAI_CODE_SIGNING_TEAM_ID;
+    },
+  };
+}
+
+const helperRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-helper-test-"));
+const helperCalls = {};
+const stagedHelper = stageCodeModeHost(helperRoot, { version: "0.157.1" }, {
+  platform: "darwin",
+  arch: "x64",
+  ...codeModeHostStub(helperCalls),
+});
+assert.strictEqual(stagedHelper.path, path.join(helperRoot, CODE_MODE_HOST_NAME));
+assert(fs.statSync(stagedHelper.path).mode & 0o111, "the staged helper must be executable");
+assert.deepStrictEqual(helperCalls.urls, [
+  "https://github.com/openai/codex/releases/download/rust-v0.157.1/codex-code-mode-host-x86_64-apple-darwin.tar.gz",
+]);
+assert.strictEqual(helperCalls.verified.length, 1, "macOS helpers must pass the OpenAI signature check");
+
+const linuxHelperRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-helper-linux-test-"));
+const linuxHelperCalls = {};
+stageCodeModeHost(linuxHelperRoot, { version: "0.157.1" }, { platform: "linux", arch: "arm64", ...codeModeHostStub(linuxHelperCalls) });
+assert.match(linuxHelperCalls.urls[0], /codex-code-mode-host-aarch64-unknown-linux-musl\.tar\.gz$/);
+assert.strictEqual(linuxHelperCalls.verified, undefined, "codesign applies to macOS helpers only");
+
+const rejectedHelperRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-helper-rejected-test-"));
+assert.throws(
+  () => stageCodeModeHost(rejectedHelperRoot, { version: "0.157.1" }, {
+    platform: "darwin",
+    arch: "arm64",
+    ...codeModeHostStub(),
+    verifyCodeSignature: () => {
+      throw new Error("signed by team XXXXXXXXXX, not OpenAI");
+    },
+  }),
+  /not OpenAI/,
+);
+assert(!fs.existsSync(path.join(rejectedHelperRoot, CODE_MODE_HOST_NAME)), "a rejected helper must not be staged");
+assert.throws(
+  () => stageCodeModeHost(helperRoot, { version: "0.157.1" }, { platform: "darwin", arch: "arm64", ...codeModeHostStub(), downloadFile: () => false }),
+  /Could not download codex-code-mode-host-aarch64-apple-darwin\.tar\.gz/,
+);
+
+const signatureSpawn = (team, verifyStatus = 0) => (_command, args) => (
+  args[0] === "--verify"
+    ? { status: verifyStatus, stderr: verifyStatus ? "invalid signature" : "" }
+    : { status: 0, stdout: "", stderr: `Executable=/x\nIdentifier=codex-code-mode-host\nTeamIdentifier=${team}\n` }
+);
+assert.strictEqual(verifyOpenAiCodeSignature("/x/helper", { spawnSync: signatureSpawn(OPENAI_CODE_SIGNING_TEAM_ID) }), "2DC432GLL2");
+assert.throws(() => verifyOpenAiCodeSignature("/x/helper", { spawnSync: signatureSpawn("ABCDE12345") }), /team ABCDE12345, not OpenAI/);
+assert.throws(
+  () => verifyOpenAiCodeSignature("/x/helper", { spawnSync: signatureSpawn(OPENAI_CODE_SIGNING_TEAM_ID, 1) }),
+  /failed code-signature verification: invalid signature/,
+);
 const intelBuildEnv = codexBuildEnv({}, { platform: "darwin", arch: "x64" });
 assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_LTO, "off");
 assert.strictEqual(intelBuildEnv.CARGO_PROFILE_RELEASE_CODEGEN_UNITS, "16");
@@ -1130,7 +1285,7 @@ assert(runtimeWorkflow.includes("actions/cache@668228422ae6a00e4ad889ee87cd7109e
 assert(runtimeWorkflow.includes("actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f"));
 assert(!runtimeWorkflow.includes("--retain-build"), "ephemeral runtime builds must not retain their source-local target tree");
 assert(runtimeWorkflow.includes(RUNTIME_MANIFEST_NAME), "runtime archives must carry semantic patch provenance");
-assert(runtimeWorkflow.includes("--clobber"), "same-version patch-set releases must replace stale assets");
+assert(runtimeWorkflow.includes("--clobber"), "re-runs must replace an identical-identity archive");
 assert(
   runtimeWorkflow.includes('if ! gh release create "$tag"'),
   "concurrent target lanes must handle a shared-release create conflict",
@@ -1141,24 +1296,61 @@ assert.strictEqual(
   "a failed release create must be followed by a second existence check",
 );
 assert(runtimeWorkflow.includes("scripts/package-patched-runtime.js"), "CI must package through the shared packager");
-assert(runtimeWorkflow.includes("--target \"$CODEX_TARGET\""), "CI must pass the dispatched target to the packager");
+assert(runtimeWorkflow.includes("--target \"$CODEX_TARGET\""), "CI must pass the planned target to the packager");
 for (const target of ["aarch64-apple-darwin", "x86_64-apple-darwin"]) {
   assert(runtimeWorkflow.includes(`- ${target}`), `runtime workflow must offer the ${target} target`);
 }
 assert(
   !/x86_64-apple-darwin-\$\{\{ hashFiles/.test(runtimeWorkflow),
-  "cache keys must derive from the dispatched target, not a hard-coded triple",
+  "cache keys must derive from the planned target, not a hard-coded triple",
 );
-assert(runtimeWorkflow.includes("${{ inputs.target }}-cargo-timings"), "timings artifact must be target-scoped");
-assert(runtimeWorkflow.includes("patched-codex-runtime-${{ inputs.codex_version }}-${{ inputs.target }}"), "concurrency must be target-scoped");
-assert(
-  runtimeWorkflow.includes("inputs.target == 'x86_64-apple-darwin' && !inputs.local_build_ok"),
-  "the local_build_ok runner-minute guard must stay on the Intel target",
+assert(runtimeWorkflow.includes("hashFiles('scripts/codex-patch-set.js')"), "the build cache must key on the patch set");
+assert(runtimeWorkflow.includes("${{ matrix.target }}-cargo-timings"), "timings artifact must be target-scoped");
+assert(/schedule:\s*\n\s*#[^\n]*\n\s*- cron: "\d+ \* \* \* \*"/.test(runtimeWorkflow), "publishing must run on an hourly schedule");
+assert(runtimeWorkflow.includes("node scripts/plan-runtime-publish.js"), "a plan job must pick the missing targets");
+assert(runtimeWorkflow.includes("fromJSON(needs.plan.outputs.matrix)"), "builds must follow the plan matrix");
+assert(runtimeWorkflow.includes("runs-on: ${{ matrix.runner }}"), "runner labels come from the plan");
+assert(!runtimeWorkflow.includes("local_build_ok"), "publishing must not require a local build first");
+assert(runtimeWorkflow.includes("group: patched-codex-runtime\n"), "runs must be serialized so a queued run re-plans");
+
+// --- publish planner: latest stable Codex, only missing targets ---
+const {
+  PUBLISH_TARGETS,
+  latestStableCodexVersion,
+  missingRuntimeTargets,
+  selectTargets,
+} = require("./plan-runtime-publish");
+assert.deepStrictEqual(
+  PUBLISH_TARGETS.map((entry) => [entry.target, entry.runner]),
+  [["aarch64-apple-darwin", "macos-15"], ["x86_64-apple-darwin", "macos-15-intel"]],
 );
-assert(
-  runtimeWorkflow.includes("inputs.target == 'x86_64-apple-darwin' && 'macos-15-intel' || 'macos-15'"),
-  "runner label must follow the target (macos-15 is arm64)",
+assert.strictEqual(
+  latestStableCodexVersion(["rust-v0.157.1", "rust-v0.158.0-alpha.3", "rusty-v8-v150.4.0", "rust-v0.156.2", "rust-v0.99.9"]),
+  "0.157.1",
 );
+assert.strictEqual(latestStableCodexVersion(["rust-v0.9.10", "rust-v0.10.0"]), "0.10.0", "versions compare numerically");
+assert.throws(() => latestStableCodexVersion(["rust-v0.158.0-alpha.1"]), /No stable/);
+assert.strictEqual(selectTargets("all").length, 2);
+assert.deepStrictEqual(selectTargets("x86_64-apple-darwin").map((entry) => entry.runner), ["macos-15-intel"]);
+assert.throws(() => selectTargets("x86_64-unknown-linux-gnu"), /Unknown target/);
+const publishedArm = bundleNamesForPlan("0.157.1", "aarch64-apple-darwin");
+assert.deepStrictEqual(
+  missingRuntimeTargets("0.157.1", PUBLISH_TARGETS, [publishedArm.archiveName, publishedArm.checksumName]).map((entry) => entry.target),
+  ["x86_64-apple-darwin"],
+);
+assert.deepStrictEqual(
+  missingRuntimeTargets("0.157.1", PUBLISH_TARGETS, [publishedArm.archiveName]).map((entry) => entry.target),
+  ["aarch64-apple-darwin", "x86_64-apple-darwin"],
+  "an archive without its checksum is not published",
+);
+assert.deepStrictEqual(
+  missingRuntimeTargets("0.157.1", PUBLISH_TARGETS, ["codex-hud-codex-v0.157.1-aarch64-apple-darwin.tar.gz"]).length,
+  2,
+  "archives from another patch set do not count",
+);
+function bundleNamesForPlan(version, target) {
+  return require("./package-patched-runtime").bundleNames(version, target);
+}
 
 // --- shared packager: both targets round-trip through the installer's prebuilt verification ---
 const { bundleNames, packagePatchedRuntime, parseArgs: parsePackageArgs } = require("./package-patched-runtime");
@@ -1243,10 +1435,10 @@ for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
   });
   const expectedNames = bundleNames(packageVersion, target);
   assert.strictEqual(packaged.archiveName, expectedNames.archiveName);
-  assert.strictEqual(packaged.archiveName, `codex-hud-codex-v${packageVersion}-${target}.tar.gz`);
+  assert.strictEqual(packaged.archiveName, `codex-hud-codex-v${packageVersion}-p${PATCH_SET_ID}-${target}.tar.gz`);
   assert(fs.existsSync(packaged.archivePath));
   assert(fs.existsSync(packaged.checksumPath));
-  assert.strictEqual(packaged.manifest.patchSetRevision, PATCH_SET_REVISION);
+  assert.strictEqual(packaged.manifest.patchSetId, PATCH_SET_ID);
   assert.strictEqual(packaged.manifest.sourceCommit, packageSourceCommit);
   const versionProbe = packageCalls.find(({ command, args }) => command.endsWith("/codex") && args[0] === "--version");
   assert(versionProbe, "packaging must health-check the bundled Codex payload");
@@ -1287,7 +1479,12 @@ for (const target of ["x86_64-apple-darwin", "aarch64-apple-darwin"]) {
       fs.copyFileSync(url.endsWith(".sha256") ? packaged.checksumPath : packaged.archivePath, destination);
       return true;
     },
+    codeModeHost: codeModeHostStub(),
   });
+  assert(
+    fs.existsSync(path.join(path.dirname(roundTrip.activeBinary), CODE_MODE_HOST_NAME)),
+    "the installed runtime must carry codex-code-mode-host beside its payload",
+  );
   assert.strictEqual(roundTrip.source, "prebuilt");
   assert.strictEqual(roundTrip.version, packageVersion);
   assert.strictEqual(roundTrip.assetName, packaged.archiveName);
@@ -1376,7 +1573,7 @@ const prebuiltAsset = runtimeReleaseAsset(prebuiltArgs, { platform: "darwin", ar
 assert.strictEqual(prebuiltAsset.tag, `codex-runtime-v${prebuiltVersion}`);
 assert.strictEqual(
   prebuiltAsset.archiveName,
-  `codex-hud-codex-v${prebuiltVersion}-x86_64-apple-darwin.tar.gz`,
+  `codex-hud-codex-v${prebuiltVersion}-p${PATCH_SET_ID}-x86_64-apple-darwin.tar.gz`,
 );
 assert.doesNotThrow(() => validateRuntimeArchiveEntries(
   `${prebuiltAsset.baseName}/\n${prebuiltAsset.baseName}/codex\n${prebuiltAsset.baseName}/LICENSE\n${prebuiltAsset.baseName}/NOTICE\n`,
@@ -1431,9 +1628,11 @@ assert.match(downloadWarning, /exit 22/);
 assert.match(downloadWarning, /HTTP 404/);
 const downloadedUrls = [];
 const prebuiltSourceCommit = "a".repeat(40);
+const prebuiltHelperCalls = {};
 const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
   platform: "darwin",
   arch: "x64",
+  codeModeHost: codeModeHostStub(prebuiltHelperCalls),
   downloadFile(url, destination) {
     downloadedUrls.push(url);
     if (url.endsWith(".sha256")) {
@@ -1453,7 +1652,7 @@ const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
     writeFile(bundle, RUNTIME_MANIFEST_NAME, `${JSON.stringify({
       schemaVersion: 1,
       codexVersion: prebuiltVersion,
-      patchSetRevision: PATCH_SET_REVISION,
+      patchSetId: PATCH_SET_ID,
       sourceCommit: prebuiltSourceCommit,
       payloadSha256: crypto.createHash("sha256").update(fs.readFileSync(bundledBinary)).digest("hex"),
     }, null, 2)}\n`);
@@ -1462,9 +1661,18 @@ const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
 assert.strictEqual(prebuiltInstalled.version, prebuiltVersion);
 assert.strictEqual(prebuiltInstalled.source, "prebuilt");
 assert.strictEqual(prebuiltInstalled.assetName, prebuiltAsset.archiveName);
-assert.strictEqual(prebuiltInstalled.patchSetRevision, PATCH_SET_REVISION);
+assert.strictEqual(prebuiltInstalled.patchSetId, PATCH_SET_ID);
 assert.strictEqual(prebuiltInstalled.sourceCommit, prebuiltSourceCommit);
 assert.strictEqual(downloadedUrls.length, 2);
+assert.deepStrictEqual(prebuiltHelperCalls.urls, [
+  `https://github.com/openai/codex/releases/download/rust-v${prebuiltVersion}/codex-code-mode-host-x86_64-apple-darwin.tar.gz`,
+]);
+assert.strictEqual(
+  prebuiltInstalled.activeBinary,
+  path.join(prebuiltArgs.prefix, "codex-hud-codex.d", prebuiltVersion, "codex"),
+  "the launcher must exec the versioned payload so Codex finds its sibling helper",
+);
+assert(fs.existsSync(path.join(prebuiltArgs.prefix, "codex-hud-codex.d", prebuiltVersion, CODE_MODE_HOST_NAME)));
 assert.strictEqual(
   fs.realpathSync(prebuiltInstalled.target),
   fs.realpathSync(prebuiltInstalled.target.replace(/codex-hud-codex$/, `codex-hud-codex.d/${prebuiltVersion}/codex`)),
@@ -1476,13 +1684,13 @@ writeExecutable(staleManifestBinary, fakeCodexScript(prebuiltVersion));
 writeFile(staleManifestBundle, RUNTIME_MANIFEST_NAME, `${JSON.stringify({
   schemaVersion: 1,
   codexVersion: prebuiltVersion,
-  patchSetRevision: "0",
+  patchSetId: "0",
   sourceCommit: prebuiltSourceCommit,
   payloadSha256: crypto.createHash("sha256").update(fs.readFileSync(staleManifestBinary)).digest("hex"),
 })}\n`);
 assert.throws(
   () => validateRuntimeManifest(staleManifestBundle, prebuiltArgs),
-  /patch-set revision mismatch/,
+  /patch-set id mismatch/,
   "an old prebuilt for the same Codex version must fail closed",
 );
 
@@ -1494,7 +1702,7 @@ assert.strictEqual(
     downloadFile: () => false,
   }),
   null,
-  "missing release assets must fall back to the source build",
+  "missing release assets return null; the caller decides (no implicit build)",
 );
 let sourceOnlyDownloadAttempted = false;
 assert.strictEqual(
@@ -1785,7 +1993,7 @@ const doctorRecordedArgs = {
   binName: "codex-hud-codex",
   launcherName: "codex-hud-tui",
 };
-writeExecutable(
+writeRuntimePayload(
   path.join(doctorRecordedArgs.prefix, "codex-hud-codex.d", "0.144.0", "codex"),
   fakeCodexScript("0.144.0"),
 );
@@ -1815,8 +2023,21 @@ const doctorRecordedStatus = patchedRuntimeStatus(doctorRecordedReport);
 assert.strictEqual(doctorRecordedReport.stock.path, fs.realpathSync.native(doctorRecordedStock));
 assert.strictEqual(doctorRecordedStatus.stockVersion, "0.144.0");
 assert.strictEqual(doctorRecordedStatus.needsSync, false);
-assert.strictEqual(doctorRecordedStatus.metadataPatchSetRevision, PATCH_SET_REVISION);
+assert.strictEqual(doctorRecordedStatus.metadataPatchSetId, PATCH_SET_ID);
 assert.strictEqual(doctorRecordedStatus.activePayloadSha256, doctorRecordedStatus.metadataPayloadSha256);
+const doctorRecordedHelper = path.join(doctorRecordedArgs.prefix, "codex-hud-codex.d", "0.144.0", CODE_MODE_HOST_NAME);
+assert.strictEqual(doctorRecordedReport.patched.active.codeModeHost, fs.realpathSync.native(doctorRecordedHelper));
+fs.renameSync(doctorRecordedHelper, `${doctorRecordedHelper}.moved`);
+const helperlessStatus = patchedRuntimeStatus(doctor(doctorRecordedArgs, {
+  env: { PATH: doctorFallbackBin },
+  runCommand(command) {
+    return command === doctorFallbackStock ? "codex-cli 0.143.0\n" : "codex-cli 0.144.0\n";
+  },
+}));
+assert.strictEqual(helperlessStatus.needsSync, true, "a runtime without its Code Mode helper must be updated");
+assert.strictEqual(helperlessStatus.action, "rebuild");
+assert.match(helperlessStatus.reason, /no codex-code-mode-host beside/);
+fs.renameSync(`${doctorRecordedHelper}.moved`, doctorRecordedHelper);
 const preRevisionReport = {
   ...doctorRecordedReport,
   launcher: {
@@ -1824,11 +2045,11 @@ const preRevisionReport = {
     metadata: { ...doctorRecordedReport.launcher.metadata },
   },
 };
-delete preRevisionReport.launcher.metadata.patchSetRevision;
+delete preRevisionReport.launcher.metadata.patchSetId;
 const preRevisionStatus = patchedRuntimeStatus(preRevisionReport);
 assert.strictEqual(preRevisionStatus.needsSync, true);
 assert.strictEqual(preRevisionStatus.action, "rebuild");
-assert.match(preRevisionStatus.reason, /revision is missing/);
+assert.match(preRevisionStatus.reason, /patch set is missing/);
 const replacedPayloadReport = {
   ...doctorRecordedReport,
   launcher: {
@@ -1852,7 +2073,7 @@ assert.strictEqual(
 
 const doctorStaleRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-stale-test-"));
 const doctorStaleArgs = { prefix: doctorStaleRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
-writeExecutable(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.138.0", "codex"), fakeCodexScript("0.138.0"));
+writeRuntimePayload(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.138.0", "codex"), fakeCodexScript("0.138.0"));
 fs.symlinkSync(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.138.0", "codex"), path.join(doctorStaleRoot, "codex-hud-codex"));
 installLauncher(doctorStaleArgs, {
   mode: "patched",
@@ -1909,7 +2130,7 @@ assert.strictEqual(brokenStatus.action, "rebuild");
 // this is exactly the incident npm run doctor previously reported as healthy.
 const capDoctorRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-capability-test-"));
 const capDoctorArgs = { prefix: capDoctorRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
-writeExecutable(path.join(capDoctorRoot, "codex-hud-codex.d", "0.144.1", "codex"), fakeCodexScript("0.144.1"));
+writeRuntimePayload(path.join(capDoctorRoot, "codex-hud-codex.d", "0.144.1", "codex"), fakeCodexScript("0.144.1"));
 fs.symlinkSync(path.join(capDoctorRoot, "codex-hud-codex.d", "0.144.1", "codex"), path.join(capDoctorRoot, "codex-hud-codex"));
 writeExecutable(path.join(capDoctorRoot, "codex-hud"), '#!/usr/bin/env bash\necho "codex-hud 0.3.3"\n');
 installLauncher(capDoctorArgs, {
@@ -1973,7 +2194,7 @@ const syncResult = syncPatchedRuntime(doctorStaleArgs, {
   },
   runPatchedInstall(installArgs) {
     assert.strictEqual(installArgs.version, "0.139.0");
-    writeExecutable(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
+    writeRuntimePayload(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
     fs.unlinkSync(path.join(doctorStaleRoot, "codex-hud-codex"));
     fs.symlinkSync(path.join(doctorStaleRoot, "codex-hud-codex.d", "0.139.0", "codex"), path.join(doctorStaleRoot, "codex-hud-codex"));
     installLauncher(doctorStaleArgs, {
@@ -1995,7 +2216,7 @@ assert.strictEqual(syncResult.status.needsSync, false);
 const realpathOnlyRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-realpath-sync-test-"));
 const realpathOnlyArgs = { prefix: realpathOnlyRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
 writeExecutable(path.join(realpathOnlyRoot, "codex-hud"), `#!/usr/bin/env bash\necho codex-hud ${repoPackageVersion}\n`);
-writeExecutable(path.join(realpathOnlyRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
+writeRuntimePayload(path.join(realpathOnlyRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
 fs.symlinkSync(path.join(realpathOnlyRoot, "codex-hud-codex.d", "0.139.0", "codex"), path.join(realpathOnlyRoot, "codex-hud-codex"));
 installLauncher(realpathOnlyArgs, {
   mode: "patched",
@@ -2070,7 +2291,7 @@ assert.strictEqual(isManagedDefaultShim(shim, launcher), true);
 function buildPatchedInstall(label, { defaultShim } = {}) {
   const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), `codex-hud-${label}-`));
   const installArgs = { prefix: installRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
-  writeExecutable(path.join(installRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
+  writeRuntimePayload(path.join(installRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
   fs.symlinkSync(
     path.join(installRoot, "codex-hud-codex.d", "0.139.0", "codex"),
     path.join(installRoot, "codex-hud-codex"),
@@ -2172,6 +2393,46 @@ assert.throws(
   /rebuild failed/,
 );
 assert.strictEqual(fs.readlinkSync(failedDriftShim), doctorFakeStock, "failed rebuild must not reclaim the default shim");
+
+// No published runtime yet: a healthy runtime keeps running and sync reports
+// pending (exit 0 path); nothing compiles.
+const pending = buildPatchedInstall("pending-sync-test", { defaultShim: "1" });
+fs.rmSync(path.join(pending.root, "codex-hud-codex.d", "0.139.0", CODE_MODE_HOST_NAME));
+const pendingShim = path.join(pending.root, "codex");
+fs.symlinkSync(doctorFakeStock, pendingShim);
+let pendingInstallArgs = null;
+const pendingCapture = captureConsoleLog(() => syncPatchedRuntime(pending.args, {
+  ...patchedSyncOptions(pending.root),
+  runPatchedInstall(installArgs) {
+    pendingInstallArgs = installArgs;
+    throw runtimeNotPublishedError(installArgs, { platform: "darwin", arch: "arm64" });
+  },
+}));
+assert.strictEqual(pendingCapture.result.action, "pending");
+assert.strictEqual(pendingInstallArgs.sourceBuild, undefined, "sync must never add --source-build on its own");
+assert(pendingCapture.logs.some((line) => line.startsWith("Patched runtime update pending:")));
+assert(pendingCapture.logs.some((line) => line.includes("Keeping patched Codex 0.139.0")));
+assert.strictEqual(pendingCapture.result.shim.action, "reclaimed", "a healthy pending runtime still reclaims its shim");
+assert.strictEqual(isManagedDefaultShim(pendingShim, pending.launcher), true);
+
+const pendingBroken = buildPatchedInstall("pending-broken-sync-test");
+writeExecutable(path.join(pendingBroken.root, "codex-hud-codex.d", "0.139.0", "codex"), "#!/usr/bin/env bash\nexit 42\n");
+assert.throws(
+  () => syncPatchedRuntime(pendingBroken.args, {
+    ...patchedSyncOptions(pendingBroken.root),
+    runCommand: (command, commandArgs, commandOptions) => {
+      if (command === path.join(pendingBroken.root, "codex-hud-codex")) {
+        throw new Error("patched payload is broken");
+      }
+      return fakeRendererRun(repoPackageVersion)(command, commandArgs, commandOptions);
+    },
+    runPatchedInstall(installArgs) {
+      throw runtimeNotPublishedError(installArgs, { platform: "darwin", arch: "arm64" });
+    },
+  }),
+  /no working runtime to keep/,
+  "a broken runtime with nothing published must fail loudly",
+);
 
 const rebuildDrift = buildPatchedInstall("default-shim-rebuild-reclaim-test", { defaultShim: "1" });
 const rebuildDriftShim = path.join(rebuildDrift.root, "codex");
@@ -2374,7 +2635,7 @@ assert(rendererDoctorRun.stdout.includes("status: healthy"));
 // (1b) patched launcher with renderer=rust marker, no binary: rebuild recommendation, still healthy.
 const doctorRendererPatchedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-doctor-renderer-patched-test-"));
 const doctorRendererPatchedArgs = { prefix: doctorRendererPatchedRoot, binName: "codex-hud-codex", launcherName: "codex-hud-tui" };
-writeExecutable(path.join(doctorRendererPatchedRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
+writeRuntimePayload(path.join(doctorRendererPatchedRoot, "codex-hud-codex.d", "0.139.0", "codex"), fakeCodexScript("0.139.0"));
 fs.symlinkSync(path.join(doctorRendererPatchedRoot, "codex-hud-codex.d", "0.139.0", "codex"), path.join(doctorRendererPatchedRoot, "codex-hud-codex"));
 installLauncher(doctorRendererPatchedArgs, {
   mode: "patched",

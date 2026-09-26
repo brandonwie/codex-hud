@@ -1,63 +1,94 @@
 name: Patched Codex Runtime
 
+# Publishes checksummed patched-Codex runtimes so codex-hud installs and syncs
+# never compile Codex. Every hour the plan job picks the latest stable upstream
+# Codex release and builds only the macOS targets whose archive for the current
+# patch set (scripts/codex-patch-set.js) is not yet published. GitHub disables
+# scheduled workflows after 60 days without repository activity; re-enable this
+# workflow in the Actions tab if that happens.
+
 on:
+  schedule:
+    # Off the top of the hour, when GitHub delays or drops scheduled runs most.
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       codex_version:
-        description: OpenAI Codex version to patch (without rust-v prefix)
-        required: true
+        description: OpenAI Codex version to patch (without rust-v prefix). Empty means the latest stable release.
+        required: false
         type: string
+        default: ""
       target:
-        description: Rust target triple to build and publish
+        description: Rust target triple to build and publish when its archive is missing
         required: true
         type: choice
-        default: aarch64-apple-darwin
+        default: all
         options:
+          - all
           - aarch64-apple-darwin
           - x86_64-apple-darwin
-      local_build_ok:
-        description: >-
-          Confirm a successful local source build of this exact version
-          preceded this dispatch. Runner-minute guard for the Intel target,
-          whose cold builds exceed an hour: that job refuses to build without
-          it. The arm64 target ignores it.
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
 
+# One run at a time: a queued scheduled run re-plans after the running one
+# publishes, so it never rebuilds an archive that just landed.
 concurrency:
-  group: patched-codex-runtime-${{ inputs.codex_version }}-${{ inputs.target }}
+  group: patched-codex-runtime
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan missing runtimes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      codex_version: ${{ steps.plan.outputs.codex_version }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      build: ${{ steps.plan.outputs.build }}
+    steps:
+      - name: Checkout
+        # Pinned from refs/tags/v6 on 2026-06-11.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        # Pinned from refs/tags/v4 on 2026-06-11.
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+
+      - name: Resolve version and missing targets
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.codex_version }}
+          REQUESTED_TARGET: ${{ inputs.target || 'all' }}
+        run: node scripts/plan-runtime-publish.js >> "$GITHUB_OUTPUT"
+
   build-macos:
-    name: Build macOS runtime (${{ inputs.target }})
-    # macos-15 is Apple Silicon (arm64); the Intel target needs the
-    # macos-15-intel label. Both build natively, so no cross-compilation.
-    runs-on: ${{ inputs.target == 'x86_64-apple-darwin' && 'macos-15-intel' || 'macos-15' }}
+    name: Build macOS runtime (${{ matrix.target }})
+    needs: plan
+    if: ${{ needs.plan.outputs.build == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    # The plan job maps each target to its native runner: macos-15 is Apple
+    # Silicon, macos-15-intel is x86_64.
+    runs-on: ${{ matrix.runner }}
     # Hard cap. Cold-cache builds of the 126-crate Codex workspace have been
-    # observed past 64 minutes; actions/cache only saves on success, so a cap
-    # below the cold-build time can never bootstrap the cache. Tighten after
-    # reading the cargo --timings artifact from a successful cached run.
+    # observed past 64 minutes on the Intel runner; actions/cache only saves on
+    # success, so a cap below the cold-build time can never bootstrap the cache.
     timeout-minutes: 90
     env:
-      CODEX_VERSION: ${{ inputs.codex_version }}
-      CODEX_TARGET: ${{ inputs.target }}
+      CODEX_VERSION: ${{ needs.plan.outputs.codex_version }}
+      CODEX_TARGET: ${{ matrix.target }}
       CARGO_PROFILE_RELEASE_LTO: "off"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
       CARGO_PROFILE_RELEASE_DEBUG: "none"
       CARGO_PROFILE_RELEASE_STRIP: "symbols"
     steps:
-      - name: Assert local build gate
-        # Intel-only runner-minute guard; arm64 builds finish in minutes.
-        if: ${{ inputs.target == 'x86_64-apple-darwin' && !inputs.local_build_ok }}
-        run: |
-          echo "::error::Refusing to build: local_build_ok is false. Run the local source build for this version first, then re-dispatch with local_build_ok=true."
-          exit 1
-
       - name: Checkout
         # Pinned from refs/tags/v6 on 2026-06-11.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -86,10 +117,10 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             ${{ runner.temp }}/cargo-target
-          key: patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-${{ hashFiles('scripts/install-patched-codex.js') }}-${{ inputs.codex_version }}
+          key: patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-${{ hashFiles('scripts/codex-patch-set.js') }}-${{ needs.plan.outputs.codex_version }}
           restore-keys: |
-            patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-${{ hashFiles('scripts/install-patched-codex.js') }}-
-            patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-
+            patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-${{ hashFiles('scripts/codex-patch-set.js') }}-
+            patched-codex-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-
 
       - name: Validate input
         run: |
@@ -130,15 +161,15 @@ jobs:
         # Pinned from refs/tags/v7.0.0 on 2026-08-06.
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
-          name: codex-${{ inputs.codex_version }}-${{ inputs.target }}-cargo-timings
+          name: codex-${{ needs.plan.outputs.codex_version }}-${{ matrix.target }}-cargo-timings
           path: ${{ runner.temp }}/cargo-target/cargo-timings/
           if-no-files-found: ignore
           retention-days: 14
 
       - name: Package runtime and licenses
-        # Shared packager (also the maintainer's local-publish path): bundles
-        # codex + LICENSE + NOTICE + codex-hud-runtime.json, ad-hoc codesigns,
-        # health-checks --version, then writes the archive and its .sha256.
+        # Shared packager: bundles codex + LICENSE + NOTICE +
+        # codex-hud-runtime.json, ad-hoc codesigns, health-checks --version, then
+        # writes the patch-set-named archive and its .sha256.
         run: |
           node scripts/package-patched-runtime.js \
             --payload "$RUNNER_TEMP/prefix/codex-hud-codex.d/$CODEX_VERSION/codex" \
@@ -156,10 +187,12 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             if ! gh release create "$tag" \
               --title "Patched Codex runtime ${CODEX_VERSION}" \
-              --notes "Checksummed codex-hud patched runtime for OpenAI Codex ${CODEX_VERSION}. The archive includes patch provenance plus the upstream Apache-2.0 LICENSE and NOTICE files."; then
+              --notes "Checksummed codex-hud patched runtimes for OpenAI Codex ${CODEX_VERSION}. Archive names carry the codex-hud patch-set id; each archive includes patch provenance plus the upstream Apache-2.0 LICENSE and NOTICE files."; then
               # Another target lane may have created the shared release after
               # our initial lookup. Continue only when that release now exists.
               gh release view "$tag" >/dev/null 2>&1
             fi
           fi
+          # Archive names carry the patch-set id, so --clobber only replaces an
+          # identical-identity archive from a re-run, never another patch set's.
           gh release upload "$tag" dist/* --clobber

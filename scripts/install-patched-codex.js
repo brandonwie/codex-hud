@@ -5,14 +5,26 @@ const crypto = require("crypto");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const {
+  PATCH_SET_ID,
+  ensureAnsiStatusLineParser,
+  patchSource,
+  sourceHasPatch,
+  verifyPatchedSource,
+} = require("./codex-patch-set");
 
 const OPENAI_CODEX_REPO = "https://github.com/openai/codex.git";
 const DEFAULT_RUNTIME_RELEASE_REPO = "brandonwie/codex-hud";
 const DEFAULT_BIN_NAME = "codex-hud-codex";
 const DEFAULT_LAUNCHER_NAME = "codex-hud-tui";
 const RUST_RENDERER_BIN_NAME = "codex-hud";
-const PATCH_SET_REVISION = "3";
 const RUNTIME_MANIFEST_NAME = "codex-hud-runtime.json";
+const OPENAI_CODEX_RELEASES_URL = "https://github.com/openai/codex/releases/download";
+const CODE_MODE_HOST_NAME = "codex-code-mode-host";
+// OpenAI's Apple Developer ID team. Upstream codex-code-mode-host binaries carry
+// this signature; a macOS helper signed by anyone else is refused.
+const OPENAI_CODE_SIGNING_TEAM_ID = "2DC432GLL2";
+const RUNTIME_NOT_PUBLISHED = "RUNTIME_NOT_PUBLISHED";
 const SAFE_COMMAND_NAME_RE = /^[A-Za-z0-9_-]+$/;
 const CODEX_VERSION_PATTERN = "\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?";
 const CODEX_VERSION_RE = new RegExp(`(${CODEX_VERSION_PATTERN})`);
@@ -23,7 +35,7 @@ const LAUNCHER_MARKER_FIELDS = {
   stock_realpath: "stockRealpath",
   stock_version: "stockVersion",
   renderer: "renderer",
-  patch_set_revision: "patchSetRevision",
+  patch_set_id: "patchSetId",
   source_commit: "sourceCommit",
   payload_sha256: "payloadSha256",
   built_at: "builtAt",
@@ -41,15 +53,17 @@ Install the Codex HUD launcher.
 
 Default mode (stock) writes a launcher that delegates to your real Codex
 install, so Codex updates are picked up automatically. Patched mode
-(experimental) downloads or builds a patched OpenAI Codex binary with
-[tui].status_line_command support.
+(experimental) downloads a published, checksummed patched OpenAI Codex runtime
+with [tui].status_line_command support. It compiles Codex locally only when you
+pass --source-build.
 
 Options:
   --mode <stock|patched>    Install mode. Defaults to stock.
   --renderer <auto|rust>    Status-line renderer. Defaults to auto (Rust renderer).
   --doctor                  Print install/runtime diagnostics and exit.
   --check-patched           Check whether the patched runtime matches stock Codex.
-  --sync-patched            Check and repair the patched runtime when stock Codex changed.
+  --sync-patched            Install the published runtime for the current stock Codex.
+                            Reports "pending" and keeps the current runtime until one is published.
   --version <version>       Codex CLI version to patch (patched mode). Defaults to installed codex version.
   --prefix <dir>            Install directory prefix. Defaults to ~/.local/bin.
   --bin-name <name>         Installed command name. Defaults to ${DEFAULT_BIN_NAME}.
@@ -57,7 +71,8 @@ Options:
   --repo <url>              Upstream source repo. Defaults to ${OPENAI_CODEX_REPO}.
   --runtime-release-repo <owner/repo>
                             Prebuilt runtime releases. Defaults to ${DEFAULT_RUNTIME_RELEASE_REPO}.
-  --source-build            Skip prebuilt runtime download and build Codex locally.
+  --source-build            Build Codex locally instead of downloading a published runtime
+                            (needs Rust; several GB of disk and 30+ minutes).
   --cache-dir <dir>         Source cache directory. Defaults to ~/.cache/codex-hud.
   --keep-versions <n>       Patched payload versions to retain. Defaults to 2.
   --retain-build, --keep-build
@@ -652,499 +667,6 @@ function detectCodexVersion(options = {}) {
   throw new Error("No stock codex found for version detection. Install Codex, or pass --version <version> for patched mode.");
 }
 
-function applyTextPatch(filePath, marker, anchor, replacement) {
-  const current = fs.readFileSync(filePath, "utf8");
-  if (current.includes(marker)) {
-    return false;
-  }
-  if (!current.includes(anchor)) {
-    throw new Error(`Patch anchor not found in ${filePath}`);
-  }
-  fs.writeFileSync(filePath, current.replace(anchor, replacement));
-  return true;
-}
-
-function statusCommandHelperSource() {
-  return [
-    "    fn custom_status_line_from_command(&self) -> Option<ratatui::text::Line<'static>> {",
-    "        let command = self.config.tui_status_line_command.as_ref()?.trim();",
-    "        if command.is_empty() {",
-    "            return None;",
-    "        }",
-    "",
-    "        let mut process = if cfg!(windows) {",
-    "            let mut process = std::process::Command::new(\"cmd\");",
-    "            process.args([\"/C\", command]);",
-    "            process",
-    "        } else {",
-    "            let mut process = std::process::Command::new(\"sh\");",
-    "            process.args([\"-lc\", command]);",
-    "            process",
-    "        };",
-    "",
-    "        process.env(\"CODEX_HUD_MODEL\", self.current_model());",
-    "        process.env(",
-    "            \"CODEX_HUD_EFFORT\",",
-    "            self.effective_reasoning_effort()",
-    "                .map(|e| e.to_string())",
-    "                .unwrap_or_default(),",
-    "        );",
-    "        process.env(\"CODEX_HUD_SERVICE_TIER\", self.current_service_tier().unwrap_or_default());",
-    "        process.env(",
-    "            \"CODEX_HUD_ROLLOUT_PATH\",",
-    "            self.rollout_path()",
-    "                .map(|p| p.to_string_lossy().into_owned())",
-    "                .unwrap_or_default(),",
-    "        );",
-    "",
-    "        let output = process.current_dir(self.status_line_cwd()).output().ok()?;",
-    "        if !output.status.success() {",
-    "            return None;",
-    "        }",
-    "",
-    "        let text = String::from_utf8_lossy(&output.stdout)",
-    "            .lines()",
-    "            .next()",
-    "            .unwrap_or(\"\")",
-    "            .trim()",
-    "            .to_string();",
-    "        if text.is_empty() {",
-    "            return None;",
-    "        }",
-    "",
-    "        Some(Self::ansi_status_line_to_line(&text))",
-    "    }",
-    "",
-    "    fn ansi_status_line_to_line(text: &str) -> ratatui::text::Line<'static> {",
-    "        let mut spans = Vec::new();",
-    "        let mut buffer = String::new();",
-    "        let mut style = ratatui::style::Style::default();",
-    "        let mut chars = text.chars().peekable();",
-    "",
-    "        while let Some(ch) = chars.next() {",
-    "            if ch == '\\u{1b}' && chars.peek() == Some(&'[') {",
-    "                chars.next();",
-    "                let mut sequence = String::new();",
-    "                for next in chars.by_ref() {",
-    "                    if next == 'm' {",
-    "                        break;",
-    "                    }",
-    "                    sequence.push(next);",
-    "                }",
-    "",
-    "                if !buffer.is_empty() {",
-    "                    spans.push(ratatui::text::Span::styled(std::mem::take(&mut buffer), style));",
-    "                }",
-    "                Self::apply_ansi_status_style(&sequence, &mut style);",
-    "            } else {",
-    "                buffer.push(ch);",
-    "            }",
-    "        }",
-    "",
-    "        if !buffer.is_empty() {",
-    "            spans.push(ratatui::text::Span::styled(buffer, style));",
-    "        }",
-    "",
-    "        ratatui::text::Line::from(spans)",
-    "    }",
-    "",
-    "    fn apply_ansi_status_style(sequence: &str, style: &mut ratatui::style::Style) {",
-    "        let codes = if sequence.is_empty() {",
-    "            vec![0]",
-    "        } else {",
-    "            sequence",
-    "                .split(';')",
-    "                .filter_map(|part| part.parse::<u16>().ok())",
-    "                .collect::<Vec<_>>()",
-    "        };",
-    "",
-    "        let mut index = 0;",
-    "        while index < codes.len() {",
-    "            match codes[index] {",
-    "                0 | 39 => *style = ratatui::style::Style::default(),",
-    "                30..=37 => {",
-    "                    *style = (*style).fg(ratatui::style::Color::Indexed((codes[index] - 30) as u8));",
-    "                }",
-    "                90..=97 => {",
-    "                    *style = (*style).fg(ratatui::style::Color::Indexed((codes[index] - 90 + 8) as u8));",
-    "                }",
-    "                38 if index + 2 < codes.len() && codes[index + 1] == 5 => {",
-    "                    *style = (*style).fg(ratatui::style::Color::Indexed(codes[index + 2] as u8));",
-    "                    index += 2;",
-    "                }",
-    "                _ => {}",
-    "            }",
-    "            index += 1;",
-    "        }",
-    "    }",
-  ].join("\n");
-}
-
-function ensureAnsiStatusLineParser(filePath) {
-  const current = fs.readFileSync(filePath, "utf8");
-  if (current.includes("CODEX_HUD_MODEL")) {
-    return false;
-  }
-
-  const startNeedle = "    fn custom_status_line_from_command(&self) -> Option<ratatui::text::Line<'static>> {";
-  const endNeedle = "\n\n    /// Clears the terminal title Codex most recently wrote, if any.";
-  const start = current.indexOf(startNeedle);
-  const end = start === -1 ? -1 : current.indexOf(endNeedle, start);
-  if (start === -1 || end === -1) {
-    throw new Error(`ANSI parser patch anchor not found in ${filePath}`);
-  }
-
-  fs.writeFileSync(filePath, current.slice(0, start) + statusCommandHelperSource() + current.slice(end));
-  return true;
-}
-
-function ensureRemotePluginDisableRegressionTest(filePath) {
-  const current = fs.readFileSync(filePath, "utf8");
-  const originalName = "async fn remote_installed_plugin_preserves_configured_mcp_server_policy()";
-  const regressionName = "async fn remote_installed_plugin_respects_local_disable()";
-  if (current.includes(regressionName)) {
-    return false;
-  }
-
-  const start = current.indexOf(originalName);
-  const end = start === -1 ? -1 : current.indexOf("\n#[tokio::test]", start + originalName.length);
-  if (start === -1) {
-    throw new Error(`Remote plugin regression-test anchor not found in ${filePath}`);
-  }
-
-  const resolvedEnd = end === -1 ? current.length : end;
-  const testBody = current.slice(start, resolvedEnd);
-  const localDisableConfig = `[plugins."linear@openai-curated-remote"]
-enabled = false`;
-  if (!testBody.includes(localDisableConfig)) {
-    throw new Error(`Remote plugin local-disable fixture not found in ${filePath}`);
-  }
-
-  const enabledPolicyTest = testBody.replace(
-    localDisableConfig,
-    `[plugins."linear@openai-curated-remote"]
-enabled = true`,
-  );
-  const regressionTest = `
-
-#[tokio::test]
-async fn remote_installed_plugin_respects_local_disable() {
-    let codex_home = TempDir::new().unwrap();
-    write_cached_plugin(codex_home.path(), "openai-curated-remote", "linear");
-    write_file(
-        &codex_home.path().join(CONFIG_TOML_FILE),
-        r#"[features]
-plugins = true
-
-[plugins."linear@openai-curated-remote"]
-enabled = false
-"#,
-    );
-
-    let config = load_config(codex_home.path(), codex_home.path()).await;
-    let manager = PluginsManager::new_with_options(
-        codex_home.path().to_path_buf(),
-        Some(Product::Codex),
-        Some(AuthMode::Chatgpt),
-    );
-    manager.write_remote_installed_plugins_cache(vec![remote_installed_linear_plugin()]);
-
-    let outcome = manager.plugins_for_config(&config).await;
-    let plugin = outcome
-        .plugins()
-        .iter()
-        .find(|plugin| plugin.config_name == "linear@openai-curated-remote")
-        .expect("remote plugin should be loaded");
-
-    assert!(!plugin.enabled);
-    assert!(plugin.mcp_servers.is_empty());
-}`;
-  fs.writeFileSync(
-    filePath,
-    current.slice(0, start) + enabledPolicyTest + regressionTest + current.slice(resolvedEnd),
-  );
-  return true;
-}
-
-function patchSource(sourceRoot) {
-  const configTypes = path.join(sourceRoot, "codex-rs", "config", "src", "types.rs");
-  const coreConfig = path.join(sourceRoot, "codex-rs", "core", "src", "config", "mod.rs");
-  const pluginLoader = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "loader.rs");
-  const pluginManagerTests = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "manager_tests.rs");
-  const execLib = path.join(sourceRoot, "codex-rs", "exec", "src", "lib.rs");
-  const execMain = path.join(sourceRoot, "codex-rs", "exec", "src", "main.rs");
-  const cliMain = path.join(sourceRoot, "codex-rs", "cli", "src", "main.rs");
-  const statusSurfaces = path.join(sourceRoot, "codex-rs", "tui", "src", "chatwidget", "status_surfaces.rs");
-  const skillsHelpers = path.join(sourceRoot, "codex-rs", "tui", "src", "skills_helpers.rs");
-
-  const changes = [];
-
-  if (applyTextPatch(
-    configTypes,
-    "pub status_line_command: Option<String>",
-    `    #[serde(default)]
-    pub status_line: Option<Vec<String>>,
-
-    /// Color status line items with colors derived from the active syntax theme.`,
-    `    #[serde(default)]
-    pub status_line: Option<Vec<String>>,
-
-    /// Shell command used to render a custom status line. When set, it overrides status_line.
-    #[serde(default)]
-    pub status_line_command: Option<String>,
-
-    /// Color status line items with colors derived from the active syntax theme.`,
-  )) {
-    changes.push("config Tui.status_line_command");
-  }
-
-  if (applyTextPatch(
-    coreConfig,
-    "pub tui_status_line_command: Option<String>",
-    `    pub tui_status_line: Option<Vec<String>>,
-
-    /// Whether to color status line items with colors from the active syntax theme.`,
-    `    pub tui_status_line: Option<Vec<String>>,
-
-    /// Shell command that renders a custom TUI status line.
-    pub tui_status_line_command: Option<String>,
-
-    /// Whether to color status line items with colors from the active syntax theme.`,
-  )) {
-    changes.push("core Config.tui_status_line_command");
-  }
-
-  if (applyTextPatch(
-    coreConfig,
-    "tui_status_line_command: cfg",
-    `            tui_status_line: cfg.tui.as_ref().and_then(|t| t.status_line.clone()),
-            tui_status_line_use_colors: cfg`,
-    `            tui_status_line: cfg.tui.as_ref().and_then(|t| t.status_line.clone()),
-            tui_status_line_command: cfg
-                .tui
-                .as_ref()
-                .and_then(|t| t.status_line_command.clone()),
-            tui_status_line_use_colors: cfg`,
-  )) {
-    changes.push("core ConfigBuilder status_line_command resolution");
-  }
-
-  if (applyTextPatch(
-    statusSurfaces,
-    "fn custom_status_line_from_command",
-    `    fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
-        let enabled = !selections.status_line_items.is_empty();`,
-    `    fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
-        if let Some(status_line) = self.custom_status_line_from_command() {
-            self.bottom_pane.set_status_line_enabled(true);
-            self.set_status_line(Some(status_line));
-            self.set_status_line_hyperlink(None);
-            return;
-        }
-
-        let enabled = !selections.status_line_items.is_empty();`,
-  )) {
-    changes.push("TUI status-line command render hook");
-  }
-
-  if (applyTextPatch(
-    statusSurfaces,
-    "status_line_command.as_ref",
-    `        self.set_status_line_hyperlink(hyperlink_url);
-    }
-
-    /// Clears the terminal title Codex most recently wrote, if any.`,
-    `        self.set_status_line_hyperlink(hyperlink_url);
-    }
-
-    fn custom_status_line_from_command(&self) -> Option<ratatui::text::Line<'static>> {
-        let command = self.config.tui_status_line_command.as_ref()?.trim();
-        if command.is_empty() {
-            return None;
-        }
-
-        let mut process = if cfg!(windows) {
-            let mut process = std::process::Command::new("cmd");
-            process.args(["/C", command]);
-            process
-        } else {
-            let mut process = std::process::Command::new("sh");
-            process.args(["-lc", command]);
-            process
-        };
-
-        let output = process.current_dir(self.status_line_cwd()).output().ok()?;
-        if !output.status.success() {
-            return None;
-        }
-
-        let text = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .next()
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        if text.is_empty() {
-            return None;
-        }
-
-        Some(ratatui::text::Line::from(text))
-    }
-
-    /// Clears the terminal title Codex most recently wrote, if any.`,
-  )) {
-    changes.push("TUI status-line command helper");
-  }
-
-  if (ensureAnsiStatusLineParser(statusSurfaces)) {
-    changes.push("TUI ANSI status-line parser");
-  }
-
-  const localSettings = path.join(sourceRoot, "codex-rs", "tui", "src", "local_settings.rs");
-  if (fs.existsSync(localSettings) && applyTextPatch(
-    localSettings,
-    "status_line_command: config.tui_status_line_command.clone(),",
-    `                status_line: config.tui_status_line.clone(),
-                status_line_use_colors: config.tui_status_line_use_colors,`,
-    `                status_line: config.tui_status_line.clone(),
-                status_line_command: config.tui_status_line_command.clone(),
-                status_line_use_colors: config.tui_status_line_use_colors,`,
-  )) {
-    changes.push("TUI local_settings status_line_command");
-  }
-
-  if (applyTextPatch(
-    pluginLoader,
-    "remote_plugin_config.enabled &= configured_plugin.enabled;",
-    `    if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
-        remote_plugin_config
-            .mcp_servers
-            .clone_from(&configured_plugin.mcp_servers);
-    }`,
-    `    if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
-        // Remote state is authoritative for availability, while local config is a
-        // user-controlled kill switch. Both must permit the plugin.
-        remote_plugin_config.enabled &= configured_plugin.enabled;
-        remote_plugin_config
-            .mcp_servers
-            .clone_from(&configured_plugin.mcp_servers);
-    }`,
-  )) {
-    changes.push("remote plugin local-disable precedence");
-  }
-
-  if (ensureRemotePluginDisableRegressionTest(pluginManagerTests)) {
-    changes.push("remote plugin local-disable regression test");
-  }
-
-  if (applyTextPatch(
-    execLib,
-    `#![recursion_limit = "256"]`,
-    `// For both modes, any other output must be written to stderr.
-#![deny(clippy::print_stdout)]`,
-    `// For both modes, any other output must be written to stderr.
-#![recursion_limit = "256"]
-#![deny(clippy::print_stdout)]`,
-  )) {
-    changes.push("codex-exec compiler recursion limit");
-  }
-
-  if (applyTextPatch(
-    execMain,
-    `#![recursion_limit = "256"]`,
-    `//! of the \`codex-exec\` binary.
-use clap::Parser;`,
-    `//! of the \`codex-exec\` binary.
-#![recursion_limit = "256"]
-
-use clap::Parser;`,
-  )) {
-    changes.push("codex-exec binary compiler recursion limit");
-  }
-
-  if (applyTextPatch(
-    cliMain,
-    `#![recursion_limit = "256"]`,
-    `use clap::Args;`,
-    `#![recursion_limit = "256"]
-
-use clap::Args;`,
-  )) {
-    changes.push("codex CLI compiler recursion limit");
-  }
-
-  // Render plugin-contributed skills in the interactive TUI picker / mention
-  // popup / composer as `plugin:skill` (e.g. `3b:wrap`) instead of the upstream
-  // `skill (plugin)` inversion (`wrap (3b)`). Matches the model-prompt label
-  // (core-skills render) and the Claude `/3b:` surface. Only the plugin branch
-  // (skill.name contains ':') is affected; bare skills fall through unchanged.
-  if (applyTextPatch(
-    skillsHelpers,
-    `format!("{plugin_name}:{skill_name}")`,
-    `        return format!("{skill_name} ({plugin_name})");`,
-    `        return format!("{plugin_name}:{skill_name}");`,
-  )) {
-    changes.push("TUI skill picker plugin:skill label");
-  }
-
-  return changes;
-}
-
-function verifyPatchedSource(sourceRoot) {
-  const statusSurfaces = path.join(sourceRoot, "codex-rs", "tui", "src", "chatwidget", "status_surfaces.rs");
-  const current = fs.readFileSync(statusSurfaces, "utf8");
-  if (!current.includes("CODEX_HUD_MODEL")) {
-    throw new Error(`Patched Codex source is missing CODEX_HUD_MODEL env injection: ${statusSurfaces}`);
-  }
-
-  const pluginLoader = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "loader.rs");
-  const pluginLoaderSource = fs.readFileSync(pluginLoader, "utf8");
-  if (!pluginLoaderSource.includes("remote_plugin_config.enabled &= configured_plugin.enabled;")) {
-    throw new Error(`Patched Codex source is missing remote plugin local-disable precedence: ${pluginLoader}`);
-  }
-
-  const pluginManagerTests = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "manager_tests.rs");
-  const pluginManagerTestSource = fs.readFileSync(pluginManagerTests, "utf8");
-  if (
-    !pluginManagerTestSource.includes("remote_installed_plugin_respects_local_disable") ||
-    !pluginManagerTestSource.includes("assert!(!plugin.enabled);")
-  ) {
-    throw new Error(`Patched Codex source is missing the remote plugin local-disable regression guard: ${pluginManagerTests}`);
-  }
-
-  const execLib = path.join(sourceRoot, "codex-rs", "exec", "src", "lib.rs");
-  const execLibSource = fs.readFileSync(execLib, "utf8");
-  if (!execLibSource.includes(`#![recursion_limit = "256"]`)) {
-    throw new Error(`Patched Codex source is missing the codex-exec compiler recursion limit: ${execLib}`);
-  }
-  const execMain = path.join(sourceRoot, "codex-rs", "exec", "src", "main.rs");
-  const execMainSource = fs.readFileSync(execMain, "utf8");
-  if (!execMainSource.includes(`#![recursion_limit = "256"]`)) {
-    throw new Error(`Patched Codex source is missing the codex-exec binary compiler recursion limit: ${execMain}`);
-  }
-  const cliMain = path.join(sourceRoot, "codex-rs", "cli", "src", "main.rs");
-  const cliMainSource = fs.readFileSync(cliMain, "utf8");
-  if (!cliMainSource.includes(`#![recursion_limit = "256"]`)) {
-    throw new Error(`Patched Codex source is missing the Codex CLI compiler recursion limit: ${cliMain}`);
-  }
-}
-
-function sourceHasPatch(sourceRoot) {
-  const checks = [
-    ["codex-rs/config/src/types.rs", "pub status_line_command: Option<String>"],
-    ["codex-rs/core/src/config/mod.rs", "pub tui_status_line_command: Option<String>"],
-    ["codex-rs/exec/src/lib.rs", `#![recursion_limit = "256"]`],
-    ["codex-rs/exec/src/main.rs", `#![recursion_limit = "256"]`],
-    ["codex-rs/cli/src/main.rs", `#![recursion_limit = "256"]`],
-    ["codex-rs/tui/src/chatwidget/status_surfaces.rs", "fn custom_status_line_from_command"],
-  ];
-
-  return checks.every(([relativePath, marker]) => {
-    const filePath = path.join(sourceRoot, relativePath);
-    return fs.existsSync(filePath) && fs.readFileSync(filePath, "utf8").includes(marker);
-  });
-}
-
 function ensureSource(args) {
   const tag = `rust-v${args.version}`;
   const sourceDir = path.join(args.cacheDir, `openai-codex-${tag}`);
@@ -1194,16 +716,16 @@ function codexBuildEnv(env = process.env, options = {}) {
   return buildEnv;
 }
 
-function sourceBuildFallbackAllowed(args, options = {}) {
-  const platform = options.platform || process.platform;
-  const arch = options.arch || process.arch;
-  return Boolean(args.sourceBuild) || platform !== "darwin" || arch !== "x64";
-}
-
 const RUNTIME_TARGETS = {
   darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" },
   linux: { x64: "x86_64-unknown-linux-gnu", arm64: "aarch64-unknown-linux-gnu" },
   win32: { x64: "x86_64-pc-windows-msvc", arm64: "aarch64-pc-windows-msvc" },
+};
+// Upstream publishes codex-code-mode-host per target; Linux ships only static
+// musl builds, which run on glibc hosts too.
+const CODE_MODE_HOST_TARGETS = {
+  darwin: { x64: "x86_64-apple-darwin", arm64: "aarch64-apple-darwin" },
+  linux: { x64: "x86_64-unknown-linux-musl", arm64: "aarch64-unknown-linux-musl" },
 };
 const KNOWN_RUNTIME_TARGETS = Object.freeze(
   Object.values(RUNTIME_TARGETS).flatMap((byArch) => Object.values(byArch)),
@@ -1224,7 +746,7 @@ function runtimeReleaseAsset(args, options = {}) {
 
   validateCodexVersion(args.version, "--version");
   validateRuntimeReleaseRepo(args.runtimeReleaseRepo || DEFAULT_RUNTIME_RELEASE_REPO);
-  const baseName = `codex-hud-codex-v${args.version}-${target}`;
+  const baseName = `codex-hud-codex-v${args.version}-p${PATCH_SET_ID}-${target}`;
   const tag = `codex-runtime-v${args.version}`;
   const archiveName = `${baseName}.tar.gz`;
   const releaseBase = `https://github.com/${args.runtimeReleaseRepo || DEFAULT_RUNTIME_RELEASE_REPO}/releases/download/${encodeURIComponent(tag)}`;
@@ -1304,6 +826,105 @@ function sha256File(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
+function runtimeNotPublishedError(args, options = {}) {
+  const asset = runtimeReleaseAsset(args, options);
+  const message = asset
+    ? `No published codex-hud runtime for Codex ${args.version} on ${asset.target} (patch set ${PATCH_SET_ID}) yet; ` +
+      `expected ${asset.archiveName} in release ${asset.tag}. ` +
+      "The Patched Codex Runtime workflow publishes it automatically after each Codex release, usually within a few hours. " +
+      "If your codex-hud checkout is behind the latest release, update it first. " +
+      "To compile Codex locally instead, rerun with --source-build."
+    : `codex-hud does not publish patched runtimes for ${options.platform || process.platform}/${options.arch || process.arch}; ` +
+      `rerun with --source-build to compile Codex ${args.version} locally.`;
+  const error = new Error(message);
+  error.code = RUNTIME_NOT_PUBLISHED;
+  return error;
+}
+
+function codeModeHostSupported(platform = process.platform) {
+  return Boolean(CODE_MODE_HOST_TARGETS[platform]);
+}
+
+function codeModeHostAsset(version, options = {}) {
+  const platform = options.platform || process.platform;
+  const arch = options.arch || process.arch;
+  const target = CODE_MODE_HOST_TARGETS[platform] && CODE_MODE_HOST_TARGETS[platform][arch];
+  if (!target || !version) {
+    return null;
+  }
+  validateCodexVersion(version, "--version");
+  const baseName = `${CODE_MODE_HOST_NAME}-${target}`;
+  const archiveName = `${baseName}.tar.gz`;
+  return {
+    target,
+    baseName,
+    archiveName,
+    url: `${OPENAI_CODEX_RELEASES_URL}/${encodeURIComponent(`rust-v${version}`)}/${encodeURIComponent(archiveName)}`,
+  };
+}
+
+function verifyOpenAiCodeSignature(binaryPath, options = {}) {
+  const spawn = options.spawnSync || spawnSync;
+  const verify = spawn("codesign", ["--verify", "--strict", binaryPath], { encoding: "utf8" });
+  if (verify.error || verify.status !== 0) {
+    const detail = verify.error ? verify.error.message : String(verify.stderr || "").trim();
+    throw new Error(`${path.basename(binaryPath)} failed code-signature verification: ${detail}`);
+  }
+  const details = spawn("codesign", ["-dv", "--verbose=2", binaryPath], { encoding: "utf8" });
+  const teamMatch = /^TeamIdentifier=(\S+)$/m.exec(`${details.stdout || ""}\n${details.stderr || ""}`);
+  const team = teamMatch ? teamMatch[1] : "missing";
+  if (team !== OPENAI_CODE_SIGNING_TEAM_ID) {
+    throw new Error(
+      `${path.basename(binaryPath)} is signed by team ${team}, not OpenAI (${OPENAI_CODE_SIGNING_TEAM_ID}); refusing to install it.`,
+    );
+  }
+  return team;
+}
+
+// Codex resolves codex-code-mode-host beside its own executable, so a patched
+// runtime needs the helper from the same Codex release next to its payload.
+// Without it, Code Mode either fails or talks to a different release's helper,
+// whose IPC frames an older Codex cannot decode.
+function stageCodeModeHost(stagingDir, args, options = {}) {
+  const platform = options.platform || process.platform;
+  const asset = codeModeHostAsset(args.version, options);
+  if (!asset) {
+    console.warn(
+      `codex-hud installs ${CODE_MODE_HOST_NAME} only on macOS and Linux; ` +
+      `Code Mode in this runtime needs ${CODE_MODE_HOST_NAME} from Codex ${args.version} in ${stagingDir}.`,
+    );
+    return null;
+  }
+
+  const fetchFile = options.downloadFile || downloadFile;
+  const extractArchive = options.extractRuntimeArchive || extractRuntimeArchive;
+  const verifySignature = options.verifyCodeSignature || verifyOpenAiCodeSignature;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-code-mode-host-"));
+  try {
+    const archivePath = path.join(tempDir, asset.archiveName);
+    if (!fetchFile(asset.url, archivePath)) {
+      throw new Error(
+        `Could not download ${asset.archiveName} for Codex ${args.version} (${asset.url}). ` +
+        "The patched runtime needs the Code Mode helper from the same Codex release; the active runtime was NOT modified.",
+      );
+    }
+    extractArchive(archivePath, tempDir, { baseName: asset.baseName });
+    const extracted = path.join(tempDir, asset.baseName);
+    if (!fs.existsSync(extracted) || !fs.statSync(extracted).isFile()) {
+      throw new Error(`${asset.archiveName} does not contain ${asset.baseName}`);
+    }
+    if (platform === "darwin") {
+      verifySignature(extracted);
+    }
+    const staged = path.join(stagingDir, CODE_MODE_HOST_NAME);
+    fs.copyFileSync(extracted, staged);
+    fs.chmodSync(staged, 0o755);
+    return { path: staged, asset: asset.archiveName, sha256: sha256File(staged) };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 function validateRuntimeManifest(bundleDir, args) {
   const manifestPath = path.join(bundleDir, RUNTIME_MANIFEST_NAME);
   if (!fs.existsSync(manifestPath)) {
@@ -1323,9 +944,9 @@ function validateRuntimeManifest(bundleDir, args) {
   if (manifest.codexVersion !== args.version) {
     throw new Error(`Prebuilt runtime manifest Codex version mismatch: expected ${args.version}, got ${manifest.codexVersion}`);
   }
-  if (manifest.patchSetRevision !== PATCH_SET_REVISION) {
+  if (manifest.patchSetId !== PATCH_SET_ID) {
     throw new Error(
-      `Prebuilt runtime patch-set revision mismatch: expected ${PATCH_SET_REVISION}, got ${manifest.patchSetRevision || "missing"}`,
+      `Prebuilt runtime patch-set id mismatch: expected ${PATCH_SET_ID}, got ${manifest.patchSetId || "missing"}`,
     );
   }
   if (!/^[0-9a-f]{40}$/.test(manifest.sourceCommit || "")) {
@@ -1351,7 +972,10 @@ function installBinary(sourceDir, args) {
     env,
   });
 
-  return installBuiltBinary(sourceDir, args, { env });
+  fs.mkdirSync(args.prefix, { recursive: true });
+  const stagedBinary = stageBuiltBinary(sourceDir, args, { env });
+  stageCodeModeHost(path.dirname(stagedBinary), args);
+  return installStagedBinary(stagedBinary, args);
 }
 
 function stageBinaryFile(sourceBinary, args) {
@@ -1431,8 +1055,8 @@ function installStagedBinary(stagedBinary, args) {
     );
   }
 
-  const { target } = activateStagedBinary(stagedBinary, args);
-  return { target, version };
+  const { target, activeBinary } = activateStagedBinary(stagedBinary, args);
+  return { target, activeBinary, version };
 }
 
 function installBuiltBinary(sourceDir, args, options = {}) {
@@ -1476,12 +1100,18 @@ function installPrebuiltBinary(args, options = {}) {
     const manifest = validateRuntimeManifest(bundleDir, args);
 
     fs.mkdirSync(args.prefix, { recursive: true });
-    const installed = installStagedBinary(stageBinaryFile(path.join(bundleDir, builtBinaryName()), args), args);
+    const stagedBinary = stageBinaryFile(path.join(bundleDir, builtBinaryName()), args);
+    stageCodeModeHost(path.dirname(stagedBinary), args, {
+      platform: options.platform,
+      arch: options.arch,
+      ...options.codeModeHost,
+    });
+    const installed = installStagedBinary(stagedBinary, args);
     return {
       ...installed,
       source: "prebuilt",
       assetName: asset.archiveName,
-      patchSetRevision: manifest.patchSetRevision,
+      patchSetId: manifest.patchSetId,
       sourceCommit: manifest.sourceCommit,
       payloadSha256: manifest.payloadSha256,
     };
@@ -1870,9 +1500,10 @@ exec -a codex "$stock" "$@"
   }
   const statusLineCommand = opts.statusLineCommand;
   const staleWarning =
-    `codex-hud: stock Codex changed since this patched runtime was built; ` +
+    `codex-hud: stock Codex changed since this patched runtime was installed; ` +
     `running experimental patched Codex ${opts.patchedVersion || "(unknown version)"}. ` +
-    `Rebuild with 'npm run patch:codex' or switch to stock delegation ('npm run install:launcher').`;
+    `Run 'npm run codex:sync' to install the published runtime for the new version (it reports pending until one is published), ` +
+    `or switch to stock delegation ('npm run install:launcher').`;
 
   return `#!/usr/bin/env bash
 ${markers.join("\n")}
@@ -1937,7 +1568,7 @@ function installLauncher(args, opts) {
   }
   const patchedProvenance = opts.mode === "patched"
     ? {
-        patchSetRevision: opts.patchSetRevision || PATCH_SET_REVISION,
+        patchSetId: opts.patchSetId || PATCH_SET_ID,
         payloadSha256: opts.payloadSha256 || sha256File(opts.patchedBinary),
       }
     : {};
@@ -2306,6 +1937,10 @@ function doctor(args, options = {}) {
       active.broken = true;
       report.anomalies.push(`patched command is a broken symlink: ${binEntryPath}`);
     }
+    if (!active.broken && codeModeHostSupported()) {
+      const helperPath = path.join(path.dirname(active.target), CODE_MODE_HOST_NAME);
+      active.codeModeHost = fs.existsSync(helperPath) ? helperPath : null;
+    }
     if (!active.broken) {
       try {
         active.version = parseCodexVersion(
@@ -2456,8 +2091,8 @@ function patchedRuntimeStatus(report) {
     patchedVersion,
     activeVersion,
     metadataPatchedVersion,
-    expectedPatchSetRevision: PATCH_SET_REVISION,
-    metadataPatchSetRevision: metadata.patchSetRevision || null,
+    expectedPatchSetId: PATCH_SET_ID,
+    metadataPatchSetId: metadata.patchSetId || null,
     metadataPayloadSha256: metadata.payloadSha256 || null,
     needsSync: false,
     action: "none",
@@ -2501,12 +2136,16 @@ function patchedRuntimeStatus(report) {
     status.issues.push(`stock Codex is ${stock.version} but patched runtime is ${patchedVersion}`);
   }
 
-  if (metadata.patchSetRevision !== PATCH_SET_REVISION) {
+  if (metadata.patchSetId !== PATCH_SET_ID) {
     status.needsSync = true;
     status.action = "rebuild";
-    status.issues.push(
-      `patched runtime revision is ${metadata.patchSetRevision || "missing"}; expected ${PATCH_SET_REVISION}`,
-    );
+    status.issues.push(`patched runtime patch set is ${metadata.patchSetId || "missing"}; expected ${PATCH_SET_ID}`);
+  }
+
+  if (active && !active.broken && active.codeModeHost === null) {
+    status.needsSync = true;
+    status.action = "rebuild";
+    status.issues.push(`patched runtime has no ${CODE_MODE_HOST_NAME} beside ${active.target}`);
   }
 
   if (!metadata.payloadSha256) {
@@ -2594,12 +2233,12 @@ function refreshPatchedLauncher(args, report, options = {}) {
     : report.stock.path;
   const launcher = installLauncher(args, {
     mode: "patched",
-    patchedBinary: active.path,
+    patchedBinary: active.target || active.path,
     patchedVersion: active.version,
     stockPath: trackedStockPath,
     stockRealpath: report.stock.realpath,
     stockVersion: report.stock.version,
-    patchSetRevision: metadata.patchSetRevision,
+    patchSetId: metadata.patchSetId,
     sourceCommit: metadata.sourceCommit,
     payloadSha256: metadata.payloadSha256,
     statusLineCommand,
@@ -2703,8 +2342,25 @@ function syncPatchedRuntime(args, options = {}) {
 
   const installPatched = options.runPatchedInstall || runPatchedInstall;
   const installArgs = { ...args, mode: "patched", version: first.status.stockVersion || args.version };
-  console.log("Rebuilding patched runtime to match stock Codex.");
-  installPatched(installArgs);
+  console.log(`Updating patched runtime to match stock Codex ${installArgs.version}.`);
+  try {
+    installPatched(installArgs);
+  } catch (error) {
+    if (error.code !== RUNTIME_NOT_PUBLISHED) {
+      throw error;
+    }
+    const active = first.report.patched.active;
+    if (!active || active.broken) {
+      throw new Error(
+        `${error.message}\nThe active patched runtime is missing or broken, so there is no working runtime to keep. ` +
+        "Switch to stock delegation ('npm run install:launcher') or rerun with --source-build.",
+      );
+    }
+    console.log(`Patched runtime update pending: ${error.message}`);
+    console.log(`Keeping patched Codex ${first.status.patchedVersion} until the runtime is published.`);
+    const pendingShim = reconcileDefaultShim(args, first.report, options);
+    return { action: "pending", status: first.status, shim: pendingShim, reason: error.message };
+  }
   const afterRebuild = checkPatchedRuntime(args, options);
   if (afterRebuild.status.needsSync) {
     throw new Error(`Patched runtime rebuild did not clear sync state: ${afterRebuild.status.reason}`);
@@ -2762,6 +2418,9 @@ function printDoctorReport(report) {
   if (report.patched.active) {
     const active = report.patched.active;
     lines.push(`patched command: ${active.path} -> ${active.target || "(unresolved)"}${active.version ? ` (${active.version})` : ""}${active.broken ? " [BROKEN]" : ""}`);
+    if (active.codeModeHost !== undefined) {
+      lines.push(`patched ${CODE_MODE_HOST_NAME}: ${active.codeModeHost || "(missing)"}`);
+    }
   } else {
     lines.push("patched command: (none)");
   }
@@ -2848,6 +2507,33 @@ function runStockInstall(args) {
   installShimIfRequested(launcher, args);
 }
 
+function buildPatchedRuntimeFromSource(args) {
+  const sourceDir = ensureSource(args);
+  const changes = patchSource(sourceDir);
+  verifyPatchedSource(sourceDir);
+  console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
+  const installed = installBinary(sourceDir, args);
+  installed.sourceCommit = run("git", ["rev-parse", "HEAD"], { cwd: sourceDir }).trim();
+  return { installed, sourceDir };
+}
+
+// Published runtimes are the only implicit path. Compiling Codex costs several
+// GB and 30+ minutes, so it happens only when the caller passed --source-build.
+function acquirePatchedRuntime(args, deps = {}) {
+  const installPrebuilt = deps.installPrebuiltBinary || installPrebuiltBinary;
+  const buildFromSource = deps.buildFromSource || buildPatchedRuntimeFromSource;
+  const installed = installPrebuilt(args);
+  if (installed) {
+    console.log(`Installed verified prebuilt runtime: ${installed.assetName}`);
+    return { installed, sourceDir: null };
+  }
+  if (!args.sourceBuild) {
+    throw runtimeNotPublishedError(args, deps);
+  }
+  console.log("Source build requested.");
+  return buildFromSource(args);
+}
+
 function runPatchedInstall(args) {
   if (!args.version) {
     args.version = detectCodexVersion();
@@ -2894,37 +2580,17 @@ function runPatchedInstall(args) {
   const renderer = resolveRenderer(args, { requireSessionCapability: true });
   const statusLineCommand = statusLineCommandFor(renderer);
   console.log(`HUD command: ${statusLineCommand}`);
-  let sourceDir = null;
-  let installed = installPrebuiltBinary(args);
-  if (installed) {
-    console.log(`Installed verified prebuilt runtime: ${installed.assetName}`);
-  } else {
-    if (!sourceBuildFallbackAllowed(args)) {
-      const asset = runtimeReleaseAsset(args);
-      throw new Error(
-        `No verified Intel macOS runtime asset is available for Codex ${args.version}.` +
-        `\nExpected: ${asset ? asset.archiveName : "x86_64-apple-darwin archive"}` +
-        "\nPublish it with the Patched Codex Runtime workflow, or rerun with --source-build to compile locally.",
-      );
-    }
-    console.log(args.sourceBuild ? "Source build requested." : "No prebuilt runtime available for this version/target; building from source.");
-    sourceDir = ensureSource(args);
-    const changes = patchSource(sourceDir);
-    verifyPatchedSource(sourceDir);
-    console.log(changes.length ? `Applied patch: ${changes.join(", ")}` : "Patch already applied.");
-    installed = installBinary(sourceDir, args);
-    installed.sourceCommit = run("git", ["rev-parse", "HEAD"], { cwd: sourceDir }).trim();
-  }
-  installed.patchSetRevision = PATCH_SET_REVISION;
+  const { installed, sourceDir } = acquirePatchedRuntime(args);
+  installed.patchSetId = PATCH_SET_ID;
   installed.payloadSha256 = installed.payloadSha256 || sha256File(installed.target);
   const launcher = installLauncher(args, {
     mode: "patched",
-    patchedBinary: installed.target,
+    patchedBinary: installed.activeBinary || installed.target,
     patchedVersion: installed.version,
     stockPath: stock ? stock.path : null,
     stockRealpath: stock ? stock.realpath : null,
     stockVersion: stock ? stock.version : null,
-    patchSetRevision: installed.patchSetRevision,
+    patchSetId: installed.patchSetId,
     sourceCommit: installed.sourceCommit,
     payloadSha256: installed.payloadSha256,
     statusLineCommand,
@@ -3020,8 +2686,12 @@ if (require.main === module) {
 
 module.exports = {
   KNOWN_RUNTIME_TARGETS,
-  PATCH_SET_REVISION,
+  CODE_MODE_HOST_NAME,
+  OPENAI_CODE_SIGNING_TEAM_ID,
+  PATCH_SET_ID,
+  RUNTIME_NOT_PUBLISHED,
   RUNTIME_MANIFEST_NAME,
+  acquirePatchedRuntime,
   activateStagedBinary,
   builtBinaryPath,
   codexBuildEnv,
@@ -3064,12 +2734,16 @@ module.exports = {
   refreshPatchedLauncher,
   reviewLegacyBinEntry,
   sourceHasPatch,
-  sourceBuildFallbackAllowed,
+  codeModeHostAsset,
+  codeModeHostSupported,
+  runtimeNotPublishedError,
   stageBuiltBinary,
+  stageCodeModeHost,
   statusLineCommandFor,
   syncPatchedRuntime,
   uninstallDefaultShim,
   verifyInstalledBinary,
+  verifyOpenAiCodeSignature,
   verifyPatchedSource,
   verifyRustRenderer,
   verifyRendererSessionCapability,

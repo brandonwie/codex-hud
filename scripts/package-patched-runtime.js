@@ -4,15 +4,16 @@
 // Package a patched Codex payload into the release bundle that
 // install-patched-codex.js downloads and verifies in patched mode:
 //
-//   <dist>/codex-hud-codex-v<version>-<target>.tar.gz
-//   <dist>/codex-hud-codex-v<version>-<target>.tar.gz.sha256
+//   <dist>/codex-hud-codex-v<version>-p<patch-set-id>-<target>.tar.gz
+//   <dist>/codex-hud-codex-v<version>-p<patch-set-id>-<target>.tar.gz.sha256
 //
 // The archive holds one top-level directory named after the bundle that
 // contains `codex` (`codex.exe` for Windows targets), the upstream `LICENSE`
 // and `NOTICE`, and the
-// `codex-hud-runtime.json` provenance manifest. CI and the maintainer's
-// local-publish path share this script so both produce byte-compatible
-// bundles; the installer's prebuilt verification is the only consumer.
+// `codex-hud-runtime.json` provenance manifest. The Patched Codex Runtime
+// workflow runs this script; the installer's prebuilt verification is the only
+// consumer. The Code Mode helper is not bundled: the installer fetches OpenAI's
+// signed codex-code-mode-host for the same Codex release at install time.
 
 const crypto = require("crypto");
 const fs = require("fs");
@@ -22,7 +23,7 @@ const { spawnSync } = require("child_process");
 
 const {
   KNOWN_RUNTIME_TARGETS,
-  PATCH_SET_REVISION,
+  PATCH_SET_ID,
   RUNTIME_MANIFEST_NAME,
   parseCodexVersion,
   validateCodexVersion,
@@ -79,7 +80,7 @@ function resolveSourceCommit(options) {
 }
 
 function bundleNames(version, target) {
-  const baseName = `codex-hud-codex-v${version}-${target}`;
+  const baseName = `codex-hud-codex-v${version}-p${PATCH_SET_ID}-${target}`;
   const archiveName = `${baseName}.tar.gz`;
   return { baseName, archiveName, checksumName: `${archiveName}.sha256` };
 }
@@ -149,7 +150,7 @@ function packagePatchedRuntime(options) {
   const manifest = {
     schemaVersion: 1,
     codexVersion: version,
-    patchSetRevision: PATCH_SET_REVISION,
+    patchSetId: PATCH_SET_ID,
     sourceCommit: resolveSourceCommit({ ...options, runCommand }),
     payloadSha256: sha256File(bundledBinary),
   };
@@ -203,7 +204,7 @@ function usage() {
     "                                  [--dist <dir>] [--work <dir>] [--source-commit <sha>] [--no-codesign]",
     "",
     "Targets: " + KNOWN_RUNTIME_TARGETS.join(", "),
-    "Writes <dist>/codex-hud-codex-v<version>-<target>.tar.gz and its .sha256 next to it.",
+    "Writes <dist>/codex-hud-codex-v<version>-p<patch-set-id>-<target>.tar.gz and its .sha256 next to it.",
   ].join("\n");
 }
 
@@ -216,7 +217,7 @@ function main() {
   const result = packagePatchedRuntime(args);
   console.log(`Packaged runtime: ${result.archivePath}`);
   console.log(`Checksum: ${result.checksumPath}`);
-  console.log(`Manifest: codex ${result.manifest.codexVersion}, patch-set ${result.manifest.patchSetRevision}, source ${result.manifest.sourceCommit}`);
+  console.log(`Manifest: codex ${result.manifest.codexVersion}, patch set ${result.manifest.patchSetId}, source ${result.manifest.sourceCommit}`);
 }
 
 if (require.main === module) {
