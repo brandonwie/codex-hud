@@ -1541,6 +1541,16 @@ if [ -n "$STOCK_PATH" ] && [ -e "$STOCK_PATH" ] && [ -n "$STOCK_REALPATH_AT_INST
   fi
 fi
 
+no_daemon_passed=0
+for arg in "$@"; do
+  if [ "$arg" = --no-daemon ]; then no_daemon_passed=1; break; fi
+done
+if [ "$no_daemon_passed" = 0 ]; then
+  case "$("$PATCHED" --help 2>/dev/null || true)" in
+    *'--no-daemon'*) set -- --no-daemon "$@" ;;
+  esac
+fi
+
 exec -a codex "$PATCHED" \\
   -c ${shellQuote(`tui.status_line_command=${JSON.stringify(statusLineCommand)}`)} \\
   "$@"

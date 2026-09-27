@@ -1817,6 +1817,28 @@ assert.strictEqual(
 );
 assert(patchedExecArgv[1].includes("codex-hud"));
 assert.deepStrictEqual(patchedExecArgv.slice(2), ["resume", "--last"], "user args must arrive verbatim after the -c override");
+assert(!patchedExecArgv.includes("--no-daemon"), "older patched runtimes must keep their existing argv");
+
+const daemonCapablePrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-no-daemon-test-"));
+const daemonCapableBinary = path.join(daemonCapablePrefix, "patched-codex");
+writeExecutable(daemonCapableBinary,
+  '#!/usr/bin/env bash\nif [ "$1" = "--help" ]; then printf "      --no-daemon\\n"; exit 0; fi\nprintf "%s\\n" "$@"\n');
+const daemonCapableLauncher = installLauncher(
+  { prefix: daemonCapablePrefix, binName: "codex-hud-codex", launcherName: "codex-hud-tui" },
+  { mode: "patched", patchedBinary: daemonCapableBinary, statusLineCommand: patchedExecCommand },
+);
+const daemonCapableRun = spawnSync("bash", [daemonCapableLauncher, "resume", "--last"], { encoding: "utf8" });
+assert.strictEqual(daemonCapableRun.status, 0, `patched wrapper failed: ${daemonCapableRun.stderr}`);
+assert.deepStrictEqual(daemonCapableRun.stdout.split("\n").filter(Boolean), [
+  "-c", `tui.status_line_command=${JSON.stringify(patchedExecCommand)}`, "--no-daemon", "resume", "--last",
+], "capable patched runtime must request embedded mode while preserving the HUD override and user args");
+const explicitNoDaemonRun = spawnSync("bash", [daemonCapableLauncher, "--no-daemon", "resume"], { encoding: "utf8" });
+assert.strictEqual(explicitNoDaemonRun.status, 0, `patched wrapper failed: ${explicitNoDaemonRun.stderr}`);
+assert.deepStrictEqual(explicitNoDaemonRun.stdout.split("\n").filter(Boolean), [
+  "-c", `tui.status_line_command=${JSON.stringify(patchedExecCommand)}`, "--no-daemon", "resume",
+], "an explicit --no-daemon must not be injected a second time");
+assert(fs.readFileSync(daemonCapableLauncher, "utf8").includes('exec -a codex "$PATCHED"'),
+  "daemon-capable launcher must preserve argv[0] for Herdr");
 
 // --- pruneVersionDirs ---
 const pruneRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-prune-test-"));
