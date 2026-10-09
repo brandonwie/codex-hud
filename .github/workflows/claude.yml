@@ -1,145 +1,25 @@
 name: Claude Code Review
 
+# "@claude review" on a pull request runs the shared review workflow in
+# brandonwie/claude-review, which owns the action pin, model, trigger gate,
+# prompt and tool allowlist. What to review lives in REVIEW.md at the
+# repository root, read from the default branch. The token lives in the
+# `claude-brandonwie` environment.
+
 on:
   issue_comment:
     types: [created]
 
 jobs:
   claude-review:
-    if: |
-      github.actor == 'brandonwie' &&
-      github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@claude review')
-    timeout-minutes: 15
-    runs-on: ubuntu-latest
-    environment: claude-${{ github.actor }}
+    uses: brandonwie/claude-review/.github/workflows/claude-review.yml@main
     permissions:
       contents: read
       pull-requests: write
       issues: read
       id-token: write
       actions: read
-
-    steps:
-      - name: Validate Claude token
-        env:
-          CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          GH_ACTOR: ${{ github.actor }}
-        run: |
-          if [ -z "$CLAUDE_TOKEN" ]; then
-            echo "::error::No CLAUDE_CODE_OAUTH_TOKEN found for environment claude-${GH_ACTOR}. See .github/CLAUDE_SETUP.md for setup instructions."
-            exit 1
-          fi
-
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 1
-
-      - name: Run Claude Code Review
-        id: claude-review
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          track_progress: true
-          additional_permissions: |
-            actions: read
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.issue.number }}
-
-            Please review this pull request.
-
-            ## Project Context
-
-            codex-hud renders a compact, colored Codex status-line/footer
-            (model, project, git, context, 5h/7d usage, tokens). It ships
-            two rendering surfaces that must stay in parity for the same config
-            and inputs:
-
-            - `rust/src/*` — `codex-hud`, the default status-line renderer and
-              source of truth for defaults, segment order, colors, and
-              formatting.
-            - `site/app.js` — the website's config/runtime playground: a
-              browser reimplementation that renders DOM spans, so it must match
-              the Rust renderer's visible output, styling/control set, and
-              config-TOML generation (checked via textContent/control parity,
-              not raw ANSI bytes).
-
-            Around these: a Codex plugin manifest, the patched-Codex
-            installer/launcher, a deployed site (GitHub Pages), a config schema
-            (`spec/config-schema.md`), and README plus its localized
-            translations.
-
-            Because rendering logic is implemented in Rust and mirrored in the
-            browser playground, the central risk is CROSS-SURFACE DRIFT: a
-            change to output, color resolution, segment order, thresholds,
-            labels, or token/percent formatting in one surface that is not
-            mirrored in the other. Rust output is golden-tested; the site holds
-            visible-output and control parity. Byte-level changes to ANSI
-            colors, separators, labels, segment order, token/rate formatting,
-            or config merge semantics are product changes and must be reviewed
-            across both rendering surfaces.
-
-            ## Review Categories
-
-            1. Cross-Surface Parity (PRIMARY) - changes to rendering, config
-               defaults, color resolution, segment registry/order, pace/percent
-               thresholds, effort/token/percent formatting, or separators must
-               land in lockstep across `rust/src/*` and `site/app.js`. Flag a
-               one-sided change as a drift bug. Rust output is golden-tested
-               (`npm test`, `npm run test:rust`); site parity is
-               visible-output/control (`scripts/check-site.js`). Scrutinize any
-               hex→xterm color mapping change.
-            2. Parity Safety / Coverage - golden fixtures and deterministic
-               clocks for Rust (`npm test`, `npm run test:rust`), plus the site
-               smoke + control-parity check (`scripts/check-site.js`). New
-               rendering behavior needs matching golden/fixture updates on
-               every surface it touches.
-            3. Correctness - HUD output, config precedence, TOML validation,
-               null-safe rendering.
-            4. Installer Safety - no writes to stock Codex paths, safe shims,
-               rollback, `exec -a codex`, `npm run doctor` accuracy.
-            5. Plugin Packaging & Site - manifest validity, marketplace paths,
-               zero unnecessary runtime deps; the site stays dependency-free
-               static assets with no external scripts; version stays synced
-               (`scripts/sync-release-version.js`).
-            6. Security - workflow permissions, shell injection, unsafe path
-               handling, secret exposure, no external/CDN scripts in the site,
-               playground runtime input stays sandboxed.
-            7. Maintainability - small CommonJS style, focused helpers, low
-               abstraction overhead.
-            8. Documentation - README/i18n accuracy (localized READMEs,
-               skeleton-checked) for install, rollback, updates, and
-               limitations; `spec/config-schema.md`.
-
-            ## Project Conventions (Do NOT Flag)
-
-            - CommonJS scripts are intentional; do not request ESM/TypeScript
-              rewrites.
-            - The Rust renderer and the site playground intentionally duplicate
-              rendering semantics - there is no shared module across runtimes.
-              Do not request deduplication or a shared package. DO flag when
-              the duplicated logic has drifted out of parity.
-            - Golden fixtures may show escaped ANSI as `\x1b` text for readable
-              diffs.
-            - The patched Codex footer path is optional/advanced and
-              upstream-coupled.
-            - Preserve `exec -a codex` in generated launchers so Herdr
-              recognizes the process.
-            - Do not suggest modifying `/opt/homebrew/bin/codex` or stock Codex
-              install paths.
-            - Tests run via `npm test` (Rust build, smoke/config, installer,
-              golden, i18n, site check) and `npm run test:rust` (Rust
-              golden/parsing/CLI); CI also runs `cargo fmt`/`clippy`. Prefer
-              adding focused tests to the existing
-              `scripts/test-*.js` suites and golden fixtures over new frameworks.
-
-            ## Output Instructions
-
-            Use `gh pr comment` for top-level feedback.
-            Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) to highlight specific code issues.
-            Only post GitHub comments - do not submit review text as messages.
-
-          claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr checks:*)"
+    with:
+      environment: claude-brandonwie
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
