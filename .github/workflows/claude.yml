@@ -2,9 +2,8 @@ name: Claude Code Review
 
 # "@claude review" on a pull request runs the shared review workflow in
 # brandonwie/claude-review, which owns the action pin, model, trigger gate,
-# prompt and tool allowlist. What to review lives in REVIEW.md at the
-# repository root, read from the default branch. The token lives in the
-# `claude-brandonwie` environment.
+# token routing, prompt and tool allowlist. What to review lives in REVIEW.md
+# at the repository root, read from the default branch.
 
 on:
   issue_comment:
@@ -19,7 +18,5 @@ jobs:
       issues: read
       id-token: write
       actions: read
-    with:
-      environment: claude-brandonwie
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
