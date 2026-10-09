@@ -19,3 +19,5 @@ docs/
 .code-review-graph/
 graphify-out/
 .graphifyignore
+# Per-machine symlink to the 3B Codex profile; Codex reads it before AGENTS.md.
+/AGENTS.override.md
