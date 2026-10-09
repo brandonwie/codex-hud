@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit follows REVIEW.md, the review standard every reviewer shares.
+# inheritance keeps every other setting from the organization and UI config.
+inheritance: true
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - REVIEW.md
