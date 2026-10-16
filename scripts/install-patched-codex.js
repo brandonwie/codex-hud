@@ -2386,7 +2386,7 @@ function syncPatchedRuntime(args, options = {}) {
       );
     }
     console.log(`Patched runtime update pending: ${error.message}`);
-    console.log(`Keeping patched Codex ${first.status.patchedVersion} ; no matching runtime is published.`);
+    console.log(`Keeping patched Codex ${first.status.patchedVersion}; no matching runtime is published.`);
     const pendingShim = reconcileDefaultShim(args, first.report, options);
     return { action: "pending", status: first.status, shim: pendingShim, reason: error.message };
   }
