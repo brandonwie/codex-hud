@@ -64,7 +64,7 @@ Options:
   --doctor                  Print install/runtime diagnostics and exit.
   --check-patched           Check whether the patched runtime matches stock Codex.
   --sync-patched            Install the published runtime for the current stock Codex.
-                            Reports "pending" and keeps the current runtime until one is published.
+                            Reports "pending" and keeps the current runtime when none is published.
   --version <version>       Codex CLI version to patch (patched mode). Defaults to installed codex version.
   --prefix <dir>            Install directory prefix. Defaults to ~/.local/bin.
   --bin-name <name>         Installed command name. Defaults to ${DEFAULT_BIN_NAME}.
@@ -1521,7 +1521,7 @@ exec -a codex "$stock" "$@"
   const staleWarning =
     `codex-hud: stock Codex changed since this patched runtime was installed; ` +
     `running experimental patched Codex ${opts.patchedVersion || "(unknown version)"}. ` +
-    `Run 'npm run codex:sync' to install the published runtime for the new version (it reports pending until one is published), ` +
+    `Run 'npm run codex:sync' to install the published runtime for the new version (it reports pending if none is published; automated builds are retired), ` +
     `or switch to stock delegation ('npm run install:launcher').`;
 
   return `#!/usr/bin/env bash
@@ -2386,7 +2386,7 @@ function syncPatchedRuntime(args, options = {}) {
       );
     }
     console.log(`Patched runtime update pending: ${error.message}`);
-    console.log(`Keeping patched Codex ${first.status.patchedVersion} until the runtime is published.`);
+    console.log(`Keeping patched Codex ${first.status.patchedVersion} ; no matching runtime is published.`);
     const pendingShim = reconcileDefaultShim(args, first.report, options);
     return { action: "pending", status: first.status, shim: pendingShim, reason: error.message };
   }
