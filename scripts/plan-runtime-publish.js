@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 "use strict";
 
-// Decide which patched Codex runtimes the Patched Codex Runtime workflow must
-// build: the requested (or latest stable) upstream Codex version, for each macOS
+// Legacy publish planner, retained after automated runtime builds were retired.
+// Select the requested (or latest stable) upstream Codex version, for each macOS
 // target whose archive for the current patch set is not yet published. Prints
-// GitHub Actions outputs (key=value lines) for the plan job.
+// key=value lines for manual inspection; this script does not build runtimes.
 
 const { spawnSync } = require("child_process");
 

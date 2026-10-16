@@ -64,7 +64,7 @@ Options:
   --doctor                  Print install/runtime diagnostics and exit.
   --check-patched           Check whether the patched runtime matches stock Codex.
   --sync-patched            Install the published runtime for the current stock Codex.
-                            Reports "pending" and keeps the current runtime until one is published.
+                            Reports "pending" and keeps the current runtime when none is published.
   --version <version>       Codex CLI version to patch (patched mode). Defaults to installed codex version.
   --prefix <dir>            Install directory prefix. Defaults to ~/.local/bin.
   --bin-name <name>         Installed command name. Defaults to ${DEFAULT_BIN_NAME}.
@@ -731,8 +731,8 @@ const CODE_MODE_HOST_TARGETS = {
 const KNOWN_RUNTIME_TARGETS = Object.freeze(
   Object.values(RUNTIME_TARGETS).flatMap((byArch) => Object.values(byArch)),
 );
-// Targets the Patched Codex Runtime workflow publishes. Intel macOS
-// (x86_64-apple-darwin) was retired on 2026-09-26: its cold builds ran past 90
+// Targets eligible for existing published runtimes. Automated builds are retired.
+// Intel macOS (x86_64-apple-darwin) was retired on 2026-09-26: its cold builds ran past 90
 // minutes on the Intel runner, and no one outside the maintainer downloaded it.
 const PUBLISHED_RUNTIME_TARGETS = Object.freeze(["aarch64-apple-darwin"]);
 
@@ -831,18 +831,17 @@ function sha256File(filePath) {
   return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
 }
 
-// RUNTIME_NOT_PUBLISHED resolves on its own once CI publishes the runtime, so
-// codex:sync reports it as pending. RUNTIME_TARGET_UNSUPPORTED never resolves,
-// so codex:sync must fail loudly instead of promising an update.
+// Keep the pending result for missing assets without promising a future build.
+// RUNTIME_TARGET_UNSUPPORTED never resolves, so codex:sync must fail loudly.
 function runtimeNotPublishedError(args, options = {}) {
   const asset = runtimeReleaseAsset(args, options);
   if (asset && PUBLISHED_RUNTIME_TARGETS.includes(asset.target)) {
     const error = new Error(
-      `No published codex-hud runtime for Codex ${args.version} on ${asset.target} (patch set ${PATCH_SET_ID}) yet; ` +
+      `No published codex-hud runtime for Codex ${args.version} on ${asset.target} (patch set ${PATCH_SET_ID}); ` +
       `expected ${asset.archiveName} in release ${asset.tag}. ` +
-      "The Patched Codex Runtime workflow publishes it automatically after each Codex release, usually within a few hours. " +
+      "Automated patched-runtime builds have been retired; existing published runtimes remain available. " +
       "If your codex-hud checkout is behind the latest release, update it first. " +
-      "To compile Codex locally instead, rerun with --source-build.",
+      "Use the default stock launcher ('npm run install:launcher'), or rerun with --source-build to compile Codex locally.",
     );
     error.code = RUNTIME_NOT_PUBLISHED;
     return error;
@@ -853,7 +852,7 @@ function runtimeNotPublishedError(args, options = {}) {
     ? "Intel macOS runtimes were retired on 2026-09-26"
     : `${target} has no published runtime`;
   const error = new Error(
-    `codex-hud publishes patched runtimes only for Apple Silicon macOS (${PUBLISHED_RUNTIME_TARGETS.join(", ")}); ${reason}. ` +
+    `codex-hud has published patched runtimes only for Apple Silicon macOS (${PUBLISHED_RUNTIME_TARGETS.join(", ")}); ${reason}. ` +
     "Use the default stock launcher ('npm run install:launcher'), " +
     `or rerun with --source-build to compile Codex ${args.version} locally (unsupported).`,
   );
@@ -1522,7 +1521,7 @@ exec -a codex "$stock" "$@"
   const staleWarning =
     `codex-hud: stock Codex changed since this patched runtime was installed; ` +
     `running experimental patched Codex ${opts.patchedVersion || "(unknown version)"}. ` +
-    `Run 'npm run codex:sync' to install the published runtime for the new version (it reports pending until one is published), ` +
+    `Run 'npm run codex:sync' to install the published runtime for the new version (it reports pending if none is published; automated builds are retired), ` +
     `or switch to stock delegation ('npm run install:launcher').`;
 
   return `#!/usr/bin/env bash
@@ -2387,7 +2386,7 @@ function syncPatchedRuntime(args, options = {}) {
       );
     }
     console.log(`Patched runtime update pending: ${error.message}`);
-    console.log(`Keeping patched Codex ${first.status.patchedVersion} until the runtime is published.`);
+    console.log(`Keeping patched Codex ${first.status.patchedVersion}; no matching runtime is published.`);
     const pendingShim = reconcileDefaultShim(args, first.report, options);
     return { action: "pending", status: first.status, shim: pendingShim, reason: error.message };
   }

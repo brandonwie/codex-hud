@@ -10,9 +10,9 @@
 // The archive holds one top-level directory named after the bundle that
 // contains `codex` (`codex.exe` for Windows targets), the upstream `LICENSE`
 // and `NOTICE`, and the
-// `codex-hud-runtime.json` provenance manifest. The Patched Codex Runtime
-// workflow runs this script; the installer's prebuilt verification is the only
-// consumer. The Code Mode helper is not bundled: the installer fetches OpenAI's
+// `codex-hud-runtime.json` provenance manifest. Retained as manual packaging
+// tooling after automated builds were retired; the installer's verification is
+// the only consumer. The Code Mode helper is not bundled: the installer fetches OpenAI's
 // signed codex-code-mode-host for the same Codex release at install time.
 
 const crypto = require("crypto");
