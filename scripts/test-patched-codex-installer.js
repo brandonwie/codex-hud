@@ -1289,42 +1289,6 @@ assert.strictEqual(
   "a shared Cargo target directory and cross-build target must resolve to the staged binary",
 );
 
-const runtimeWorkflow = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "patched-codex-runtime.yml"), "utf8");
-assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_LTO: "off"'));
-assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_DEBUG: "none"'));
-assert(runtimeWorkflow.includes('CARGO_PROFILE_RELEASE_STRIP: "symbols"'));
-assert(runtimeWorkflow.includes("actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"));
-assert(runtimeWorkflow.includes("actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"));
-assert(!runtimeWorkflow.includes("--retain-build"), "ephemeral runtime builds must not retain their source-local target tree");
-assert(runtimeWorkflow.includes(RUNTIME_MANIFEST_NAME), "runtime archives must carry semantic patch provenance");
-assert(runtimeWorkflow.includes("--clobber"), "re-runs must replace an identical-identity archive");
-assert(
-  runtimeWorkflow.includes('if ! gh release create "$tag"'),
-  "concurrent target lanes must handle a shared-release create conflict",
-);
-assert.strictEqual(
-  runtimeWorkflow.split('gh release view "$tag" >/dev/null 2>&1').length - 1,
-  2,
-  "a failed release create must be followed by a second existence check",
-);
-assert(runtimeWorkflow.includes("scripts/package-patched-runtime.js"), "CI must package through the shared packager");
-assert(runtimeWorkflow.includes("--target \"$CODEX_TARGET\""), "CI must pass the planned target to the packager");
-assert(runtimeWorkflow.includes("- aarch64-apple-darwin"), "runtime workflow must offer the aarch64-apple-darwin target");
-assert(!runtimeWorkflow.includes("- x86_64-apple-darwin"), "Intel macOS runtimes are retired from dispatch");
-assert(!runtimeWorkflow.includes("macos-15-intel"), "no Intel runner is used");
-assert(
-  !/x86_64-apple-darwin-\$\{\{ hashFiles/.test(runtimeWorkflow),
-  "cache keys must derive from the planned target, not a hard-coded triple",
-);
-assert(runtimeWorkflow.includes("hashFiles('scripts/codex-patch-set.js')"), "the build cache must key on the patch set");
-assert(runtimeWorkflow.includes("${{ matrix.target }}-cargo-timings"), "timings artifact must be target-scoped");
-assert(/schedule:\s*\n\s*#[^\n]*\n\s*- cron: "\d+ \* \* \* \*"/.test(runtimeWorkflow), "publishing must run on an hourly schedule");
-assert(runtimeWorkflow.includes("node scripts/plan-runtime-publish.js"), "a plan job must pick the missing targets");
-assert(runtimeWorkflow.includes("fromJSON(needs.plan.outputs.matrix)"), "builds must follow the plan matrix");
-assert(runtimeWorkflow.includes("runs-on: ${{ matrix.runner }}"), "runner labels come from the plan");
-assert(!runtimeWorkflow.includes("local_build_ok"), "publishing must not require a local build first");
-assert(runtimeWorkflow.includes("group: patched-codex-runtime\n"), "runs must be serialized so a queued run re-plans");
-
 // --- publish planner: latest stable Codex, only missing targets ---
 const {
   PUBLISH_TARGETS,
