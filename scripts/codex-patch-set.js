@@ -379,9 +379,22 @@ function patchSource(sourceRoot) {
     changes.push("TUI local_settings status_line_command");
   }
 
+  const legacyPluginDisable = "remote_plugin_config.enabled &= configured_plugin.enabled;";
+  const pluginDisable = `if configured_plugin.enabled == false.into() {
+            remote_plugin_config.enabled = false.into();
+        }`;
+  if (fs.readFileSync(pluginLoader, "utf8").includes(legacyPluginDisable) && applyTextPatch(
+    pluginLoader,
+    pluginDisable,
+    legacyPluginDisable,
+    pluginDisable,
+  )) {
+    changes.push("remote plugin optional enablement compatibility");
+  }
+
   if (applyTextPatch(
     pluginLoader,
-    "remote_plugin_config.enabled &= configured_plugin.enabled;",
+    pluginDisable,
     `    if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
         remote_plugin_config
             .mcp_servers
@@ -389,8 +402,8 @@ function patchSource(sourceRoot) {
     }`,
     `    if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
         // Remote state is authoritative for availability, while local config is a
-        // user-controlled kill switch. Both must permit the plugin.
-        remote_plugin_config.enabled &= configured_plugin.enabled;
+        // user-controlled kill switch. Into supports bool and Option<bool>.
+        ${pluginDisable}
         remote_plugin_config
             .mcp_servers
             .clone_from(&configured_plugin.mcp_servers);
@@ -465,7 +478,7 @@ function verifyPatchedSource(sourceRoot) {
 
   const pluginLoader = path.join(sourceRoot, "codex-rs", "core-plugins", "src", "loader.rs");
   const pluginLoaderSource = fs.readFileSync(pluginLoader, "utf8");
-  if (!pluginLoaderSource.includes("remote_plugin_config.enabled &= configured_plugin.enabled;")) {
+  if (!pluginLoaderSource.includes("if configured_plugin.enabled == false.into() {")) {
     throw new Error(`Patched Codex source is missing remote plugin local-disable precedence: ${pluginLoader}`);
   }
 

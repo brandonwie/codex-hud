@@ -364,9 +364,24 @@ assert(
   "old skill (plugin) formatter must be replaced",
 );
 assert(
-  pluginLoader.includes("remote_plugin_config.enabled &= configured_plugin.enabled;"),
+  pluginLoader.includes("if configured_plugin.enabled == false.into() {") &&
+    pluginLoader.includes("remote_plugin_config.enabled = false.into();"),
   "remote plugin enablement must preserve the local disable switch",
 );
+const pluginLoaderPath = path.join(root, "codex-rs/core-plugins/src/loader.rs");
+const optionalPluginDisable = `if configured_plugin.enabled == false.into() {
+            remote_plugin_config.enabled = false.into();
+        }`;
+fs.writeFileSync(pluginLoaderPath, pluginLoader.replace(
+  optionalPluginDisable,
+  "remote_plugin_config.enabled &= configured_plugin.enabled;",
+));
+assert(
+  patchSource(root).includes("remote plugin optional enablement compatibility"),
+  "previously patched source must migrate its bool-only enablement guard",
+);
+assert(fs.readFileSync(pluginLoaderPath, "utf8").includes(optionalPluginDisable));
+assert.deepStrictEqual(patchSource(root), [], "optional enablement migration must be idempotent");
 assert(
   pluginManagerTests.includes("remote_installed_plugin_respects_local_disable"),
   "patched upstream regression test must name the local-disable behavior",
@@ -404,7 +419,9 @@ fn merge_remote_plugin_config(
     mut remote_plugin_config: PluginConfig,
 ) {
     if let Some(configured_plugin) = configured_plugins.get(&plugin_key) {
-        remote_plugin_config.enabled &= configured_plugin.enabled;
+        if configured_plugin.enabled == false.into() {
+            remote_plugin_config.enabled = false.into();
+        }
     }
     configured_plugins.insert(plugin_key, remote_plugin_config);
 }
