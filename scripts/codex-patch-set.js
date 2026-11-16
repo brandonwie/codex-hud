@@ -295,6 +295,9 @@ function patchSource(sourceRoot) {
     changes.push("core ConfigBuilder status_line_command resolution");
   }
 
+  const clearLegacyHyperlink = fs.readFileSync(statusSurfaces, "utf8").includes("self.set_status_line_hyperlink(")
+    ? "\n            self.set_status_line_hyperlink(None);"
+    : "";
   if (applyTextPatch(
     statusSurfaces,
     "fn custom_status_line_from_command",
@@ -303,8 +306,7 @@ function patchSource(sourceRoot) {
     `    fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
         if let Some(status_line) = self.custom_status_line_from_command() {
             self.bottom_pane.set_status_line_enabled(true);
-            self.set_status_line(Some(status_line));
-            self.set_status_line_hyperlink(None);
+            self.set_status_line(Some(status_line.into()));${clearLegacyHyperlink}
             return;
         }
 
@@ -316,14 +318,8 @@ function patchSource(sourceRoot) {
   if (applyTextPatch(
     statusSurfaces,
     "status_line_command.as_ref",
-    `        self.set_status_line_hyperlink(hyperlink_url);
-    }
-
-    /// Clears the terminal title Codex most recently wrote, if any.`,
-    `        self.set_status_line_hyperlink(hyperlink_url);
-    }
-
-    fn custom_status_line_from_command(&self) -> Option<ratatui::text::Line<'static>> {
+    `    /// Clears the terminal title Codex most recently wrote, if any.`,
+    `    fn custom_status_line_from_command(&self) -> Option<ratatui::text::Line<'static>> {
         let command = self.config.tui_status_line_command.as_ref()?.trim();
         if command.is_empty() {
             return None;

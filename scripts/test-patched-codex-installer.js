@@ -307,6 +307,7 @@ writeFile(root, "codex-rs/cli/src/main.rs", `
 use clap::Args;
 `);
 
+const unpatchedStatusSurfaces = fs.readFileSync(path.join(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs"), "utf8");
 const firstChanges = patchSource(root);
 const secondChanges = patchSource(root);
 
@@ -322,6 +323,22 @@ const cliMain = fs.readFileSync(path.join(root, "codex-rs/cli/src/main.rs"), "ut
 
 assert(firstChanges.length >= 5, "expected patchSource to patch every anchor");
 assert.deepStrictEqual(secondChanges, [], "patchSource should be idempotent");
+
+const modernStatusSurfaces = unpatchedStatusSurfaces.replace(
+  "self.set_status_line_hyperlink(hyperlink_url);",
+  "self.set_status_line(line.map(Into::into));",
+);
+assert.notStrictEqual(modernStatusSurfaces, unpatchedStatusSurfaces);
+writeFile(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs", modernStatusSurfaces);
+patchSource(root);
+const patchedModernStatusSurfaces = fs.readFileSync(path.join(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs"), "utf8");
+assert(patchedModernStatusSurfaces.includes("fn custom_status_line_from_command"), "Codex 0.169 must receive the HUD helper");
+assert(patchedModernStatusSurfaces.includes("self.set_status_line(Some(status_line.into()))"), "custom lines must convert to the upstream footer type");
+assert(!patchedModernStatusSurfaces.includes("set_status_line_hyperlink"), "Codex 0.169 removed the separate hyperlink setter");
+assert(statusSurfaces.includes("self.set_status_line_hyperlink(None)"), "older Codex must still clear its built-in hyperlink");
+assertStatusLineCommandEnvInjection(patchedModernStatusSurfaces);
+assert.deepStrictEqual(patchSource(root), [], "the Codex 0.169 patch must be idempotent");
+writeFile(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs", statusSurfaces);
 assert(configTypes.includes("pub status_line_command: Option<String>"));
 assert(coreConfig.includes("pub tui_status_line_command: Option<String>"));
 assert(coreConfig.includes("tui_status_line_command: cfg"));
