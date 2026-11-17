@@ -17,6 +17,7 @@ const {
   acquirePatchedRuntime,
   codeModeHostAsset,
   runtimeNotPublishedError,
+  signStagedPayload,
   stageCodeModeHost,
   verifyOpenAiCodeSignature,
   RUNTIME_MANIFEST_NAME,
@@ -631,6 +632,19 @@ assert.throws(() => parseArgs(["--renderer", "js"]), /--renderer must be auto or
 assert.throws(() => parseArgs(["--renderer", "python"]), /--renderer must be auto or rust/);
 assert.throws(() => parseArgs(["--bin-name", "codex-hud"]), /Refusing to use codex-hud/);
 assert.throws(() => parseArgs(["--launcher-name", "codex-hud"]), /Refusing to use codex-hud/);
+const savedCodesignIdentityEnv = process.env.CODEX_HUD_CODESIGN_IDENTITY;
+delete process.env.CODEX_HUD_CODESIGN_IDENTITY;
+assert.strictEqual(parseArgs([]).codesignIdentity, null, "code signing stays off unless requested");
+assert.strictEqual(parseArgs(["--codesign-identity", "codex-hud local signing"]).codesignIdentity, "codex-hud local signing");
+assert.throws(() => parseArgs(["--codesign-identity"]), /--codesign-identity requires a value/);
+process.env.CODEX_HUD_CODESIGN_IDENTITY = "env signing";
+assert.strictEqual(parseArgs([]).codesignIdentity, "env signing");
+assert.strictEqual(parseArgs(["--codesign-identity", "flag signing"]).codesignIdentity, "flag signing", "the flag wins over the env var");
+if (savedCodesignIdentityEnv === undefined) {
+  delete process.env.CODEX_HUD_CODESIGN_IDENTITY;
+} else {
+  process.env.CODEX_HUD_CODESIGN_IDENTITY = savedCodesignIdentityEnv;
+}
 
 // --- stock discovery: HUD-managed candidates skipped ---
 const versionShimRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-version-shim-test-"));
@@ -745,6 +759,95 @@ assert.throws(
   /health check failed/,
 );
 assert(fs.realpathSync.native(path.join(stagePrefix, "codex-hud-codex")).includes(`${path.sep}2.0.0${path.sep}`));
+
+// --- staged install: opt-in --codesign-identity re-signs before activation ---
+const signingIdentity = "codex-hud local signing";
+function codesignSpawn(calls, { signStatus = 0, signStderr = "", details = `Authority=${signingIdentity}` } = {}) {
+  return (command, commandArgs) => {
+    calls.push([command, ...commandArgs]);
+    const binary = commandArgs[commandArgs.length - 1];
+    if (commandArgs[0] === "--force") {
+      // A real re-sign rewrites the payload bytes; mimic that so hash checks see it.
+      if (signStatus === 0 && fs.existsSync(binary)) {
+        fs.appendFileSync(binary, "# signed\n");
+      }
+      return { status: signStatus, stderr: signStderr };
+    }
+    if (commandArgs[0] === "--verify") {
+      return { status: 0, stderr: "" };
+    }
+    return { status: 0, stdout: "", stderr: `Executable=${binary}\n${details}\n` };
+  };
+}
+const sha256Of = (filePath) => crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+const stageSourceBinary = path.join(stageSource, "codex-rs/target/release/codex");
+
+writeExecutable(stageSourceBinary, fakeCodexScript("5.0.0"));
+const unsignedCalls = [];
+const unsignedV5 = installBuiltBinary(stageSource, { ...stagedArgsV1, version: "5.0.0" }, {
+  platform: "darwin",
+  codesign: { spawnSync: codesignSpawn(unsignedCalls) },
+});
+assert.deepStrictEqual(unsignedCalls, [], "codesign must not run without --codesign-identity");
+assert.strictEqual(unsignedV5.payloadSha256, undefined, "unsigned installs keep the existing payload hash source");
+
+writeExecutable(stageSourceBinary, fakeCodexScript("6.0.0"));
+const signCalls = [];
+const signedV6 = installBuiltBinary(stageSource, { ...stagedArgsV1, version: "6.0.0", codesignIdentity: signingIdentity }, {
+  platform: "darwin",
+  codesign: { spawnSync: codesignSpawn(signCalls) },
+});
+const signedStagingBinary = path.join(stagePrefix, "codex-hud-codex.d", "6.0.0.staging", "codex");
+assert.deepStrictEqual(signCalls, [
+  ["codesign", "--force", "--sign", signingIdentity, signedStagingBinary],
+  ["codesign", "--verify", "--strict", signedStagingBinary],
+  ["codesign", "-dv", "--verbose=2", signedStagingBinary],
+], "the staged payload is signed and verified before its health check and activation");
+assert.strictEqual(signedV6.version, "6.0.0");
+assert(fs.readFileSync(signedV6.activeBinary, "utf8").endsWith("# signed\n"), "the signed payload is the one activated");
+assert.strictEqual(signedV6.payloadSha256, sha256Of(signedV6.activeBinary), "launcher metadata must hash the signed payload");
+
+writeExecutable(stageSourceBinary, fakeCodexScript("7.0.0"));
+const linuxSignCalls = [];
+const linuxSignWarnings = [];
+const originalWarn = console.warn;
+console.warn = (...warnArgs) => linuxSignWarnings.push(warnArgs.join(" "));
+let linuxV7;
+try {
+  linuxV7 = installBuiltBinary(stageSource, { ...stagedArgsV1, version: "7.0.0", codesignIdentity: signingIdentity }, {
+    platform: "linux",
+    codesign: { spawnSync: codesignSpawn(linuxSignCalls) },
+  });
+} finally {
+  console.warn = originalWarn;
+}
+assert.deepStrictEqual(linuxSignCalls, [], "codesign must not run off macOS");
+assert.match(linuxSignWarnings.join("\n"), /--codesign-identity applies only on macOS/);
+assert.strictEqual(linuxV7.version, "7.0.0");
+assert.strictEqual(linuxV7.payloadSha256, undefined);
+
+writeExecutable(stageSourceBinary, fakeCodexScript("8.0.0"));
+const activeBeforeMissingIdentity = fs.realpathSync.native(path.join(stagePrefix, "codex-hud-codex"));
+assert.throws(
+  () => installBuiltBinary(stageSource, { ...stagedArgsV1, version: "8.0.0", codesignIdentity: "missing identity" }, {
+    platform: "darwin",
+    codesign: { spawnSync: codesignSpawn([], { signStatus: 1, signStderr: "missing identity: no identity found" }) },
+  }),
+  /code signing failed; the active runtime was NOT modified[\s\S]*no identity found[\s\S]*Keychain Access/,
+);
+assert.strictEqual(
+  fs.realpathSync.native(path.join(stagePrefix, "codex-hud-codex")),
+  activeBeforeMissingIdentity,
+  "a missing identity must leave the active runtime in place",
+);
+assert(fs.existsSync(path.join(stagePrefix, "codex-hud-codex.d", "8.0.0.failed", "codex")));
+assert(!fs.existsSync(path.join(stagePrefix, "codex-hud-codex.d", "8.0.0")), "an unsigned payload must never be activated");
+
+assert.throws(
+  () => signStagedPayload("/x/codex", "-", { platform: "darwin", spawnSync: codesignSpawn([], { details: "Signature=adhoc" }) }),
+  /no certificate authority/,
+  "an ad-hoc result does not keep keychain access across rebuilds",
+);
 
 // --- generated stock wrapper: executes stock codex, never recurses into HUD entries ---
 const wrapperPrefix = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-wrapper-test-"));
@@ -1657,10 +1760,7 @@ assert.match(downloadWarning, /HTTP 404/);
 const downloadedUrls = [];
 const prebuiltSourceCommit = "a".repeat(40);
 const prebuiltHelperCalls = {};
-const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
-  platform: "darwin",
-  arch: "arm64",
-  codeModeHost: codeModeHostStub(prebuiltHelperCalls),
+const prebuiltFixture = {
   downloadFile(url, destination) {
     downloadedUrls.push(url);
     if (url.endsWith(".sha256")) {
@@ -1685,8 +1785,15 @@ const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
       payloadSha256: crypto.createHash("sha256").update(fs.readFileSync(bundledBinary)).digest("hex"),
     }, null, 2)}\n`);
   },
+};
+const prebuiltInstalled = installPrebuiltBinary(prebuiltArgs, {
+  platform: "darwin",
+  arch: "arm64",
+  codeModeHost: codeModeHostStub(prebuiltHelperCalls),
+  ...prebuiltFixture,
 });
 assert.strictEqual(prebuiltInstalled.version, prebuiltVersion);
+assert.strictEqual(prebuiltInstalled.payloadSha256, sha256Of(prebuiltInstalled.activeBinary));
 assert.strictEqual(prebuiltInstalled.source, "prebuilt");
 assert.strictEqual(prebuiltInstalled.assetName, prebuiltAsset.archiveName);
 assert.strictEqual(prebuiltInstalled.patchSetId, PATCH_SET_ID);
@@ -1704,6 +1811,27 @@ assert(fs.existsSync(path.join(prebuiltArgs.prefix, "codex-hud-codex.d", prebuil
 assert.strictEqual(
   fs.realpathSync(prebuiltInstalled.target),
   fs.realpathSync(prebuiltInstalled.target.replace(/codex-hud-codex$/, `codex-hud-codex.d/${prebuiltVersion}/codex`)),
+);
+
+const signedPrebuiltPrefix = path.join(prebuiltRoot, "signed");
+const signedPrebuiltCalls = [];
+const signedPrebuilt = installPrebuiltBinary({ ...prebuiltArgs, prefix: signedPrebuiltPrefix, codesignIdentity: signingIdentity }, {
+  platform: "darwin",
+  arch: "arm64",
+  codeModeHost: codeModeHostStub(),
+  codesign: { spawnSync: codesignSpawn(signedPrebuiltCalls) },
+  ...prebuiltFixture,
+});
+assert.deepStrictEqual(
+  signedPrebuiltCalls[0],
+  ["codesign", "--force", "--sign", signingIdentity, path.join(signedPrebuiltPrefix, "codex-hud-codex.d", `${prebuiltVersion}.staging`, "codex")],
+  "the checksummed prebuilt payload is re-signed while staged",
+);
+assert.notStrictEqual(signedPrebuilt.payloadSha256, prebuiltInstalled.payloadSha256, "the manifest hash no longer describes a re-signed payload");
+assert.strictEqual(
+  signedPrebuilt.payloadSha256,
+  sha256Of(signedPrebuilt.activeBinary),
+  "launcher metadata must hash the signed payload so codex:check does not report drift",
 );
 
 const staleManifestBundle = path.join(prebuiltRoot, "stale-manifest");
