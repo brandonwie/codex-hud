@@ -74,6 +74,11 @@ Options:
                             Prebuilt runtime releases. Defaults to ${DEFAULT_RUNTIME_RELEASE_REPO}.
   --source-build            Build Codex locally instead of downloading a published runtime
                             (needs Rust; several GB of disk and 30+ minutes).
+  --codesign-identity <name>
+                            macOS patched mode: re-sign the payload with this Keychain
+                            code-signing identity before activation, so keychain
+                            "Always Allow" grants survive rebuilds. Defaults to
+                            CODEX_HUD_CODESIGN_IDENTITY; unset keeps the ad-hoc signature.
   --cache-dir <dir>         Source cache directory. Defaults to ~/.cache/codex-hud.
   --keep-versions <n>       Patched payload versions to retain. Defaults to 2.
   --retain-build, --keep-build
@@ -238,6 +243,7 @@ function parseArgs(argv) {
   const args = {
     repo: OPENAI_CODEX_REPO,
     runtimeReleaseRepo: process.env.CODEX_HUD_RUNTIME_RELEASE_REPO || DEFAULT_RUNTIME_RELEASE_REPO,
+    codesignIdentity: process.env.CODEX_HUD_CODESIGN_IDENTITY || null,
     prefix: path.join(os.homedir(), ".local", "bin"),
     binName: DEFAULT_BIN_NAME,
     launcherName: DEFAULT_LAUNCHER_NAME,
@@ -300,7 +306,8 @@ function parseArgs(argv) {
       arg === "--repo" ||
       arg === "--runtime-release-repo" ||
       arg === "--cache-dir" ||
-      arg === "--keep-versions"
+      arg === "--keep-versions" ||
+      arg === "--codesign-identity"
     ) {
       const value = argv[index + 1];
       if (!value) {
@@ -318,6 +325,7 @@ function parseArgs(argv) {
         "--runtime-release-repo": "runtimeReleaseRepo",
         "--cache-dir": "cacheDir",
         "--keep-versions": "keepVersions",
+        "--codesign-identity": "codesignIdentity",
       }[arg];
       args[key] = value;
     } else {
@@ -900,6 +908,41 @@ function verifyOpenAiCodeSignature(binaryPath, options = {}) {
   return team;
 }
 
+// An ad-hoc signature makes the designated requirement the payload's CDHash,
+// which changes with every build, so macOS keychain "Always Allow" grants stop
+// matching. Re-signing with a named identity makes the requirement
+// certificate-based, which stays stable across rebuilds signed the same way.
+function signStagedPayload(binaryPath, identity, options = {}) {
+  const platform = options.platform || process.platform;
+  if (platform !== "darwin") {
+    console.warn(`--codesign-identity applies only on macOS; leaving the ${platform} payload unsigned.`);
+    return false;
+  }
+  const spawn = options.spawnSync || spawnSync;
+  const sign = spawn("codesign", ["--force", "--sign", identity, binaryPath], { encoding: "utf8" });
+  if (sign.error || sign.status !== 0) {
+    const detail = sign.error ? sign.error.message : String(sign.stderr || "").trim();
+    throw new Error(
+      `codesign could not sign with identity "${identity}": ${detail}\n` +
+      `Create a Code Signing certificate named "${identity}" in Keychain Access (see the README), ` +
+      "or rerun without --codesign-identity and CODEX_HUD_CODESIGN_IDENTITY.",
+    );
+  }
+  const verify = spawn("codesign", ["--verify", "--strict", binaryPath], { encoding: "utf8" });
+  if (verify.error || verify.status !== 0) {
+    const detail = verify.error ? verify.error.message : String(verify.stderr || "").trim();
+    throw new Error(`${path.basename(binaryPath)} failed code-signature verification after signing: ${detail}`);
+  }
+  const details = spawn("codesign", ["-dv", "--verbose=2", binaryPath], { encoding: "utf8" });
+  if (!/^Authority=/m.test(`${details.stdout || ""}\n${details.stderr || ""}`)) {
+    throw new Error(
+      `${path.basename(binaryPath)} has no certificate authority after signing with "${identity}"; ` +
+      "an ad-hoc signature would not keep keychain access across rebuilds.",
+    );
+  }
+  return true;
+}
+
 // Codex resolves codex-code-mode-host beside its own executable, so a patched
 // runtime needs the helper from the same Codex release next to its payload.
 // Without it, Code Mode either fails or talks to a different release's helper,
@@ -1056,7 +1099,21 @@ function activateStagedBinary(stagedBinary, args) {
   return { target, activeBinary, versionDir };
 }
 
-function installStagedBinary(stagedBinary, args) {
+function installStagedBinary(stagedBinary, args, options = {}) {
+  let signed = false;
+  if (args.codesignIdentity) {
+    try {
+      signed = signStagedPayload(stagedBinary, args.codesignIdentity, options);
+    } catch (error) {
+      const failedDir = markFailedStaging(stagedBinary);
+      throw new Error(
+        "Patched Codex code signing failed; the active runtime was NOT modified." +
+        `\nFailed payload kept at: ${failedDir}` +
+        `\n${error.message}`,
+      );
+    }
+  }
+
   let version;
   try {
     version = verifyInstalledBinary(stagedBinary, args);
@@ -1075,12 +1132,19 @@ function installStagedBinary(stagedBinary, args) {
   }
 
   const { target, activeBinary } = activateStagedBinary(stagedBinary, args);
-  return { target, activeBinary, version };
+  // Re-signing changes the payload bytes, so record the active hash for the
+  // launcher metadata instead of the published manifest hash.
+  return signed
+    ? { target, activeBinary, version, payloadSha256: sha256File(activeBinary) }
+    : { target, activeBinary, version };
 }
 
 function installBuiltBinary(sourceDir, args, options = {}) {
   fs.mkdirSync(args.prefix, { recursive: true });
-  return installStagedBinary(stageBuiltBinary(sourceDir, args, options), args);
+  return installStagedBinary(stageBuiltBinary(sourceDir, args, options), args, {
+    platform: options.platform,
+    ...options.codesign,
+  });
 }
 
 function installPrebuiltBinary(args, options = {}) {
@@ -1125,14 +1189,17 @@ function installPrebuiltBinary(args, options = {}) {
       arch: options.arch,
       ...options.codeModeHost,
     });
-    const installed = installStagedBinary(stagedBinary, args);
+    const installed = installStagedBinary(stagedBinary, args, {
+      platform: options.platform,
+      ...options.codesign,
+    });
     return {
       ...installed,
       source: "prebuilt",
       assetName: asset.archiveName,
       patchSetId: manifest.patchSetId,
       sourceCommit: manifest.sourceCommit,
-      payloadSha256: manifest.payloadSha256,
+      payloadSha256: installed.payloadSha256 || manifest.payloadSha256,
     };
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -2489,6 +2556,9 @@ function runStockInstall(args) {
     );
   }
   console.log(`Stock Codex: ${stock.path} (${stock.version})`);
+  if (args.codesignIdentity) {
+    console.log("Note: --codesign-identity signs only patched runtimes; stock mode leaves Codex unchanged.");
+  }
 
   if (args.dryRun) {
     const previewRenderer = resolveRenderer(args, { install: false, allowMissing: true });
@@ -2768,6 +2838,7 @@ module.exports = {
   codeModeHostAsset,
   codeModeHostSupported,
   runtimeNotPublishedError,
+  signStagedPayload,
   stageBuiltBinary,
   stageCodeModeHost,
   statusLineCommandFor,
