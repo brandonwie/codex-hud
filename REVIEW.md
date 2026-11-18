@@ -1,7 +1,7 @@
 ---
 tags: [personal, reference]
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-11-18
 status: active
 ---
 
@@ -28,13 +28,21 @@ Skip formatting and pure style, personal preference, speculative refactors,
 anything in [Do not flag](#do-not-flag), and restating what the diff does.
 
 For each finding give `path:line`, the failure (input or state, then the wrong
-result) and a suggested fix. Tag a severity:
+result) and a suggested fix. Tag a priority:
 
-| Severity | Meaning                                                                 |
-| -------- | ----------------------------------------------------------------------- |
-| P0       | Breaks a user's Codex install, leaks a secret, or opens a security hole |
-| P1       | Wrong output or behavior a user will hit, or Rust/site drift            |
-| P2       | Edge case, or a risk to the next change                                 |
+| Priority                          | Meaning                                                                                                                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 critical                       | Immediate action required: the HUD or a user's Codex install is down or does not work. A security hole, a leaked secret, or data loss or corruption (for example a lost rollback payload) is always P1, regardless of diff size |
+| P2 high                           | A major feature or service is degraded: wrong output or behavior a user will hit, or Rust/site drift                                                                                                                            |
+| P3 medium                         | Limited impact: an edge case, or a risk to the next change                                                                                                                                                                      |
+| P4 low                            | Minor inconvenience or standard request with low operational impact: wording, or a doc that does not match the code                                                                                                             |
+| P5 trivial/planning/informational | No immediate function or operational impact; backlog for future planning, or for when spare capacity allows                                                                                                                     |
+
+P1-P3 findings block the merge: the author fixes them and the PR is reviewed
+again, with no cap on review rounds. When a review of the current head shows no
+P1-P3 finding, the PR is mergeable. A review never closes a PR for not being
+ready. P4 and P5 findings do not block; they go into one fix-forward issue per
+PR.
 
 If nothing meets the bar, say so in one line rather than padding the review.
 
