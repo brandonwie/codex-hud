@@ -2395,17 +2395,29 @@ const unknownCheck = checkPatchedRuntime(doctorStaleArgs, {
   runtimePublished: () => null,
 });
 assert.strictEqual(unknownCheck.status.action, "rebuild", "an unknown probe result must keep rebuild");
-const pendingSync = syncPatchedRuntime(doctorStaleArgs, {
+// A pending sync rewrites a launcher written by an older template, keeping its metadata.
+const doctorStaleLauncher = path.join(doctorStaleRoot, "codex-hud-tui");
+const launcherBeforePending = fs.readFileSync(doctorStaleLauncher, "utf8");
+const metadataBeforePending = parseLauncherMetadata(launcherBeforePending);
+fs.writeFileSync(doctorStaleLauncher, launcherBeforePending.replace("# Warn once per stock install, not on every start.\n", ""));
+const pendingSyncOptions = {
   env: { PATH: doctorStockBin },
   platform: "darwin",
   arch: "arm64",
   runCommand: (command) => (command === path.join(doctorStaleRoot, "codex-hud-codex") ? "codex-cli 0.138.0\n" : "codex-cli 0.139.0\n"),
   runtimePublished: () => false,
+  resolveRenderer: () => ({ kind: "rust", path: path.join(doctorStaleRoot, "codex-hud") }),
   runPatchedInstall() {
     throw new Error("a pending sync must not start an install");
   },
-});
+};
+const pendingSync = syncPatchedRuntime(doctorStaleArgs, pendingSyncOptions);
 assert.strictEqual(pendingSync.action, "pending");
+assert.strictEqual(pendingSync.launcher.action, "rewritten");
+assert.strictEqual(fs.readFileSync(doctorStaleLauncher, "utf8"), launcherBeforePending, "the rewrite must restore the current template");
+assert.deepStrictEqual(parseLauncherMetadata(fs.readFileSync(doctorStaleLauncher, "utf8")), metadataBeforePending);
+const pendingSyncAgain = syncPatchedRuntime(doctorStaleArgs, pendingSyncOptions);
+assert.strictEqual(pendingSyncAgain.launcher.action, "current");
 
 let syncRebuilt = false;
 const syncResult = syncPatchedRuntime(doctorStaleArgs, {

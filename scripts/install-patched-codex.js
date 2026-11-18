@@ -2355,6 +2355,59 @@ function markPendingRuntime(args, report, status, options = {}) {
   status.reason = status.issues.join("; ");
 }
 
+// A pending sync keeps the runtime, so nothing else rewrites the launcher and
+// a launcher fix in a newer codex-hud would never reach the install. Re-render
+// the launcher from its own metadata (same payload, same recorded stock
+// install, same build time) when the script differs from the current template.
+// A failure here only warns: the pending result and the runtime stay as they are.
+function rewritePendingLauncher(args, report, options = {}) {
+  const active = report.patched.active;
+  const metadata = report.launcher.metadata || {};
+  if (report.launcher.mode !== "patched" || !active || active.broken || !metadata.stockRealpath) {
+    return { action: "none" };
+  }
+  const launcherPath = path.join(args.prefix, args.launcherName);
+  try {
+    // Keep the payload path the launcher already runs (a versioned path or the
+    // stable symlink, depending on how it was installed).
+    const current = fs.readFileSync(launcherPath, "utf8");
+    const quoted = current.match(/^PATCHED=('(?:[^']|'\\'')*')$/m);
+    const patchedBinary = quoted ? quoted[1].slice(1, -1).replace(/'\\''/g, "'") : active.target || active.path;
+    const resolveRendererImpl = options.resolveRenderer || resolveRenderer;
+    const renderer = resolveRendererImpl(args, { install: false, requireSessionCapability: true });
+    const opts = {
+      mode: "patched",
+      patchedBinary,
+      patchedVersion: metadata.patchedVersion || active.version,
+      stockPath: metadata.stockPath,
+      stockRealpath: metadata.stockRealpath,
+      stockVersion: metadata.stockVersion,
+      patchSetId: metadata.patchSetId,
+      sourceCommit: metadata.sourceCommit,
+      payloadSha256: metadata.payloadSha256,
+      statusLineCommand: statusLineCommandFor(renderer),
+      renderer: renderer.kind,
+      builtAt: metadata.builtAt,
+      defaultShim: metadata.defaultShim,
+    };
+    const expected = renderLauncherScript({
+      prefix: args.prefix,
+      binName: args.binName,
+      launcherName: args.launcherName,
+      ...opts,
+    });
+    if (current === expected) {
+      return { action: "current" };
+    }
+    installLauncher(args, opts);
+    console.log(`Rewrote the patched launcher with the current template: ${launcherPath}`);
+    return { action: "rewritten" };
+  } catch (error) {
+    console.warn(`Patched launcher not rewritten: ${error.message}`);
+    return { action: "failed", reason: error.message };
+  }
+}
+
 function readPatchedRuntimeState(args, options = {}) {
   const report = doctor(args, options);
   const status = patchedRuntimeStatus(report);
@@ -2481,8 +2534,9 @@ function syncPatchedRuntime(args, options = {}) {
   if (first.status.action === "pending") {
     console.log(`Patched runtime update pending: no codex-hud runtime is published for Codex ${first.status.stockVersion}.`);
     console.log(`Keeping patched Codex ${first.status.patchedVersion}; no matching runtime is published.`);
+    const pendingLauncher = rewritePendingLauncher(args, first.report, options);
     const pendingShim = reconcileDefaultShim(args, first.report, options);
-    return { action: "pending", status: first.status, shim: pendingShim, reason: first.status.reason };
+    return { action: "pending", status: first.status, shim: pendingShim, launcher: pendingLauncher, reason: first.status.reason };
   }
 
   if (first.status.action === "refresh-launcher") {
@@ -2517,8 +2571,9 @@ function syncPatchedRuntime(args, options = {}) {
     }
     console.log(`Patched runtime update pending: ${error.message}`);
     console.log(`Keeping patched Codex ${first.status.patchedVersion}; no matching runtime is published.`);
+    const pendingLauncher = rewritePendingLauncher(args, first.report, options);
     const pendingShim = reconcileDefaultShim(args, first.report, options);
-    return { action: "pending", status: first.status, shim: pendingShim, reason: error.message };
+    return { action: "pending", status: first.status, shim: pendingShim, launcher: pendingLauncher, reason: error.message };
   }
   const afterRebuild = checkPatchedRuntime(args, options);
   if (afterRebuild.status.needsSync) {
