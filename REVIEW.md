@@ -33,8 +33,8 @@ result) and a suggested fix. Tag a priority:
 | Priority                          | Meaning                                                                                                                                                                                                                         |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P1 critical                       | Immediate action required: the HUD or a user's Codex install is down or does not work. A security hole, a leaked secret, or data loss or corruption (for example a lost rollback payload) is always P1, regardless of diff size |
-| P2 high                           | A major feature or service is degraded: wrong output or behavior a user will hit, or Rust/site drift                                                                                                                            |
-| P3 medium                         | Limited impact: an edge case, or a risk to the next change                                                                                                                                                                      |
+| P2 high                           | A major feature or service is degraded: wrong output or behavior a user will hit (for example a wrong `ctx`, `5h` or `7d` reading), or Rust/site drift in values, segments, colors or generated config                          |
+| P3 medium                         | Limited impact: an edge case, a risk to the next change, or Rust/site drift in cosmetic detail only (for example punctuation in a label)                                                                                        |
 | P4 low                            | Minor inconvenience or standard request with low operational impact: wording, or a doc that does not match the code                                                                                                             |
 | P5 trivial/planning/informational | No immediate function or operational impact; backlog for future planning, or for when spare capacity allows                                                                                                                     |
 
@@ -78,9 +78,10 @@ merge semantics are product changes; review them across both surfaces.
 1. **Cross-surface parity (primary).** Rendering, config defaults, color
    resolution, segment registry and order, pace and percent thresholds,
    effort, token and percent formatting, and separators change in lockstep in
-   `rust/src/*` and `site/app.js`. Flag a one-sided change as a drift bug.
-   Scrutinize any change to the `#rrggbb` to xterm-256 mapping
-   (`nearest_xterm256` in `rust/src/colors.rs`). The frozen rules in
+   `rust/src/*` and `site/app.js`. Flag a one-sided change as a drift bug and
+   rate it by its impact (P2 or P3 in the priority table). Scrutinize any
+   change to the `#rrggbb` to xterm-256 mapping (`nearest_xterm256` in
+   `rust/src/colors.rs`). The frozen rules in
    `spec/config-schema.md` § Parity-critical invariants (JS `Math.round`,
    `k` rounding, color gate, empty-segment suppression and others) must not be
    "cleaned up".
