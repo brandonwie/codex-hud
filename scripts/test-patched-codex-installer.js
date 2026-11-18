@@ -912,14 +912,18 @@ const patchedWrapperPath = installLauncher(
   },
 );
 fs.symlinkSync(patchedWrapperPath, patchedWrapperStock);
-const managedPatchedRun = spawnSync("bash", [patchedWrapperPath, "--version"], { encoding: "utf8" });
+const patchedWrapperEnv = { ...process.env, XDG_STATE_HOME: path.join(patchedWrapperRoot, "state") };
+const managedPatchedRun = spawnSync("bash", [patchedWrapperPath, "--version"], { encoding: "utf8", env: patchedWrapperEnv });
 assert.strictEqual(managedPatchedRun.status, 0, `patched wrapper failed: ${managedPatchedRun.stderr}`);
 assert(!managedPatchedRun.stderr.includes("stock Codex changed"), "managed shim must not trigger a stale warning");
 fs.unlinkSync(patchedWrapperStock);
 fs.symlinkSync(patchedWrapperUpdatedStock, patchedWrapperStock);
-const updatedPatchedRun = spawnSync("bash", [patchedWrapperPath, "--version"], { encoding: "utf8" });
+const updatedPatchedRun = spawnSync("bash", [patchedWrapperPath, "--version"], { encoding: "utf8", env: patchedWrapperEnv });
 assert.strictEqual(updatedPatchedRun.status, 0, `updated patched wrapper failed: ${updatedPatchedRun.stderr}`);
 assert(updatedPatchedRun.stderr.includes("stock Codex changed"), "stock updater takeover must trigger a stale warning");
+const repeatedPatchedRun = spawnSync("bash", [patchedWrapperPath, "--version"], { encoding: "utf8", env: patchedWrapperEnv });
+assert.strictEqual(repeatedPatchedRun.status, 0, `repeated patched wrapper failed: ${repeatedPatchedRun.stderr}`);
+assert(!repeatedPatchedRun.stderr.includes("stock Codex changed"), "the stale warning must not repeat for the same stock install");
 
 // --- rust renderer: verify / install / resolve ---
 const rendererRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-renderer-test-"));
@@ -2360,6 +2364,48 @@ const checkResult = checkPatchedRuntime(doctorStaleArgs, {
   runCommand: (command) => (command === path.join(doctorStaleRoot, "codex-hud-codex") ? "codex-cli 0.138.0\n" : "codex-cli 0.139.0\n"),
 });
 assert.strictEqual(checkResult.status.action, "rebuild");
+
+// With a published-runtime probe, a stock version with no runtime is pending.
+let probedAsset = null;
+const pendingCheck = checkPatchedRuntime(doctorStaleArgs, {
+  env: { PATH: doctorStockBin },
+  platform: "darwin",
+  arch: "arm64",
+  runCommand: (command) => (command === path.join(doctorStaleRoot, "codex-hud-codex") ? "codex-cli 0.138.0\n" : "codex-cli 0.139.0\n"),
+  runtimePublished(asset) {
+    probedAsset = asset;
+    return false;
+  },
+});
+assert.strictEqual(pendingCheck.status.action, "pending");
+assert.strictEqual(probedAsset.tag, "codex-runtime-v0.139.0");
+const publishedCheck = checkPatchedRuntime(doctorStaleArgs, {
+  env: { PATH: doctorStockBin },
+  platform: "darwin",
+  arch: "arm64",
+  runCommand: (command) => (command === path.join(doctorStaleRoot, "codex-hud-codex") ? "codex-cli 0.138.0\n" : "codex-cli 0.139.0\n"),
+  runtimePublished: () => true,
+});
+assert.strictEqual(publishedCheck.status.action, "rebuild");
+const unknownCheck = checkPatchedRuntime(doctorStaleArgs, {
+  env: { PATH: doctorStockBin },
+  platform: "darwin",
+  arch: "arm64",
+  runCommand: (command) => (command === path.join(doctorStaleRoot, "codex-hud-codex") ? "codex-cli 0.138.0\n" : "codex-cli 0.139.0\n"),
+  runtimePublished: () => null,
+});
+assert.strictEqual(unknownCheck.status.action, "rebuild", "an unknown probe result must keep rebuild");
+const pendingSync = syncPatchedRuntime(doctorStaleArgs, {
+  env: { PATH: doctorStockBin },
+  platform: "darwin",
+  arch: "arm64",
+  runCommand: (command) => (command === path.join(doctorStaleRoot, "codex-hud-codex") ? "codex-cli 0.138.0\n" : "codex-cli 0.139.0\n"),
+  runtimePublished: () => false,
+  runPatchedInstall() {
+    throw new Error("a pending sync must not start an install");
+  },
+});
+assert.strictEqual(pendingSync.action, "pending");
 
 let syncRebuilt = false;
 const syncResult = syncPatchedRuntime(doctorStaleArgs, {

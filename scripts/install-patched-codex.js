@@ -1603,7 +1603,12 @@ if [ -n "$STOCK_PATH" ] && [ -e "$STOCK_PATH" ] && [ -n "$STOCK_REALPATH_AT_INST
   current_stock="$(realpath "$STOCK_PATH" 2>/dev/null || true)"
   current_launcher="$(realpath "$0" 2>/dev/null || true)"
   if [ -n "$current_stock" ] && [ "$current_stock" != "$current_launcher" ] && [ "$current_stock" != "$STOCK_REALPATH_AT_INSTALL" ]; then
-    echo ${shellQuote(staleWarning)} >&2
+    # Warn once per stock install, not on every start.
+    stale_seen="\${XDG_STATE_HOME:-\${HOME:-}/.local/state}/codex-hud/stale-stock-warned"
+    if [ "$(cat "$stale_seen" 2>/dev/null || true)" != "$current_stock" ]; then
+      echo ${shellQuote(staleWarning)} >&2
+      { mkdir -p "\${stale_seen%/*}" && printf '%s\\n' "$current_stock" > "$stale_seen"; } 2>/dev/null || true
+    fi
   fi
 fi
 
@@ -2300,6 +2305,56 @@ function printPatchedRuntimeStatus(status) {
   }
 }
 
+// True when the stock version is the only reason for a rebuild: the same
+// report with the patched version as stock needs no rebuild.
+function onlyStockVersionAhead(report, status) {
+  if (status.action !== "rebuild" || !report.stock || !status.activeVersion) {
+    return false;
+  }
+  const same = patchedRuntimeStatus({ ...report, stock: { ...report.stock, version: status.patchedVersion } });
+  return same.action !== "rebuild";
+}
+
+// HEAD request for the release checksum: true when published, false on 404,
+// null when the answer is unknown (offline, rate limit).
+function probePublishedRuntime(asset, options = {}) {
+  const spawn = options.spawnSync || spawnSync;
+  const result = spawn(
+    "curl",
+    ["-sIL", "-o", "/dev/null", "-w", "%{http_code}", "--connect-timeout", "10", "--max-time", "30", asset.checksumUrl],
+    { encoding: "utf8", stdio: "pipe" },
+  );
+  if (result.error || result.status !== 0) {
+    return null;
+  }
+  const code = String(result.stdout || "").trim();
+  if (code === "200") return true;
+  if (code === "404") return false;
+  return null;
+}
+
+// Automated runtime builds are retired, so a newer stock version usually has
+// no published runtime. Report that as pending, which is the result codex:sync
+// gives, instead of a rebuild that nothing will run. Only runs when the caller
+// passes options.runtimePublished, so library callers and tests stay offline.
+function markPendingRuntime(args, report, status, options = {}) {
+  if (typeof options.runtimePublished !== "function" || !onlyStockVersionAhead(report, status)) {
+    return;
+  }
+  const asset = runtimeReleaseAsset({ ...args, version: status.stockVersion }, options);
+  if (!asset || !PUBLISHED_RUNTIME_TARGETS.includes(asset.target)) {
+    return;
+  }
+  if (options.runtimePublished(asset) !== false) {
+    return;
+  }
+  status.action = "pending";
+  status.issues.push(
+    `no codex-hud runtime is published for Codex ${status.stockVersion} (automated builds are retired); keeping patched Codex ${status.patchedVersion}`,
+  );
+  status.reason = status.issues.join("; ");
+}
+
 function readPatchedRuntimeState(args, options = {}) {
   const report = doctor(args, options);
   const status = patchedRuntimeStatus(report);
@@ -2308,6 +2363,7 @@ function readPatchedRuntimeState(args, options = {}) {
 
 function checkPatchedRuntime(args, options = {}) {
   const { report, status } = readPatchedRuntimeState(args, options);
+  markPendingRuntime(args, report, status, options);
   printPatchedRuntimeStatus(status);
   return { report, status };
 }
@@ -2420,6 +2476,13 @@ function syncPatchedRuntime(args, options = {}) {
   }
   if (!first.status.canFix) {
     throw new Error(`Cannot sync patched runtime: ${first.status.reason}`);
+  }
+
+  if (first.status.action === "pending") {
+    console.log(`Patched runtime update pending: no codex-hud runtime is published for Codex ${first.status.stockVersion}.`);
+    console.log(`Keeping patched Codex ${first.status.patchedVersion}; no matching runtime is published.`);
+    const pendingShim = reconcileDefaultShim(args, first.report, options);
+    return { action: "pending", status: first.status, shim: pendingShim, reason: first.status.reason };
   }
 
   if (first.status.action === "refresh-launcher") {
@@ -2755,7 +2818,7 @@ function main() {
   }
 
   if (args.checkPatched) {
-    const result = checkPatchedRuntime(args);
+    const result = checkPatchedRuntime(args, { runtimePublished: probePublishedRuntime });
     if (!result.status.canFix) {
       process.exitCode = 1;
     }
@@ -2763,7 +2826,7 @@ function main() {
   }
 
   if (args.syncPatched) {
-    syncPatchedRuntime(args);
+    syncPatchedRuntime(args, { runtimePublished: probePublishedRuntime });
     return;
   }
 
@@ -2812,6 +2875,7 @@ module.exports = {
   installRustRenderer,
   isManagedDefaultShim,
   checkPatchedRuntime,
+  markPendingRuntime,
   migrateLegacyLayout,
   parseCodexVersion,
   parseArgs,
