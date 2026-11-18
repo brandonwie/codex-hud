@@ -2341,7 +2341,14 @@ function markPendingRuntime(args, report, status, options = {}) {
   if (typeof options.runtimePublished !== "function" || !onlyStockVersionAhead(report, status)) {
     return;
   }
-  const asset = runtimeReleaseAsset({ ...args, version: status.stockVersion }, options);
+  let asset;
+  try {
+    asset = runtimeReleaseAsset({ ...args, version: status.stockVersion }, options);
+  } catch (_) {
+    // A stock version the release naming rejects keeps "rebuild"; the check
+    // must not fail where it did not before.
+    return;
+  }
   if (!asset || !PUBLISHED_RUNTIME_TARGETS.includes(asset.target)) {
     return;
   }
