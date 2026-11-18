@@ -79,7 +79,8 @@ merge semantics are product changes; review them across both surfaces.
    resolution, segment registry and order, pace and percent thresholds,
    effort, token and percent formatting, and separators change in lockstep in
    `rust/src/*` and `site/app.js`. Flag a one-sided change as a drift bug and
-   rate it by its impact (P2 or P3 in the priority table). Scrutinize any
+   rate it by its impact on the priority table; the P1 rule still wins for
+   a security hole, a leaked secret, or data loss or corruption. Scrutinize any
    change to the `#rrggbb` to xterm-256 mapping (`nearest_xterm256` in
    `rust/src/colors.rs`). The frozen rules in
    `spec/config-schema.md` § Parity-critical invariants (JS `Math.round`,
