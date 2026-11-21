@@ -308,6 +308,8 @@ writeFile(root, "codex-rs/cli/src/main.rs", `
 use clap::Args;
 `);
 
+const unpatchedConfigTypes = fs.readFileSync(path.join(root, "codex-rs/config/src/types.rs"), "utf8");
+const unpatchedCoreConfig = fs.readFileSync(path.join(root, "codex-rs/core/src/config/mod.rs"), "utf8");
 const unpatchedStatusSurfaces = fs.readFileSync(path.join(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs"), "utf8");
 const firstChanges = patchSource(root);
 const secondChanges = patchSource(root);
@@ -339,6 +341,47 @@ assert(!patchedModernStatusSurfaces.includes("set_status_line_hyperlink"), "Code
 assert(statusSurfaces.includes("self.set_status_line_hyperlink(None)"), "older Codex must still clear its built-in hyperlink");
 assertStatusLineCommandEnvInjection(patchedModernStatusSurfaces);
 assert.deepStrictEqual(patchSource(root), [], "the Codex 0.169 patch must be idempotent");
+
+// Codex 0.171 inserts its MCP provider between the previous status-line fields.
+writeFile(root, "codex-rs/config/src/types.rs", unpatchedConfigTypes.replace(
+  "    pub status_line: Option<Vec<String>>,\n",
+  "    pub status_line: Option<Vec<String>>,\n\n    pub status_line_provider: Option<Box<StatusLineSelection>>,\n",
+));
+writeFile(root, "codex-rs/core/src/config/mod.rs", unpatchedCoreConfig.replace(
+  "    pub tui_status_line: Option<Vec<String>>,\n",
+  "    pub tui_status_line: Option<Vec<String>>,\n\n    pub tui_status_line_provider: Option<Box<StatusLineSelection>>,\n",
+).replace(
+  "            tui_status_line_use_colors: cfg",
+  "            tui_status_line_provider: cfg.tui.as_ref().and_then(|t| t.status_line_provider.clone()),\n" +
+  "            tui_status_line_use_colors: cfg",
+));
+writeFile(root, "codex-rs/tui/src/local_settings.rs", `
+            let tui = Tui {
+                status_line: config.tui_status_line.clone(),
+                status_line_provider: config.tui_status_line_provider.clone(),
+                status_line_use_colors: config.tui_status_line_use_colors,
+            };
+`);
+const providerGuard = "        if self.refresh_provider_footer() {\n            return;\n        }\n";
+writeFile(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs", modernStatusSurfaces.replace(
+  "        let enabled = !selections.status_line_items.is_empty();",
+  providerGuard + "        let enabled = !selections.status_line_items.is_empty();",
+));
+patchSource(root);
+const providerConfigTypes = fs.readFileSync(path.join(root, "codex-rs/config/src/types.rs"), "utf8");
+const providerCoreConfig = fs.readFileSync(path.join(root, "codex-rs/core/src/config/mod.rs"), "utf8");
+const providerLocalSettings = fs.readFileSync(path.join(root, "codex-rs/tui/src/local_settings.rs"), "utf8");
+const providerStatusSurfaces = fs.readFileSync(path.join(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs"), "utf8");
+assert(providerConfigTypes.includes("pub status_line_command: Option<String>"));
+assert(providerConfigTypes.includes("pub status_line_provider: Option<Box<StatusLineSelection>>"));
+assert(providerCoreConfig.includes("tui_status_line_command: cfg"));
+assert(providerCoreConfig.includes("tui_status_line_provider: cfg.tui.as_ref().and_then(|t| t.status_line_provider.clone()),"));
+assert(providerLocalSettings.includes("status_line_command: config.tui_status_line_command.clone(),"));
+assert(providerLocalSettings.includes("status_line_provider: config.tui_status_line_provider.clone(),"));
+assert(providerStatusSurfaces.includes(providerGuard + "        if let Some(status_line) = self.custom_status_line_from_command()"));
+assertStatusLineCommandEnvInjection(providerStatusSurfaces);
+assert.deepStrictEqual(patchSource(root), [], "the Codex 0.171 patch must be idempotent");
+
 writeFile(root, "codex-rs/tui/src/chatwidget/status_surfaces.rs", statusSurfaces);
 assert(configTypes.includes("pub status_line_command: Option<String>"));
 assert(coreConfig.includes("pub tui_status_line_command: Option<String>"));

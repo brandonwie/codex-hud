@@ -248,18 +248,13 @@ function patchSource(sourceRoot) {
   if (applyTextPatch(
     configTypes,
     "pub status_line_command: Option<String>",
-    `    #[serde(default)]
-    pub status_line: Option<Vec<String>>,
-
-    /// Color status line items with colors derived from the active syntax theme.`,
-    `    #[serde(default)]
-    pub status_line: Option<Vec<String>>,
+    "    pub status_line: Option<Vec<String>>,\n",
+    `    pub status_line: Option<Vec<String>>,
 
     /// Shell command used to render a custom status line. When set, it overrides status_line.
     #[serde(default)]
     pub status_line_command: Option<String>,
-
-    /// Color status line items with colors derived from the active syntax theme.`,
+`,
   )) {
     changes.push("config Tui.status_line_command");
   }
@@ -267,15 +262,12 @@ function patchSource(sourceRoot) {
   if (applyTextPatch(
     coreConfig,
     "pub tui_status_line_command: Option<String>",
-    `    pub tui_status_line: Option<Vec<String>>,
-
-    /// Whether to color status line items with colors from the active syntax theme.`,
+    "    pub tui_status_line: Option<Vec<String>>,\n",
     `    pub tui_status_line: Option<Vec<String>>,
 
     /// Shell command that renders a custom TUI status line.
     pub tui_status_line_command: Option<String>,
-
-    /// Whether to color status line items with colors from the active syntax theme.`,
+`,
   )) {
     changes.push("core Config.tui_status_line_command");
   }
@@ -283,14 +275,13 @@ function patchSource(sourceRoot) {
   if (applyTextPatch(
     coreConfig,
     "tui_status_line_command: cfg",
-    `            tui_status_line: cfg.tui.as_ref().and_then(|t| t.status_line.clone()),
-            tui_status_line_use_colors: cfg`,
+    "            tui_status_line: cfg.tui.as_ref().and_then(|t| t.status_line.clone()),\n",
     `            tui_status_line: cfg.tui.as_ref().and_then(|t| t.status_line.clone()),
             tui_status_line_command: cfg
                 .tui
                 .as_ref()
                 .and_then(|t| t.status_line_command.clone()),
-            tui_status_line_use_colors: cfg`,
+`,
   )) {
     changes.push("core ConfigBuilder status_line_command resolution");
   }
@@ -298,19 +289,21 @@ function patchSource(sourceRoot) {
   const clearLegacyHyperlink = fs.readFileSync(statusSurfaces, "utf8").includes("self.set_status_line_hyperlink(")
     ? "\n            self.set_status_line_hyperlink(None);"
     : "";
+  // Codex 0.171 and later can render the upstream MCP provider before
+  // falling through to this built-in status-line path.
+  const builtinStatusLine = `        let enabled = !selections.status_line_items.is_empty();
+        self.bottom_pane.set_status_line_enabled(enabled);`;
   if (applyTextPatch(
     statusSurfaces,
     "fn custom_status_line_from_command",
-    `    fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
-        let enabled = !selections.status_line_items.is_empty();`,
-    `    fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
-        if let Some(status_line) = self.custom_status_line_from_command() {
+    builtinStatusLine,
+    `        if let Some(status_line) = self.custom_status_line_from_command() {
             self.bottom_pane.set_status_line_enabled(true);
             self.set_status_line(Some(status_line.into()));${clearLegacyHyperlink}
             return;
         }
 
-        let enabled = !selections.status_line_items.is_empty();`,
+${builtinStatusLine}`,
   )) {
     changes.push("TUI status-line command render hook");
   }
@@ -366,11 +359,10 @@ function patchSource(sourceRoot) {
   if (fs.existsSync(localSettings) && applyTextPatch(
     localSettings,
     "status_line_command: config.tui_status_line_command.clone(),",
-    `                status_line: config.tui_status_line.clone(),
-                status_line_use_colors: config.tui_status_line_use_colors,`,
+    "                status_line: config.tui_status_line.clone(),\n",
     `                status_line: config.tui_status_line.clone(),
                 status_line_command: config.tui_status_line_command.clone(),
-                status_line_use_colors: config.tui_status_line_use_colors,`,
+`,
   )) {
     changes.push("TUI local_settings status_line_command");
   }
