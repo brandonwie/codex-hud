@@ -146,7 +146,9 @@ uses a GitHub-hosted macOS runner. The macOS leg runs only on a Mac:
 `sh scripts/ci-mac-gate.sh <pr>` checks the PR's merge commit and posts the
 `ci-local / macOS` commit status. It never runs fork code, so a fork PR's
 macOS leg stays unchecked until a maintainer recreates the change on a branch
-of this repository.
+of this repository. On a branch it runs only commits signed by a listed
+maintainer (`scripts/ci-mac-gate-maintainers.txt`), unless a maintainer passes
+`--trust-head <head-sha>` after reviewing the diff.
 `sh scripts/ci-mac-gate.sh verify <pr>` must pass before a merge. A green Linux
 check alone does not cover macOS. `release.yml` repeats the checks before a
 release, the Husky pre-commit hook runs `npm test`, and the pre-push hook runs

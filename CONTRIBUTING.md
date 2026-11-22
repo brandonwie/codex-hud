@@ -43,12 +43,24 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     branch name too long for GitHub's 140-character description is stored as a
     fixed-length `refid`), or error when the base, the target branch or the
     merge commit changed during the run.
-  - Fork pull requests: the gate runs the PR's code with your account's access
-    (files, credentials, Keychain, SSH agent, the status token), so it never
-    runs fork code. A fork PR gets the Linux CI job only, and its macOS leg
-    stays unchecked: `verify` fails for it. To check macOS, a maintainer
-    recreates the change on a branch of this repository and runs the gate on
-    that pull request.
+  - Trust: the gate runs the PR's code with your account's access (files,
+    credentials, Keychain, SSH agent, the status token). Before any checkout it
+    refuses a fork PR, and it refuses a branch PR unless every commit has a
+    verified signature from a committer listed in
+    `scripts/ci-mac-gate-maintainers.txt` (or GitHub's `web-flow` with a listed
+    author). Fork code copied onto a branch keeps its commits and is refused
+    too. After reviewing such a PR's diff, run
+    `sh scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>`; the flag covers
+    that exact head only.
+  - Fork pull requests get the Linux CI job only, and their macOS leg stays
+    unchecked: `verify` fails for them. To check macOS, a maintainer recreates
+    the change on a branch of this repository and runs the gate on that pull
+    request.
+- Imported code and local hooks: checking out or committing code from someone
+  else runs the Husky hooks under your account (`pre-commit` runs `npm test`,
+  `pre-push` runs `scripts/ci-local.sh`), and so does `npm install`. Review an
+  imported change by its diff (`gh pr diff <pr>`) before you check it out or
+  commit it. Do not skip or weaken the hooks to get around this.
 - Before a merge, `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0. It needs
   a green `ci-local / macOS` status whose record matches the PR's current merge
   commit, base tip and base branch.
@@ -60,7 +72,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 | `npm test` | Build `codex-hud` and run config, installer, version, pre-push hook, Mac gate, golden, README, and site checks. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
 | `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
-| `sh scripts/ci-mac-gate.sh [verify] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |
+| `sh scripts/ci-mac-gate.sh [verify \| --trust-head <sha>] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |
 | `npm run check:i18n` | Check localized README heading and code-block skeletons against `README.md`. |
 | `npm run hud` | Run the built Rust HUD renderer directly. |
 | `npm run build:rust` | Build the release Rust renderer. |

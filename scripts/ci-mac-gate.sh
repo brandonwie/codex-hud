@@ -3,6 +3,10 @@
 # the same checks on a Mac and records the result on the pull request.
 #
 #   sh scripts/ci-mac-gate.sh <pr>         check the PR on this Mac, post the status
+#   sh scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>
+#                                          same, for a PR whose commits fail the
+#                                          provenance check, after you reviewed
+#                                          its diff at exactly <head-sha>
 #   sh scripts/ci-mac-gate.sh verify <pr>  exit 0 only when the PR's current merge
 #                                          candidate has a green macOS result
 #
@@ -11,27 +15,33 @@
 #
 # Trust boundary: the run mode executes the PR's code (npm lifecycle scripts and
 # tests) with this account's access: files, credentials, Keychain, SSH agent and
-# the token that posts the status. It only checks PRs whose branch lives in the
-# base repository, which only people with push access can write. It never runs
-# fork code. A fork PR gets the Linux CI job only; its macOS leg stays unchecked
-# (verify fails) until a maintainer recreates the change on a branch of this
-# repository and runs the gate on that PR.
+# the token that posts the status. Before any checkout it requires:
+#   1. The PR branch lives in the base repository. Fork PRs are always refused:
+#      their macOS leg stays unchecked (verify fails) until a maintainer
+#      recreates the change on a branch of this repository.
+#   2. Provenance: every PR commit has a verified signature, and its committer is
+#      listed in scripts/ci-mac-gate-maintainers.txt (or is GitHub's web-flow
+#      with a listed author). Code copied from a fork onto a branch keeps the
+#      fork's commits and fails this check. --trust-head <sha> overrides it for
+#      that exact head only, after a maintainer reviewed the diff.
 #
 # The run mode checks GitHub's merge commit for the PR (refs/pull/<pr>/merge,
 # the commit the old hosted job checked out) in a clean temporary checkout. It
 # matches the old hosted job: the Node major set in ci.yml, the current Rust
 # stable with rustfmt and clippy, `npm ci`, then scripts/ci-local.sh, at nice 10.
 # The whole run, from the first GitHub read to the final status, has the old
-# hosted job's deadline (GitHub's default 360 minutes); a timeout posts failure.
-# It posts pending while it runs, then success or failure with a record of the
-# candidate. If the candidate changed during the run (new head, retarget, base
-# moved), it posts error or nothing, so the run must repeat. verify compares the
-# record with the PR's current one.
+# hosted job's deadline (GitHub's default 360 minutes): the public command
+# always restarts itself as an internal worker under that deadline, and a
+# timeout posts failure. It posts pending while it runs, then success or failure
+# with a record of the candidate. If the candidate changed during the run (new
+# head, retarget, base moved), it posts error or nothing, so the run must
+# repeat. verify compares the record with the PR's current one.
 set -u
 
 context="ci-local / macOS"
 deadline_seconds=21600
 status_post_seconds=120
+maintainers_file=scripts/ci-mac-gate-maintainers.txt
 rust_channel_url="https://static.rust-lang.org/dist/channel-rust-stable.toml"
 
 die() {
@@ -43,6 +53,13 @@ short() {
   printf '%.12s' "$1"
 }
 
+full_sha() {
+  case $1 in
+    *[!0-9a-f]*) return 1 ;;
+  esac
+  [ ${#1} -eq 40 ]
+}
+
 # Git variables set by a calling hook would point git at another repository.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
   GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX GIT_NAMESPACE
@@ -50,24 +67,43 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 cd "$(dirname "$0")/.." || exit 1
 self="$(pwd)/scripts/ci-mac-gate.sh"
 
-usage="usage: sh scripts/ci-mac-gate.sh [verify] <pr-number>"
+usage="usage: sh scripts/ci-mac-gate.sh [verify | --trust-head <head-sha>] <pr-number>"
 mode=run
-if [ "${1:-}" = verify ]; then
-  mode=verify
-  shift
-fi
+trust_head=
+run_dir=
+case ${1:-} in
+  verify)
+    mode=verify
+    shift
+    ;;
+  --trust-head)
+    [ $# -ge 3 ] || die "$usage"
+    trust_head=$2
+    shift 2
+    full_sha "$trust_head" || die "--trust-head needs the full 40-character head SHA"
+    ;;
+  __worker)
+    # Internal: only the public run below starts this, under the deadline.
+    [ $# -ge 4 ] || die "$usage"
+    mode=worker
+    run_dir=$2
+    trust_head=$3
+    shift 3
+    ;;
+esac
 pr=${1:-}
 case $pr in
   '' | *[!0-9]*) die "$usage" ;;
 esac
 command -v gh >/dev/null 2>&1 || die "gh is required"
 
-# Run mode: restart this script under one deadline for the whole run. On a
-# timeout, post failure on the head the run recorded, with its own short limit.
-if [ "$mode" = run ] && [ -z "${CI_MAC_GATE_RUN_DIR:-}" ]; then
+# Public run: restart as the worker under one deadline for the whole run. On a
+# timeout, post failure on the head the worker recorded, with a short limit.
+if [ "$mode" = run ]; then
   [ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
   run_dir=$(mktemp -d) || die "mktemp failed"
-  CI_MAC_GATE_RUN_DIR=$run_dir node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" "$pr"
+  echo "ci-mac-gate: running PR $pr under a $((deadline_seconds / 60))-minute deadline"
+  node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" __worker "$run_dir" "$trust_head" "$pr"
   rc=$?
   if [ "$rc" -eq 124 ] && [ -s "$run_dir/head" ]; then
     timed_head=$(cat "$run_dir/head")
@@ -87,12 +123,13 @@ post() {
 }
 
 # Sets head, base_name, head_repo, base_repo, merge (GitHub's current merge
-# commit for the PR) and base (the current tip of the PR's current base branch).
+# commit for the PR), commit_count and base (the current tip of the PR's
+# current base branch).
 read_candidate() {
   pr_line=$(gh api "repos/{owner}/{repo}/pulls/$pr" \
-    --jq '"\(.head.sha) \(.base.ref) \(.head.repo.full_name) \(.base.repo.full_name) \(.merge_commit_sha)"') ||
+    --jq '"\(.head.sha) \(.base.ref) \(.head.repo.full_name) \(.base.repo.full_name) \(.merge_commit_sha) \(.commits)"') ||
     return 1
-  read -r head base_name head_repo base_repo merge <<EOF
+  read -r head base_name head_repo base_repo merge commit_count <<EOF
 $pr_line
 EOF
   base=$(gh api "repos/{owner}/{repo}/git/ref/heads/$base_name" --jq .object.sha)
@@ -107,6 +144,44 @@ candidate_record() {
     ref_id=$(printf '%s' "$base_name" | git hash-object --stdin) || return 1
     record="merge $merge base $base refid $(printf '%.24s' "$ref_id")"
   fi
+}
+
+is_maintainer() {
+  sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$maintainers_file" | grep -Fqx -- "$1"
+}
+
+# Prints each PR commit that fails the provenance rule; returns 1 when the
+# commit list cannot be read or does not match the PR.
+untrusted_commits() {
+  [ -s "$maintainers_file" ] || {
+    echo "no maintainer list in $maintainers_file" >&2
+    return 1
+  }
+  case $commit_count in
+    '' | *[!0-9]*)
+      echo "cannot read the PR's commit count" >&2
+      return 1
+      ;;
+  esac
+  [ "$commit_count" -le 250 ] || {
+    echo "the PR has $commit_count commits; GitHub lists at most 250" >&2
+    return 1
+  }
+  commits=$(gh api --paginate "repos/{owner}/{repo}/pulls/$pr/commits?per_page=100" \
+    --jq '.[] | "\(.sha) \(.commit.verification.verified) \(.committer.login) \(.author.login)"') || return 1
+  listed=$(printf '%s\n' "$commits" | grep -c .)
+  last=$(printf '%s\n' "$commits" | tail -n 1 | cut -d' ' -f1)
+  [ "$listed" = "$commit_count" ] && [ "$last" = "$head" ] || {
+    echo "the PR's commit list ($listed commits, last $last) does not match the PR ($commit_count commits, head $head)" >&2
+    return 1
+  }
+  printf '%s\n' "$commits" | while read -r sha verified committer author; do
+    if [ "$verified" = true ]; then
+      is_maintainer "$committer" && continue
+      [ "$committer" = web-flow ] && is_maintainer "$author" && continue
+    fi
+    echo "$sha (verified: $verified, committer: $committer, author: $author)"
+  done
 }
 
 read_candidate || die "cannot read PR $pr"
@@ -132,9 +207,22 @@ if [ "$mode" = verify ]; then
   esac
 fi
 
+# Worker: trust checks first, before any state write, checkout or install.
 [ "$head_repo" = "$base_repo" ] || die "$fork_note"
+if [ -n "$trust_head" ] && [ "$trust_head" != "$head" ]; then
+  die "PR $pr head is $head, not the trusted $trust_head; review the new commits first"
+fi
+untrusted=$(untrusted_commits) || die "cannot check the provenance of PR $pr"
+if [ -n "$untrusted" ]; then
+  [ "$trust_head" = "$head" ] ||
+    die "PR $pr has commits outside the maintainer provenance rule (signed and verified, committer in $maintainers_file):
+$untrusted
+Review the PR's diff without checking it out (gh pr diff $pr), then rerun with: sh scripts/ci-mac-gate.sh --trust-head $head $pr"
+  echo "ci-mac-gate: --trust-head $head given; running commits outside the provenance rule:"
+  echo "$untrusted"
+fi
 [ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
-printf '%s\n' "$head" >"$CI_MAC_GATE_RUN_DIR/head" || die "cannot write the run state"
+printf '%s\n' "$head" >"$run_dir/head" || die "cannot write the run state"
 candidate="$head $base_name $base $merge"
 
 tmp=$(mktemp -d) || die "mktemp failed"
