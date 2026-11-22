@@ -7,6 +7,12 @@
 #                                          same, for a PR whose commits fail the
 #                                          provenance check, after you reviewed
 #                                          its diff at exactly <head-sha>
+#   sh scripts/ci-mac-gate.sh --trust-candidate <head-sha> <base-sha> <pr>
+#                                          same, for a PR that targets another
+#                                          branch than the default one, after you
+#                                          reviewed the whole merge candidate:
+#                                          the target at <base-sha> and the PR
+#                                          at <head-sha>
 #   sh scripts/ci-mac-gate.sh verify <pr>  exit 0 only when the PR's current merge
 #                                          candidate has a green macOS result
 #
@@ -24,6 +30,11 @@
 #      with a listed author). Code copied from a fork onto a branch keeps the
 #      fork's commits and fails this check. --trust-head <sha> overrides it for
 #      that exact head only, after a maintainer reviewed the diff.
+#   3. A trusted target: the merge commit holds the target branch's contents
+#      too, and the gate trusts only the repository's default branch. For any
+#      other target it needs --trust-candidate <head> <base-tip>, naming the
+#      exact merge candidate a maintainer reviewed (the target against the
+#      default branch, and the PR's diff). That flag also covers provenance.
 #
 # The run mode checks GitHub's merge commit for the PR (refs/pull/<pr>/merge,
 # the commit the old hosted job checked out) in a clean temporary checkout. It
@@ -67,9 +78,10 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 cd "$(dirname "$0")/.." || exit 1
 self="$(pwd)/scripts/ci-mac-gate.sh"
 
-usage="usage: sh scripts/ci-mac-gate.sh [verify | --trust-head <head-sha>] <pr-number>"
+usage="usage: sh scripts/ci-mac-gate.sh [verify | --trust-head <head-sha> | --trust-candidate <head-sha> <base-sha>] <pr-number>"
 mode=run
 trust_head=
+trust_base=
 run_dir=
 case ${1:-} in
   verify)
@@ -82,13 +94,23 @@ case ${1:-} in
     shift 2
     full_sha "$trust_head" || die "--trust-head needs the full 40-character head SHA"
     ;;
+  --trust-candidate)
+    [ $# -ge 4 ] || die "$usage"
+    trust_head=$2
+    trust_base=$3
+    shift 3
+    if ! full_sha "$trust_head" || ! full_sha "$trust_base"; then
+      die "--trust-candidate needs the full 40-character head and base SHAs"
+    fi
+    ;;
   __worker)
     # Internal: only the public run below starts this, under the deadline.
-    [ $# -ge 4 ] || die "$usage"
+    [ $# -ge 5 ] || die "$usage"
     mode=worker
     run_dir=$2
     trust_head=$3
-    shift 3
+    trust_base=$4
+    shift 4
     ;;
 esac
 pr=${1:-}
@@ -103,7 +125,7 @@ if [ "$mode" = run ]; then
   [ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
   run_dir=$(mktemp -d) || die "mktemp failed"
   echo "ci-mac-gate: running PR $pr under a $((deadline_seconds / 60))-minute deadline"
-  node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" __worker "$run_dir" "$trust_head" "$pr"
+  node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" __worker "$run_dir" "$trust_head" "$trust_base" "$pr"
   rc=$?
   if [ "$rc" -eq 124 ] && [ -s "$run_dir/head" ]; then
     timed_head=$(cat "$run_dir/head")
@@ -123,13 +145,13 @@ post() {
 }
 
 # Sets head, base_name, head_repo, base_repo, merge (GitHub's current merge
-# commit for the PR), commit_count and base (the current tip of the PR's
-# current base branch).
+# commit for the PR), commit_count, default_branch (the repository's) and base
+# (the current tip of the PR's current base branch).
 read_candidate() {
   pr_line=$(gh api "repos/{owner}/{repo}/pulls/$pr" \
-    --jq '"\(.head.sha) \(.base.ref) \(.head.repo.full_name) \(.base.repo.full_name) \(.merge_commit_sha) \(.commits)"') ||
+    --jq '"\(.head.sha) \(.base.ref) \(.head.repo.full_name) \(.base.repo.full_name) \(.merge_commit_sha) \(.commits) \(.base.repo.default_branch)"') ||
     return 1
-  read -r head base_name head_repo base_repo merge commit_count <<EOF
+  read -r head base_name head_repo base_repo merge commit_count default_branch <<EOF
 $pr_line
 EOF
   base=$(gh api "repos/{owner}/{repo}/git/ref/heads/$base_name" --jq .object.sha)
@@ -211,6 +233,18 @@ fi
 [ "$head_repo" = "$base_repo" ] || die "$fork_note"
 if [ -n "$trust_head" ] && [ "$trust_head" != "$head" ]; then
   die "PR $pr head is $head, not the trusted $trust_head; review the new commits first"
+fi
+if [ -n "$trust_base" ] && [ "$trust_base" != "$base" ]; then
+  die "PR $pr target $base_name is at $base, not the trusted $trust_base; review the target's new commits first"
+fi
+case $default_branch in
+  '' | null) die "cannot read the default branch of $base_repo" ;;
+esac
+if [ "$base_name" != "$default_branch" ]; then
+  [ -n "$trust_base" ] ||
+    die "PR $pr targets $base_name, not the default branch $default_branch. The merge commit holds the target's contents, and the gate trusts only $default_branch.
+Review the whole merge candidate without checking it out: the target against $default_branch (gh api repos/{owner}/{repo}/compare/$default_branch...$base) and the PR's diff (gh pr diff $pr). Then rerun with: sh scripts/ci-mac-gate.sh --trust-candidate $head $base $pr"
+  echo "ci-mac-gate: --trust-candidate given; running target $base_name at $base, not the default branch"
 fi
 untrusted=$(untrusted_commits) || die "cannot check the provenance of PR $pr"
 if [ -n "$untrusted" ]; then

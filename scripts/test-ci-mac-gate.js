@@ -58,7 +58,7 @@ function runGate(args, fake) {
       ...env,
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       FAKE_GH_CALLS: calls,
-      FAKE_PR: `${head} main ${repo} ${repo} ${merge} 2`,
+      FAKE_PR: `${head} main ${repo} ${repo} ${merge} 2 main`,
       FAKE_COMMITS: trustedCommits,
       FAKE_BASE: base,
       FAKE_OTHER_BASE: otherBase,
@@ -72,10 +72,12 @@ function runGate(args, fake) {
 }
 
 // Lists every way a workflow could pick a runner that is not an allowed Ubuntu
-// label: runs-on values, matrix os values (flow lists only) and include entries,
-// and reusable workflows that are not pinned to a commit SHA. Keys may be plain
-// or quoted. Anything this line reader cannot resolve the way a YAML parser
-// would counts as a problem: escaped or explicit keys, flow mappings, a
+// label. Each job is checked on its own: its runs-on value, or for
+// `${{ matrix.os }}` its own static matrix os values (flow lists only) and
+// include entries; reusable workflows must be pinned to a commit SHA. Keys may
+// be plain or quoted. Anything this line reader cannot resolve the way a YAML
+// parser would counts as a problem: escaped or explicit keys, flow mappings,
+// anchors, aliases and merge keys, a dynamic matrix, a job with no runner, a
 // "runs-on" it cannot read as a key, and any "mac" outside a comment.
 const ubuntuLabel = /^ubuntu-(latest|\d+\.\d+)$/;
 const unquote = (value) => value.trim().replace(/^["']|["']$/g, "");
@@ -83,6 +85,8 @@ const keyLine = (key) => new RegExp(`^\\s*(?:-\\s*)?(["']?)${key}\\1\\s*:(?:\\s+
 const runsOnKey = keyLine("runs-on");
 const osKey = keyLine("os");
 const usesKey = keyLine("uses");
+const matrixKey = keyLine("(?:matrix|include|exclude)");
+const jobsKey = /^(["']?)jobs\1\s*:\s*$/;
 
 function runnerProblems(name, text) {
   const problems = [];
@@ -109,36 +113,78 @@ function runnerProblems(name, text) {
     if (/^\s*(?:-\s*)?"[^"]*\\[^"]*"\s*:/.test(line)) problems.push(`${name}: escaped key: ${line.trim()}`);
     if (/^\s*(?:-\s*)?[?:](\s|$)/.test(line)) problems.push(`${name}: explicit key: ${line.trim()}`);
     if (/runs-on/.test(line) && !runsOnKey.test(line)) problems.push(`${name}: unreadable runs-on: ${line.trim()}`);
-  }
-  const osValues = [];
-  let osLines = 0;
-  for (const line of lines) {
-    const os = line.match(osKey);
-    if (!os) continue;
-    osLines++;
-    const value = (os[2] || "").trim();
-    const list = value.match(/^\[(.*)\]$/);
-    if (list) osValues.push(...list[1].split(",").map(unquote));
-    else if (value) osValues.push(unquote(value));
-    else problems.push(`${name}: matrix os is not a one-line list: ${line.trim()}`);
-  }
-  for (const value of osValues) {
-    if (!ubuntuLabel.test(value)) problems.push(`${name}: matrix os ${value} is not an allowed Ubuntu label`);
-  }
-  for (const line of lines) {
-    const runsOn = line.match(runsOnKey);
-    if (runsOn) {
-      const value = unquote(runsOn[2] || "");
-      if (value === "${{ matrix.os }}") {
-        if (!osLines) problems.push(`${name}: runs-on uses matrix.os without a matrix os list`);
-      } else if (!ubuntuLabel.test(value)) {
-        problems.push(`${name}: runs-on ${value || "(block)"} is not an allowed Ubuntu label`);
-      }
+    if (/(^|[\s:[,-])[&*][\w-]/.test(bare) || /^\s*(?:-\s*)?<<\s*:/.test(line)) {
+      problems.push(`${name}: anchor, alias or merge key not checked: ${line.trim()}`);
     }
     const uses = line.match(usesKey);
     const target = uses ? unquote(uses[2] || "") : "";
     if (target.includes(".github/workflows/") && !/@[0-9a-f]{40}$/.test(target)) {
       problems.push(`${name}: reusable workflow ${target} is not pinned to a commit SHA`);
+    }
+  }
+
+  // Split the top-level `jobs:` mapping into jobs. Runner keys anywhere else
+  // count as problems.
+  const jobs = [];
+  let inJobs = false;
+  let jobIndent = -1;
+  let job = null;
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    const indent = line.match(/^ */)[0].length;
+    if (indent === 0) {
+      inJobs = jobsKey.test(line);
+      jobIndent = -1;
+      job = null;
+    } else if (!inJobs || indent < jobIndent) {
+      if (runsOnKey.test(line) || osKey.test(line) || matrixKey.test(line)) {
+        problems.push(`${name}: runner key outside a job: ${line.trim()}`);
+      }
+    } else if (jobIndent < 0 || indent === jobIndent) {
+      jobIndent = indent;
+      job = { name: line.trim().replace(/:.*$/, ""), lines: [] };
+      jobs.push(job);
+    } else {
+      job.lines.push(line);
+    }
+  }
+
+  for (const { name: jobName, lines: jobLines } of jobs) {
+    const where = `${name} job ${jobName}`;
+    const runsOn = [];
+    const osValues = [];
+    let matrix = false;
+    let reusable = false;
+    for (const line of jobLines) {
+      const runsOnLine = line.match(runsOnKey);
+      if (runsOnLine) runsOn.push(unquote(runsOnLine[2] || ""));
+      const matrixLine = line.match(matrixKey);
+      if (matrixLine) {
+        matrix = true;
+        if ((matrixLine[2] || "").trim()) problems.push(`${where}: dynamic or inline matrix not checked: ${line.trim()}`);
+      }
+      const os = line.match(osKey);
+      if (os) {
+        const value = (os[2] || "").trim();
+        const list = value.match(/^\[(.*)\]$/);
+        if (list) osValues.push(...list[1].split(",").map(unquote));
+        else if (value) osValues.push(unquote(value));
+        else problems.push(`${where}: matrix os is not a one-line list: ${line.trim()}`);
+      }
+      const uses = line.match(usesKey);
+      if (uses && unquote(uses[2] || "").includes(".github/workflows/")) reusable = true;
+    }
+    for (const value of osValues) {
+      if (!ubuntuLabel.test(value)) problems.push(`${where}: matrix os ${value} is not an allowed Ubuntu label`);
+    }
+    if (runsOn.length === 0 && !reusable) problems.push(`${where}: no runs-on`);
+    if (runsOn.length > 1) problems.push(`${where}: more than one runs-on`);
+    for (const value of runsOn) {
+      if (value === "${{ matrix.os }}") {
+        if (!matrix || osValues.length === 0) problems.push(`${where}: runs-on uses matrix.os without its own static os list`);
+      } else if (!ubuntuLabel.test(value)) {
+        problems.push(`${where}: runs-on ${value || "(block)"} is not an allowed Ubuntu label`);
+      }
     }
   }
   return problems;
@@ -154,9 +200,9 @@ function fails(result, pattern) {
 // run-state directory does not exist, elsewhere the macOS check stops it.
 const missingRunDir = path.join(root, "no-run-dir");
 let lastRunDir = "";
-function runWorker(trust, fake, runDir = missingRunDir) {
+function runWorker(trust, fake, runDir = missingRunDir, trustBase = "") {
   lastRunDir = runDir;
-  return runGate(["__worker", runDir, trust, "56"], fake);
+  return runGate(["__worker", runDir, trust, trustBase, "56"], fake);
 }
 
 function passedTrust(result) {
@@ -170,6 +216,9 @@ function refusedBeforeCheckout(result, pattern) {
   assert.doesNotMatch(result.ghCalls, /statuses/);
   assert.ok(!fs.existsSync(lastRunDir), "the worker wrote run state");
 }
+
+// Wraps job-level YAML lines (4-space indent) in a workflow with one job.
+const inJob = (body) => `jobs:\n  build:\n${body}`;
 
 const cases = [
   ["verify passes for a green status on the current merge candidate", () => {
@@ -232,13 +281,13 @@ const cases = [
     fails(runGate(["verify", "56"], { ...fork, FAKE_STATUS: status("success") }), /never runs fork code.*recreate the change/);
   }],
   ["the worker refuses a fork PR before it fetches, writes state or posts anything", () => {
-    const result = runWorker("", { FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2` });
+    const result = runWorker("", { FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2 main` });
     refusedBeforeCheckout(result, /comes from someone\/fork.*never runs fork code/);
   }],
   ["the gate has no option to run fork code", () => {
     fails(runGate(["--fork-reviewed", head, "56"], {}), /usage/);
     assert.doesNotMatch(fs.readFileSync(gate, "utf8"), /fork-reviewed/);
-    const trusted = runWorker(head, { FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2` });
+    const trusted = runWorker(head, { FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2 main` });
     refusedBeforeCheckout(trusted, /comes from someone\/fork/);
   }],
   ["maintainer-signed commits pass the trust checks", () => {
@@ -247,7 +296,7 @@ const cases = [
   }],
   ["the same untrusted commit is refused as a fork PR and on a repository branch", () => {
     const imported = commitLines([firstCommit, "true", "brandonwie", "brandonwie"], [head, "true", "someone", "someone"]);
-    const asFork = runWorker("", { FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2`, FAKE_COMMITS: imported });
+    const asFork = runWorker("", { FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2 main`, FAKE_COMMITS: imported });
     refusedBeforeCheckout(asFork, /comes from someone\/fork/);
     const onBranch = runWorker("", { FAKE_COMMITS: imported });
     refusedBeforeCheckout(onBranch, new RegExp(`outside the maintainer provenance rule[\\s\\S]*${head} \\(verified: true, committer: someone`));
@@ -270,16 +319,46 @@ const cases = [
       [[head, "false", "web-flow", "brandonwie"], false],
     ];
     for (const [row, ok] of rule) {
-      const result = runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 1`, FAKE_COMMITS: commitLines(row) });
+      const result = runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 1 main`, FAKE_COMMITS: commitLines(row) });
       if (ok) passedTrust(result);
       else refusedBeforeCheckout(result, /outside the maintainer provenance rule/);
     }
   }],
   ["provenance refuses a commit list that does not match the PR", () => {
-    refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 3` }), /does not match the PR/);
+    refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 3 main` }), /does not match the PR/);
     const wrongLast = commitLines([head, "true", "brandonwie", "brandonwie"], [firstCommit, "true", "brandonwie", "brandonwie"]);
     refusedBeforeCheckout(runWorker("", { FAKE_COMMITS: wrongLast }), /does not match the PR/);
-    refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 251` }), /at most 250/);
+    refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 251 main` }), /at most 250/);
+  }],
+  ["a signed PR head over an untrusted target branch is refused without --trust-candidate", () => {
+    // Every PR commit passes provenance, but the target branch is not the
+    // default branch, so its contents are not vetted.
+    const imported = { FAKE_PR: `${head} imported ${repo} ${repo} ${merge} 2 main`, FAKE_OTHER_BASE: otherBase };
+    const result = runWorker("", imported);
+    refusedBeforeCheckout(result, /targets imported, not the default branch main/);
+    assert.match(result.stderr, new RegExp(`--trust-candidate ${head} ${otherBase} 56`));
+    // --trust-head covers the PR's commits only, not the target.
+    refusedBeforeCheckout(runWorker(head, imported), /targets imported, not the default branch main/);
+    // A repository whose default branch is not main: main is untrusted there.
+    refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 2 trunk` }), /targets main, not the default branch trunk/);
+  }],
+  ["--trust-candidate for the exact head and target tip lets a reviewed candidate through", () => {
+    const untrustedCommits = commitLines([firstCommit, "true", "brandonwie", "brandonwie"], [head, "true", "someone", "someone"]);
+    const imported = { FAKE_PR: `${head} imported ${repo} ${repo} ${merge} 2 main`, FAKE_OTHER_BASE: otherBase };
+    const result = runWorker(head, { ...imported, FAKE_COMMITS: untrustedCommits }, missingRunDir, otherBase);
+    passedTrust(result);
+    assert.match(result.stdout, /--trust-candidate given; running target imported/);
+    refusedBeforeCheckout(runWorker(head, imported, missingRunDir, base), new RegExp(`target imported is at ${otherBase}, not the trusted ${base}`));
+    refusedBeforeCheckout(runWorker(otherMerge, imported, missingRunDir, otherBase), /not the trusted/);
+    const fork = { FAKE_PR: `${head} imported someone/fork ${repo} ${merge} 2 main`, FAKE_OTHER_BASE: otherBase };
+    refusedBeforeCheckout(runWorker(head, fork, missingRunDir, otherBase), /comes from someone\/fork/);
+    fails(runGate(["--trust-candidate", head, otherBase.slice(0, 12), "56"], {}), /full 40-character/);
+    fails(runGate(["--trust-candidate", head, "56"], {}), /usage/);
+  }],
+  ["the worker refuses when it cannot read the default branch", () => {
+    for (const value of ["", " null"]) {
+      refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 2${value}` }), /cannot read the default branch/);
+    }
   }],
   ["an inherited run directory cannot skip the deadline", () => {
     // The public command always takes the bounded path: on macOS it announces
@@ -299,6 +378,7 @@ const cases = [
     }
     assert.deepStrictEqual(fs.readdirSync(runDir), []);
     fails(runGate(["__worker", runDir, "56"], {}), /usage/);
+    fails(runGate(["__worker", runDir, "", "56"], {}), /usage/);
   }],
   ["verify matches a long base branch by its fixed-length ID", () => {
     const longRef = `release/${"x".repeat(60)}`;
@@ -340,22 +420,43 @@ const cases = [
       "single-quoted runs-on key": "    'runs-on': macos-latest\n",
       "quoted key, indirect value": '    "runs-on": ${{ vars.RUNNER }}\n',
       "escaped key": '    "runs\\u002don": ubuntu-latest\n    other: x\n',
-      "flow mapping": "  build: {runs-on: ubuntu-latest}\n",
+      "flow mapping": "    steps: {runs-on: ubuntu-latest}\n",
       "explicit key": "    ? runs-on\n    : ubuntu-latest\n",
       "quoted os key": '        "os": [ubuntu-latest, windows-latest]\n',
       "anchor value": "    runs-on: &r ubuntu-latest\n",
       "quoted reusable key": "    'uses': someone/repo/.github/workflows/x.yml@v1\n",
+      "alias runs-on": "    runs-on: *runner\n",
+      "merge key": "    <<: *defaults\n",
+      "no runs-on": "    steps:\n      - run: true\n",
+      "dynamic matrix": "    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix: ${{ fromJSON(vars.MATRIX) }}\n",
+      "dynamic include": "    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [ubuntu-latest]\n        include: ${{ fromJSON(vars.EXTRA) }}\n",
     };
     // Quoted keys with allowed values are fine: the reader normalizes them.
-    assert.deepStrictEqual(runnerProblems("quoted ok", '    "runs-on": "ubuntu-latest"\n'), []);
+    assert.deepStrictEqual(runnerProblems("quoted ok", inJob('    "runs-on": "ubuntu-latest"\n')), []);
     for (const [name, text] of Object.entries(bad)) {
-      assert.notDeepStrictEqual(runnerProblems(name, text), [], name);
+      assert.notDeepStrictEqual(runnerProblems(name, inJob(text)), [], name);
     }
     const round3 = spawnSync("git", ["show", "b9396f31568f6b9ad0c025f56668c1d7d64c0fe6:.github/workflows/ci.yml"], {
       cwd: repoRoot,
       encoding: "utf8",
     });
     if (round3.status === 0) assert.notDeepStrictEqual(runnerProblems("round 3 ci.yml", round3.stdout), []);
+  }],
+  ["the runner check resolves matrix.os within each job", () => {
+    const staticJob = "  test:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [ubuntu-latest]\n";
+    assert.deepStrictEqual(runnerProblems("one job", `jobs:\n${staticJob}`), []);
+    // A second job takes its matrix from a repository variable: the first
+    // job's static os list must not cover it.
+    const dynamicJob = "  other:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix: ${{ fromJSON(vars.MATRIX) }}\n";
+    const dynamic = runnerProblems("two jobs", `jobs:\n${staticJob}${dynamicJob}`);
+    assert.ok(dynamic.some((problem) => /job other: dynamic or inline matrix/.test(problem)), dynamic.join("\n"));
+    assert.ok(dynamic.some((problem) => /job other: runs-on uses matrix.os without its own static os list/.test(problem)), dynamic.join("\n"));
+    assert.ok(!dynamic.some((problem) => /job test:/.test(problem)), dynamic.join("\n"));
+    // A second job with a static matrix but no os list of its own.
+    const noOs = "  other:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        node: [24]\n";
+    assert.notDeepStrictEqual(runnerProblems("borrowed os", `jobs:\n${staticJob}${noOs}`), []);
+    // A runner key outside the jobs mapping.
+    assert.notDeepStrictEqual(runnerProblems("top level", "on: push\nenv:\n  os: [ubuntu-latest]\n"), []);
   }],
   ["the gate's deadline is no wider than the old hosted job's 360 minutes", () => {
     const script = fs.readFileSync(gate, "utf8");
@@ -365,7 +466,7 @@ const cases = [
     // One deadline around the whole run: the gate restarts itself under it
     // before its first GitHub read.
     const wrap = script.indexOf(
-      'node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" __worker "$run_dir" "$trust_head" "$pr"',
+      'node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" __worker "$run_dir" "$trust_head" "$trust_base" "$pr"',
     );
     assert.ok(wrap > 0, "the run is not wrapped in the deadline");
     assert.ok(wrap < script.indexOf("read_candidate || die"), "the deadline starts after the first GitHub read");

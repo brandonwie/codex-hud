@@ -52,6 +52,15 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     too. After reviewing such a PR's diff, run
     `sh scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>`; the flag covers
     that exact head only.
+  - Target branch: the merge commit also holds the target branch's contents,
+    and the gate trusts only the repository's default branch (`main`). For a
+    pull request into any other branch it refuses before checkout. Review the
+    whole merge candidate without checking it out: the target against `main`
+    (`gh api repos/{owner}/{repo}/compare/main...<base-sha>`) and the pull
+    request's diff (`gh pr diff <pr>`). Then run
+    `sh scripts/ci-mac-gate.sh --trust-candidate <head-sha> <base-sha> <pr>`;
+    the flag covers that exact head and target tip only, and also covers
+    provenance.
   - Fork pull requests get the Linux CI job only, and their macOS leg stays
     unchecked: `verify` fails for them. To check macOS, a maintainer recreates
     the change on a branch of this repository and runs the gate on that pull
@@ -72,7 +81,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 | `npm test` | Build `codex-hud` and run config, installer, version, pre-push hook, Mac gate, golden, README, and site checks. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
 | `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
-| `sh scripts/ci-mac-gate.sh [verify \| --trust-head <sha>] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |
+| `sh scripts/ci-mac-gate.sh [verify \| --trust-head <sha> \| --trust-candidate <head> <base>] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |
 | `npm run check:i18n` | Check localized README heading and code-block skeletons against `README.md`. |
 | `npm run hud` | Run the built Rust HUD renderer directly. |
 | `npm run build:rust` | Build the release Rust renderer. |
