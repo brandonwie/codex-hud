@@ -253,7 +253,8 @@ case $origin_url in
   "git@$trusted_host:$trusted_repo" | "git@$trusted_host:$trusted_repo.git" | \
     "ssh://git@$trusted_host/$trusted_repo" | "ssh://git@$trusted_host/$trusted_repo.git" | \
     "https://$trusted_host/$trusted_repo" | "$trusted_url") ;;
-  *) die "this clone's origin is $origin_url, not $trusted_repo on $trusted_host; run the gate from a clone of $trusted_url" ;;
+  # Never print the rejected URL: it can hold a user name and token.
+  *) die "this clone's origin (remote.origin.url) is not $trusted_repo on $trusted_host; run the gate from a clone of $trusted_url" ;;
 esac
 [ "$head_repo" = "$base_repo" ] || die "$fork_note"
 if [ -n "$trust_head" ] && [ "$trust_head" != "$head" ]; then
@@ -293,14 +294,25 @@ src="$tmp/src"
 # before anything is checked out. Git config (url.<base>.insteadOf) can rewrite
 # the URL, so resolve it in the same repository and config the fetch uses and
 # refuse a rewrite before connecting. Redirects stay limited to the first
-# request.
+# request: the limit is set for the exact URL (a generic http.followRedirects
+# loses to a URL-specific setting), and Git's effective value for that URL must
+# be "initial". Refusals never print a rewritten URL or a config key that holds
+# one: either can carry a user name and token.
+redirect_limit="http.$trusted_url.followRedirects=initial"
 git init -q "$src" || die "git init failed"
 fetch_url=$(git -C "$src" ls-remote --get-url "$trusted_url") || die "cannot resolve the fetch URL"
 case $fetch_url in
   "https://$trusted_host/$trusted_repo" | "$trusted_url") ;;
-  *) die "Git rewrites $trusted_url to $fetch_url (url.<base>.insteadOf in your Git config); the gate fetches only from $trusted_url. Remove the rewrite and rerun" ;;
+  *)
+    rewrite_sources=$(git -C "$src" config --show-origin --get-regexp '^url\..*\.insteadof$' 2>/dev/null |
+      cut -f1 | sort -u | tr '\n' ' ')
+    die "Git rewrites $trusted_url with a url.<base>.insteadOf rule (defined in: ${rewrite_sources:-your Git config}); the gate fetches only from $trusted_url. Remove the rule and rerun"
+    ;;
 esac
-git -C "$src" -c http.followRedirects=initial fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" ||
+redirects=$(git -C "$src" -c "$redirect_limit" config --get-urlmatch http.followRedirects "$trusted_url")
+[ "$redirects" = initial ] ||
+  die "Git's effective http.followRedirects for $trusted_url is not 'initial'; the gate allows redirects on the first request only. Remove the overriding http.<url>.followRedirects setting and rerun"
+git -C "$src" -c "$redirect_limit" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" ||
   die "cannot fetch refs/pull/$pr/merge; the PR may have a merge conflict"
 fetched=$(git -C "$src" rev-parse --verify -q 'FETCH_HEAD^{commit}') || die "cannot resolve the fetched merge commit"
 parents=$(git -C "$src" cat-file -p "$fetched" | sed -n 's/^parent //p' | tr '\n' ' ')

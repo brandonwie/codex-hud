@@ -49,8 +49,10 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     repository (`GH_REPO`, `GH_HOST` and the clone's defaults are ignored), the
     merge ref is fetched from its URL (refused when your Git config rewrites
     that URL with `url.<base>.insteadOf`; redirects limited to the first
-    request), and the fetched merge commit and both parents are checked before
-    checkout. Before any fetch it refuses a clone
+    request for that exact URL, and refused when Git's effective
+    `http.followRedirects` for it is not `initial`), and the fetched merge
+    commit and both parents are checked before checkout. Refusals never print
+    a rejected origin or rewritten URL, since either can hold a token. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
     and a fork PR. It also refuses a branch PR unless every commit has a
     verified signature from a committer listed in

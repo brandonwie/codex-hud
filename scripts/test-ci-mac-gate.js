@@ -264,6 +264,7 @@ function fetchHarness() {
 echo "$*" >> "$FAKE_GIT_CALLS"
 if [ "$1" = -C ] && { [ "$3" = fetch ] || [ "$5" = fetch ]; }; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
 if [ "$1" = -C ] && [ "$3" = checkout ]; then echo "fake git: checkout refused" >&2; exit 1; fi
+if [ "$1" = -C ] && [ "$5" = config ] && [ -n "\${FAKE_REDIRECTS:-}" ]; then echo "$FAKE_REDIRECTS"; exit 0; fi
 exec "${realGit}" "$@"
 `,
       { mode: 0o755 },
@@ -457,7 +458,14 @@ const cases = [
   ["the worker refuses a clone whose origin is another repository", () => {
     const forkClone = gateClone("clone-fork", "git@github.com:someone/codex-hud.git");
     const result = runWorker("", {}, missingRunDir, "", { gatePath: forkClone });
-    refusedBeforeCheckout(result, /origin is git@github.com:someone\/codex-hud.git, not brandonwie\/codex-hud/);
+    refusedBeforeCheckout(result, /origin \(remote\.origin\.url\) is not brandonwie\/codex-hud on github\.com/);
+    assert.doesNotMatch(result.stdout + result.stderr, /someone/);
+    // A credential in a rejected origin never reaches the output.
+    const secret = "SYNTHETIC-ORIGIN-TOKEN-7f3a";
+    const tokenClone = gateClone("clone-token", `https://x-access-token:${secret}@github.com/someone/codex-hud.git`);
+    const leaked = runWorker("", {}, missingRunDir, "", { gatePath: tokenClone });
+    refusedBeforeCheckout(leaked, /origin \(remote\.origin\.url\) is not/);
+    assert.ok(!(leaked.stdout + leaked.stderr).includes(secret), "the origin credential reached the output");
     for (const [name, origin] of [["clone-https", trustedUrl], ["clone-https-bare", "https://github.com/brandonwie/codex-hud"]]) {
       passedTrust(runWorker("", {}, missingRunDir, "", { gatePath: gateClone(name, origin) }));
     }
@@ -469,7 +477,9 @@ const cases = [
     const stale = runWorker("", env, runDir, "", { pathPrefix: prefix });
     fails(stale, /merge commit is not main \+ PR head yet/);
     const git = fs.readFileSync(gitCalls, "utf8");
-    assert.match(git, new RegExp(`-c http\\.followRedirects=initial fetch -q --depth=1 ${trustedUrl.replace(/\./g, "\\.")} refs/pull/56/merge`));
+    const limit = `-c http\\.${trustedUrl.replace(/\./g, "\\.")}\\.followRedirects=initial`;
+    assert.match(git, new RegExp(`${limit} config --get-urlmatch http\\.followRedirects`));
+    assert.match(git, new RegExp(`${limit} fetch -q --depth=1 ${trustedUrl.replace(/\./g, "\\.")} refs/pull/56/merge`));
     assert.doesNotMatch(git, /checkout/);
     assert.doesNotMatch(stale.ghCalls, /statuses/);
     // The same fetch with a matching PR passes the checks and only then checks out.
@@ -487,17 +497,46 @@ const cases = [
     const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
     // The clone's origin is the approved SSH URL; the inherited global config
     // rewrites the HTTPS URL the gate fetches from.
+    // The rewrite target carries a synthetic credential that must never reach
+    // the output; the refusal names only the trusted URL and the rule's source.
+    const secret = "SYNTHETIC-REWRITE-TOKEN-91c2";
     const env = {
       FAKE_GIT_CALLS: gitCalls,
       FAKE_FETCH_REPO: fixture.dir,
-      ...fetchConfig('[url "https://evil.example/"]\n\tinsteadOf = https://github.com/\n'),
+      ...fetchConfig(`[url "https://user:${secret}@evil.example/"]\n\tinsteadOf = https://github.com/\n`),
     };
     const result = runWorker("", env, runDir, "", { pathPrefix: prefix });
-    fails(result, /rewrites https:\/\/github\.com\/brandonwie\/codex-hud\.git to https:\/\/evil\.example\/brandonwie\/codex-hud\.git/);
+    fails(result, /rewrites https:\/\/github\.com\/brandonwie\/codex-hud\.git with a url\.<base>\.insteadOf rule \(defined in: file:.*fetch-gitconfig/);
+    const output = result.stdout + result.stderr;
+    assert.ok(!output.includes(secret), "the rewrite credential reached the output");
+    assert.doesNotMatch(output, /evil\.example/);
     const git = fs.readFileSync(gitCalls, "utf8");
     assert.match(git, /ls-remote --get-url/);
     assert.doesNotMatch(git, /fetch|checkout/);
     assert.doesNotMatch(result.ghCalls, /statuses/);
+  }],
+  ["a URL-specific redirect setting cannot widen the fetch's redirect limit", () => {
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const conflicting = fetchConfig(`[http "${trustedUrl}"]\n\tfollowRedirects = true\n`);
+    // Git prefers the URL-specific true over a generic command-line limit, and
+    // the exact-URL limit the gate sets over the inherited one.
+    const urlmatch = (...extra) =>
+      spawnSync(realGit, ["-C", fixture.dir, ...extra, "config", "--get-urlmatch", "http.followRedirects", trustedUrl], {
+        encoding: "utf8",
+        env: { ...process.env, ...conflicting },
+      }).stdout.trim();
+    assert.strictEqual(urlmatch("-c", "http.followRedirects=initial"), "true");
+    assert.strictEqual(urlmatch("-c", `http.${trustedUrl}.followRedirects=initial`), "initial");
+    // With that inherited setting the gate's effective limit is initial: it
+    // fetches and reaches the stale-merge check.
+    const env = { FAKE_GIT_CALLS: gitCalls, FAKE_FETCH_REPO: fixture.dir, ...conflicting };
+    fails(runWorker("", env, runDir, "", { pathPrefix: prefix }), /merge commit is not main \+ PR head yet/);
+    // If Git still resolved another value, the gate refuses before fetching.
+    fs.rmSync(gitCalls, { force: true });
+    const widened = runWorker("", { ...env, FAKE_REDIRECTS: "true" }, runDir, "", { pathPrefix: prefix });
+    fails(widened, /effective http\.followRedirects for https:\/\/github\.com\/brandonwie\/codex-hud\.git is not 'initial'/);
+    assert.doesNotMatch(fs.readFileSync(gitCalls, "utf8"), /fetch|checkout/);
+    assert.doesNotMatch(widened.ghCalls, /statuses/);
   }],
   ["an inherited run directory cannot skip the deadline", () => {
     // The public command always takes the bounded path: on macOS it announces
