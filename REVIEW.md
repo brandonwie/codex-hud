@@ -141,10 +141,11 @@ merge semantics are product changes; review them across both surfaces.
 `cargo fmt --manifest-path rust/Cargo.toml -- --check`,
 `cargo clippy --manifest-path rust/Cargo.toml -- -D warnings`, `npm test` and
 `npm run test:rust`. CI (`.github/workflows/ci.yml`) runs it on Ubuntu for every
-pull request, and on Ubuntu and macOS for a fork pull request or a manual run.
-The macOS leg of a pull request from a branch of this repository runs on a Mac:
-`sh scripts/ci-mac-gate.sh <pr>` checks the PR's merge commit and posts a
-`Test (macos-latest)` commit status, the hosted macOS job's name.
+pull request, fork pull requests included, and for a manual run. No workflow
+uses a GitHub-hosted macOS runner. The macOS leg runs only on a Mac:
+`sh scripts/ci-mac-gate.sh <pr>` checks the PR's merge commit and posts the
+`ci-local / macOS` commit status; a fork PR needs `--fork-reviewed <head-sha>`
+after a maintainer has read its code.
 `sh scripts/ci-mac-gate.sh verify <pr>` must pass before a merge. A green Linux
 check alone does not cover macOS. `release.yml` repeats the checks before a
 release, the Husky pre-commit hook runs `npm test`, and the pre-push hook runs

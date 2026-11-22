@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Runs scripts/ci-mac-gate.sh with a fake `gh` on PATH, so the verify mode and
-// the fork refusal are checked without GitHub and without running any checks.
+// the fork rules are checked without GitHub and without running any checks.
 
 const assert = require("assert");
 const fs = require("fs");
@@ -27,7 +27,6 @@ fs.writeFileSync(
 echo "$*" >> "$FAKE_GH_CALLS"
 case "$*" in
   *"/statuses"*) printf '%s\\n' "$FAKE_STATUS" ;;
-  *"/check-runs"*) printf '%s\\n' "$FAKE_CHECK" ;;
   *"/git/ref/heads/main "*) printf '%s\\n' "$FAKE_BASE" ;;
   *"/git/ref/heads/"*) printf '%s\\n' "$FAKE_OTHER_BASE" ;;
   *"/pulls/"*) printf '%s\\n' "$FAKE_PR" ;;
@@ -57,7 +56,6 @@ function runGate(args, fake) {
       FAKE_BASE: base,
       FAKE_OTHER_BASE: otherBase,
       FAKE_STATUS: "null null",
-      FAKE_CHECK: "null",
       ...fake,
     },
     encoding: "utf8",
@@ -107,31 +105,45 @@ const cases = [
   ["verify fails when GitHub has no merge commit for the PR", () => {
     fails(runGate(["verify", "56"], { FAKE_PR: `${head} main ${repo} ${repo} null` }), /no merge commit/);
   }],
-  ["verify passes a fork PR only on a green hosted macOS job", () => {
+  ["verify treats a fork PR like any PR: only the gate status counts", () => {
     const fork = { FAKE_PR: `${head} main someone/fork ${repo} ${merge}` };
-    const green = runGate(["verify", "56"], { ...fork, FAKE_CHECK: "success" });
+    const green = runGate(["verify", "56"], { ...fork, FAKE_STATUS: status("success") });
     assert.strictEqual(green.status, 0, green.stderr);
-    assert.match(green.stdout, /hosted macOS job/);
-    fails(runGate(["verify", "56"], { ...fork, FAKE_CHECK: "failure" }), /is failure/);
-    fails(runGate(["verify", "56"], { ...fork, FAKE_CHECK: "null" }), /is null/);
-    fails(runGate(["verify", "56"], { ...fork, FAKE_CHECK: "" }), /is missing/);
+    fails(runGate(["verify", "56"], fork), /has no macOS status/);
+    assert.doesNotMatch(green.ghCalls, /check-runs/);
   }],
-  ["run refuses a fork PR before it fetches or posts anything", () => {
+  ["run refuses a fork PR without a reviewed head, before it fetches or posts anything", () => {
     const result = runGate(["56"], { FAKE_PR: `${head} main someone/fork ${repo} ${merge}` });
-    fails(result, /comes from someone\/fork/);
+    fails(result, new RegExp(`comes from someone/fork.*--fork-reviewed ${head} 56`));
     assert.doesNotMatch(result.ghCalls, /statuses/);
+  }],
+  ["run refuses when the reviewed head is not the PR head", () => {
+    const result = runGate(["--fork-reviewed", otherMerge, "56"], { FAKE_PR: `${head} main someone/fork ${repo} ${merge}` });
+    fails(result, /not the reviewed/);
+    assert.doesNotMatch(result.ghCalls, /statuses/);
+  }],
+  ["--fork-reviewed needs a full SHA and a PR number", () => {
+    for (const args of [["--fork-reviewed", head.slice(0, 12), "56"], ["--fork-reviewed", "XYZ".repeat(13) + "x", "56"], ["--fork-reviewed", head]]) {
+      const result = runGate(args, {});
+      fails(result);
+      assert.strictEqual(result.ghCalls, "", args.join(" "));
+    }
   }],
   ["a PR number that is not a number is a usage error", () => {
     const result = runGate(["verify", "abc"], {});
     fails(result, /usage/);
     assert.strictEqual(result.ghCalls, "");
   }],
-  ["the gate posts under the hosted macOS job's name", () => {
-    const workflow = fs.readFileSync(path.join(repoRoot, ".github", "workflows", "ci.yml"), "utf8");
-    assert.match(workflow, /^ {4}name: Test \(\$\{\{ matrix\.os \}\}\)$/m);
-    assert.match(workflow, /"macos-latest"/);
-    const script = fs.readFileSync(gate, "utf8");
-    assert.match(script, /^context="Test \(macos-latest\)"$/m);
+  ["no workflow can start a GitHub-hosted macOS runner", () => {
+    const dir = path.join(repoRoot, ".github", "workflows");
+    for (const file of fs.readdirSync(dir).filter((name) => /\.ya?ml$/.test(name))) {
+      const text = fs.readFileSync(path.join(dir, file), "utf8");
+      assert.doesNotMatch(text, /macos-[a-z0-9]/i, `${file} names a macOS runner`);
+      for (const line of text.split("\n").filter((l) => /^\s*(runs-on|os):/.test(l))) {
+        assert.doesNotMatch(line, /mac/i, `${file}: ${line.trim()}`);
+      }
+    }
+    assert.match(fs.readFileSync(gate, "utf8"), /^context="ci-local \/ macOS"$/m);
   }],
 ];
 

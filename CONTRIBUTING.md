@@ -24,11 +24,10 @@ matching heading and code-block skeletons across every translation.
 `npm test` and `npm run test:rust`. It runs every check and lists each one that
 failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 
-- GitHub runs it on Linux for each pull request (`.github/workflows/ci.yml`).
-- For a pull request from a fork, GitHub also runs the macOS leg, because the
-  Mac gate below does not run untrusted code.
-- For a pull request from a branch of this repository, the macOS leg runs on a
-  Mac, in two steps:
+- GitHub runs it on Linux for each pull request, fork pull requests included,
+  and for a manual run (`.github/workflows/ci.yml`). No workflow uses a
+  GitHub-hosted macOS runner.
+- The macOS leg runs only on a Mac, in two steps:
   - Early feedback: after `npm install` (run it in each clone or worktree, since
     it installs the hooks), `.husky/pre-push` runs the script at low priority
     (`nice -n 10`). The hook stops the push when `git status` fails, the working
@@ -36,18 +35,18 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
   - Merge gate: after the push, `sh scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
     (`npm ci`, then the script). It requires the Node major that `ci.yml` uses
-    and the current Rust stable with rustfmt and clippy. It posts a commit
-    status on the PR head under the hosted macOS job's name,
-    `Test (macos-latest)`, so one required check covers both routes: pending
-    while it runs, then success or failure with the full merge and base SHAs,
-    or error when the base, the target branch or the merge commit changed during
-    the run. It runs the PR's code with your account's access, so it refuses
-    fork PRs.
-- Before a merge, `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0. For a
-  branch of this repository it needs a green gate status for the PR's current
-  merge commit and base tip. For a fork PR it needs a green hosted
-  `Test (macos-latest)` job.
-- A manual CI run (`workflow_dispatch`) checks both Linux and macOS on GitHub.
+    and the current Rust stable with rustfmt and clippy. It posts the commit
+    status `ci-local / macOS` on the PR head: pending while it runs, then
+    success or failure with the full merge and base SHAs, or error when the
+    base, the target branch or the merge commit changed during the run.
+  - Fork pull requests: the gate runs the PR's code with your account's access,
+    so it refuses a fork PR until a maintainer has read the PR's code. Then run
+    `sh scripts/ci-mac-gate.sh --fork-reviewed <head-sha> <pr>` with the head
+    SHA you read; the gate refuses when the PR head differs. Until then the
+    fork PR has only the Linux CI result.
+- Before a merge, `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0, for fork
+  and branch PRs alike. It needs a green `ci-local / macOS` status for the PR's
+  current merge commit and base tip.
 
 ## Maintainer scripts
 
@@ -56,7 +55,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 | `npm test` | Build `codex-hud` and run config, installer, version, pre-push hook, Mac gate, golden, README, and site checks. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
 | `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
-| `sh scripts/ci-mac-gate.sh [verify] <pr>` | Check a pull request's merge commit on macOS and post the `Test (macos-latest)` status, or verify the PR's macOS result before a merge. |
+| `sh scripts/ci-mac-gate.sh [verify \| --fork-reviewed <sha>] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |
 | `npm run check:i18n` | Check localized README heading and code-block skeletons against `README.md`. |
 | `npm run hud` | Run the built Rust HUD renderer directly. |
 | `npm run build:rust` | Build the release Rust renderer. |

@@ -3,20 +3,23 @@
 # the same checks on a Mac and records the result on the pull request.
 #
 #   sh scripts/ci-mac-gate.sh <pr>         check the PR on this Mac, post the status
+#   sh scripts/ci-mac-gate.sh --fork-reviewed <head-sha> <pr>
+#                                          same, for a fork PR whose code you
+#                                          reviewed at exactly <head-sha>
 #   sh scripts/ci-mac-gate.sh verify <pr>  exit 0 only when the PR's current merge
 #                                          candidate has a green macOS result
 #
-# Trust boundary: the run mode executes the PR's code (npm lifecycle scripts and
-# tests) with this account's access. It only checks PRs whose branch lives in
-# the base repository, which only people with push access can write. Fork PRs
-# get the hosted macOS job in .github/workflows/ci.yml instead.
+# This gate is the only macOS check: no workflow uses a GitHub-hosted macOS
+# runner (Brandon, 2026-11-22).
 #
-# One macOS result name: the gate posts its commit status under the name of the
-# hosted macOS job, "Test (macos-latest)". A required check with that name is met
-# by the gate for same-repository PRs and by the hosted job for fork PRs.
+# Trust boundary: the run mode executes the PR's code (npm lifecycle scripts and
+# tests) with this account's access. Without a flag it only checks PRs whose
+# branch lives in the base repository, which only people with push access can
+# write. A fork PR needs --fork-reviewed with the head SHA a maintainer read;
+# the gate refuses when the PR head differs from it.
 #
 # The run mode checks GitHub's merge commit for the PR (refs/pull/<pr>/merge,
-# the commit the hosted job checked out) in a clean temporary checkout. It
+# the commit the old hosted job checked out) in a clean temporary checkout. It
 # matches the old hosted job: the Node major set in ci.yml, the current Rust
 # stable with rustfmt and clippy, `npm ci`, then scripts/ci-local.sh, at nice 10.
 # It posts pending while it runs, then success or failure with the full merge
@@ -24,7 +27,7 @@
 # base moved), it posts error or nothing, so the run must repeat.
 set -u
 
-context="Test (macos-latest)"
+context="ci-local / macOS"
 rust_channel_url="https://static.rust-lang.org/dist/channel-rust-stable.toml"
 
 die() {
@@ -42,14 +45,27 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 
 cd "$(dirname "$0")/.." || exit 1
 
+usage="usage: sh scripts/ci-mac-gate.sh [verify | --fork-reviewed <head-sha>] <pr-number>"
 mode=run
-if [ "${1:-}" = verify ]; then
-  mode=verify
-  shift
-fi
+reviewed_head=
+case ${1:-} in
+  verify)
+    mode=verify
+    shift
+    ;;
+  --fork-reviewed)
+    [ $# -ge 3 ] || die "$usage"
+    reviewed_head=$2
+    shift 2
+    case $reviewed_head in
+      *[!0-9a-f]*) die "--fork-reviewed needs the full 40-character head SHA" ;;
+    esac
+    [ ${#reviewed_head} -eq 40 ] || die "--fork-reviewed needs the full 40-character head SHA"
+    ;;
+esac
 pr=${1:-}
 case $pr in
-  '' | *[!0-9]*) die "usage: sh scripts/ci-mac-gate.sh [verify] <pr-number>" ;;
+  '' | *[!0-9]*) die "$usage" ;;
 esac
 command -v gh >/dev/null 2>&1 || die "gh is required"
 
@@ -76,15 +92,6 @@ case $merge in
 esac
 
 if [ "$mode" = verify ]; then
-  if [ "$head_repo" != "$base_repo" ]; then
-    conclusion=$(gh api "repos/{owner}/{repo}/commits/$head/check-runs" \
-      --jq "[.check_runs[] | select(.name == \"$context\")][0].conclusion") ||
-      die "cannot read checks for $head"
-    [ "$conclusion" = success ] ||
-      die "fork PR $pr head $(short "$head"): hosted \"$context\" is ${conclusion:-missing}"
-    echo "ci-mac-gate: fork PR $pr head $(short "$head") is green on the hosted macOS job"
-    exit 0
-  fi
   latest=$(gh api "repos/{owner}/{repo}/commits/$head/statuses" \
     --jq "[.[] | select(.context == \"$context\")][0] | \"\(.state) \(.description)\"") ||
     die "cannot read statuses for $head"
@@ -99,8 +106,12 @@ if [ "$mode" = verify ]; then
   esac
 fi
 
-[ "$head_repo" = "$base_repo" ] ||
-  die "PR $pr comes from $head_repo, not $base_repo; the gate runs only branches of $base_repo (fork PRs use the hosted macOS job)"
+if [ -n "$reviewed_head" ] && [ "$reviewed_head" != "$head" ]; then
+  die "PR $pr head is $head, not the reviewed $reviewed_head; review the new commits first"
+fi
+if [ "$head_repo" != "$base_repo" ] && [ -z "$reviewed_head" ]; then
+  die "PR $pr comes from $head_repo, not $base_repo. The gate runs its code with your access: review the PR at head $head, then run: sh scripts/ci-mac-gate.sh --fork-reviewed $head $pr"
+fi
 [ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
 candidate="$head $base_name $base $merge"
 
