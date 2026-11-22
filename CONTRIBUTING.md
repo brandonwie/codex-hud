@@ -25,24 +25,31 @@ matching heading and code-block skeletons across every translation.
 failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 
 - GitHub runs it on Linux for each pull request (`.github/workflows/ci.yml`).
-- The macOS leg runs on a Mac, in two steps:
+- For a pull request from a fork, GitHub also runs the macOS leg, because the
+  Mac gate below does not run untrusted code.
+- For a pull request from a branch of this repository, the macOS leg runs on a
+  Mac, in two steps:
   - Early feedback: after `npm install` (run it in each clone or worktree, since
     it installs the hooks), `.husky/pre-push` runs the script at low priority
     (`nice -n 10`). The hook stops the push when `git status` fails, the working
     tree is dirty or the pushed ref is not `HEAD`.
   - Merge gate: after the push, `sh scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
-    (`npm ci`, then the script), with the Node major that `ci.yml` uses. It
-    posts the commit status `ci-local / macOS` on the PR head. Before a merge,
+    (`npm ci`, then the script). It requires the Node major that `ci.yml` uses
+    and the current Rust stable with rustfmt and clippy. It posts the commit
+    status `ci-local / macOS` on the PR head: pending while it runs, then
+    success or failure with the full merge and base SHAs, or error when the base
+    branch moved during the run. It runs the PR's code with your account's
+    access, so it refuses fork PRs. Before a merge,
     `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0; it fails when the
-    status is missing or red, or when the base branch moved since the run.
+    status is missing, not green, or for another base commit.
 - A manual CI run (`workflow_dispatch`) checks both Linux and macOS on GitHub.
 
 ## Maintainer scripts
 
 | Command | Purpose |
 | ------- | ------- |
-| `npm test` | Build `codex-hud` and run config, installer, version, pre-push hook, golden, README, and site checks. |
+| `npm test` | Build `codex-hud` and run config, installer, version, pre-push hook, Mac gate, golden, README, and site checks. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
 | `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
 | `sh scripts/ci-mac-gate.sh [verify] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |

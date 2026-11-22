@@ -18,8 +18,13 @@ process.on("exit", () => {
 
 const zero = "0".repeat(40);
 const marker = path.join(root, "checks-ran");
+
+// npm test runs inside the pre-commit hook, where Git exports GIT_INDEX_FILE and
+// other repository variables. Drop every GIT_* variable so the fixture's git
+// commands never touch the caller's repository or index.
+const parentEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
 const env = {
-  ...process.env,
+  ...parentEnv,
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
   GIT_AUTHOR_NAME: "test",
@@ -118,6 +123,33 @@ test("a delete-only push skips the checks", () => {
   assert.strictEqual(result.status, 0, result.stderr);
   assert.ok(!result.ran, "checks ran for a delete-only push");
 });
+
+// Runs this file again, once, with Git variables that point at a sentinel
+// repository, as a commit hook would. The sentinel's index and HEAD must not change.
+const childFlag = "CODEX_HUD_PRE_PUSH_TEST_CHILD";
+if (!process.env[childFlag]) {
+  test("inherited Git variables leave the caller's repository alone", () => {
+    const sentinel = makeRepo("sentinel");
+    fs.writeFileSync(path.join(sentinel, "staged.txt"), "staged\n");
+    git(sentinel, ["add", "staged.txt"]);
+    const indexPath = path.join(sentinel, ".git", "index");
+    const indexBefore = fs.readFileSync(indexPath);
+    const headBefore = git(sentinel, ["rev-parse", "HEAD"]);
+    const child = spawnSync(process.execPath, [__filename], {
+      env: {
+        ...process.env,
+        [childFlag]: "1",
+        GIT_DIR: path.join(sentinel, ".git"),
+        GIT_WORK_TREE: sentinel,
+        GIT_INDEX_FILE: indexPath,
+      },
+      encoding: "utf8",
+    });
+    assert.strictEqual(child.status, 0, child.stdout + child.stderr);
+    assert.ok(fs.readFileSync(indexPath).equals(indexBefore), "the sentinel index changed");
+    assert.strictEqual(git(sentinel, ["rev-parse", "HEAD"]), headBefore, "the sentinel HEAD moved");
+  });
+}
 
 for (const [name, fn] of cases) {
   fn();
