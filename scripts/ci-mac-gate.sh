@@ -21,13 +21,16 @@
 # The run mode checks GitHub's merge commit for the PR (refs/pull/<pr>/merge,
 # the commit the old hosted job checked out) in a clean temporary checkout. It
 # matches the old hosted job: the Node major set in ci.yml, the current Rust
-# stable with rustfmt and clippy, `npm ci`, then scripts/ci-local.sh, at nice 10.
-# It posts pending while it runs, then success or failure with the full merge
-# and base SHAs. If the candidate changed during the run (new head, retarget,
-# base moved), it posts error or nothing, so the run must repeat.
+# stable with rustfmt and clippy, `npm ci`, then scripts/ci-local.sh, at nice 10,
+# within the old hosted job's deadline (GitHub's default 360 minutes; a timeout
+# is a failure). It posts pending while it runs, then success or failure with
+# the record "merge <sha> base <sha> ref <base-branch>". If the candidate changed
+# during the run (new head, retarget, base moved), it posts error or nothing,
+# so the run must repeat. verify compares that record with the PR's current one.
 set -u
 
 context="ci-local / macOS"
+deadline_seconds=21600
 rust_channel_url="https://static.rust-lang.org/dist/channel-rust-stable.toml"
 
 die() {
@@ -90,13 +93,15 @@ read_candidate || die "cannot read PR $pr"
 case $merge in
   '' | null) die "PR $pr has no merge commit; resolve its merge conflict first" ;;
 esac
+record="merge $merge base $base ref $base_name"
+[ ${#record} -le 140 ] || die "base branch name $base_name is too long for the 140-character status record"
 
 if [ "$mode" = verify ]; then
   latest=$(gh api "repos/{owner}/{repo}/commits/$head/statuses" \
     --jq "[.[] | select(.context == \"$context\")][0] | \"\(.state) \(.description)\"") ||
     die "cannot read statuses for $head"
   case $latest in
-    "success merge $merge base $base node "*)
+    "success $record" | "success $record "*)
       echo "ci-mac-gate: PR $pr is green on macOS for merge $(short "$merge") ($base_name $(short "$base"))"
       exit 0
       ;;
@@ -153,11 +158,19 @@ post pending "running on merge $(short "$merge") base $(short "$base")" || die "
 
 start=$(date +%s)
 state=success
-(cd "$src" && nice -n 10 npm ci) || state=failure
-if [ "$state" = success ]; then
-  nice -n 10 sh "$src/scripts/ci-local.sh" || state=failure
+note=
+# shellcheck disable=SC2016 # $1 expands in the inner shell.
+node scripts/run-with-deadline.js "$deadline_seconds" \
+  sh -c 'cd "$1" && nice -n 10 npm ci && nice -n 10 sh "$1/scripts/ci-local.sh"' _ "$src"
+rc=$?
+if [ "$rc" -eq 124 ]; then
+  state=failure
+  note="timeout $((deadline_seconds / 60))m"
+elif [ "$rc" -ne 0 ]; then
+  state=failure
 fi
 elapsed=$(($(date +%s) - start))
+echo "ci-mac-gate: checks $state in ${elapsed}s${note:+ ($note)}"
 
 tested_head=$head
 read_candidate || die "cannot read PR $pr after the run; status left pending"
@@ -167,7 +180,13 @@ if [ "$head $base_name $base $merge" != "$candidate" ]; then
   die "PR $pr candidate changed during the run (was: $candidate; now: $head $base_name $base $merge); posted error, rerun"
 fi
 
-description="merge $merge base $base node $node_version rustc $rustc_version ${elapsed}s"
+# The record comes first and stays whole; extras are added only while the
+# description fits GitHub's 140 characters.
+description=$record
+for extra in "$note" "node $node_version" "rustc $rustc_version" "${elapsed}s"; do
+  [ -n "$extra" ] || continue
+  [ $((${#description} + 1 + ${#extra})) -le 140 ] && description="$description $extra"
+done
 post "$state" "$description" || die "checks finished ($state) but posting the status failed"
 echo "ci-mac-gate: posted \"$context\" = $state on $(short "$head"): $description"
 [ "$state" = success ]

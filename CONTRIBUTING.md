@@ -35,18 +35,20 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
   - Merge gate: after the push, `sh scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
     (`npm ci`, then the script). It requires the Node major that `ci.yml` uses
-    and the current Rust stable with rustfmt and clippy. It posts the commit
-    status `ci-local / macOS` on the PR head: pending while it runs, then
-    success or failure with the full merge and base SHAs, or error when the
-    base, the target branch or the merge commit changed during the run.
+    and the current Rust stable with rustfmt and clippy. `npm ci` and the
+    checks together get the old hosted job's deadline, 360 minutes; a timeout
+    is a failure. It posts the commit status `ci-local / macOS` on the PR head:
+    pending while it runs, then success or failure with the record
+    `merge <sha> base <sha> ref <base-branch>`, or error when the base, the
+    target branch or the merge commit changed during the run.
   - Fork pull requests: the gate runs the PR's code with your account's access,
     so it refuses a fork PR until a maintainer has read the PR's code. Then run
     `sh scripts/ci-mac-gate.sh --fork-reviewed <head-sha> <pr>` with the head
     SHA you read; the gate refuses when the PR head differs. Until then the
     fork PR has only the Linux CI result.
 - Before a merge, `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0, for fork
-  and branch PRs alike. It needs a green `ci-local / macOS` status for the PR's
-  current merge commit and base tip.
+  and branch PRs alike. It needs a green `ci-local / macOS` status whose record
+  matches the PR's current merge commit, base tip and base branch.
 
 ## Maintainer scripts
 

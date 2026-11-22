@@ -11,6 +11,7 @@ const { spawnSync } = require("child_process");
 
 const repoRoot = path.resolve(__dirname, "..");
 const gate = path.join(repoRoot, "scripts", "ci-mac-gate.sh");
+const deadlineRunner = path.join(repoRoot, "scripts", "run-with-deadline.js");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-mac-gate-test-"));
 process.on("exit", () => {
   fs.rmSync(root, { recursive: true, force: true });
@@ -42,7 +43,7 @@ const otherBase = "c".repeat(40);
 const merge = "d".repeat(40);
 const otherMerge = "e".repeat(40);
 const repo = "owner/repo";
-const status = (state, m = merge, b = base) => `${state} merge ${m} base ${b} node 24.22.3 rustc 1.100.0 61s`;
+const status = (state, m = merge, b = base, ref = "main") => `${state} merge ${m} base ${b} ref ${ref} node 24.22.3 rustc 1.100.0 61s`;
 
 function runGate(args, fake) {
   fs.rmSync(calls, { force: true });
@@ -90,9 +91,29 @@ const cases = [
       /another merge candidate/,
     );
   }],
+  ["verify fails after a retarget to a branch with the same tip and merge commit", () => {
+    fails(
+      runGate(["verify", "56"], {
+        FAKE_STATUS: status("success"),
+        FAKE_PR: `${head} dev ${repo} ${repo} ${merge}`,
+        FAKE_OTHER_BASE: base,
+      }),
+      /another merge candidate/,
+    );
+  }],
+  ["verify fails when the recorded base branch only starts with the current one", () => {
+    fails(runGate(["verify", "56"], { FAKE_STATUS: status("success", merge, base, "main2") }), /another merge candidate/);
+  }],
+  ["verify accepts the bare record when the extras did not fit", () => {
+    const result = runGate(["verify", "56"], { FAKE_STATUS: `success merge ${merge} base ${base} ref main` });
+    assert.strictEqual(result.status, 0, result.stderr);
+  }],
   ["verify fails when only SHA prefixes match", () => {
-    const prefixes = `success merge ${merge.slice(0, 12)} base ${base.slice(0, 12)} node 24.22.3 rustc 1.100.0 61s`;
+    const prefixes = `success merge ${merge.slice(0, 12)} base ${base.slice(0, 12)} ref main node 24.22.3 rustc 1.100.0 61s`;
     fails(runGate(["verify", "56"], { FAKE_STATUS: prefixes }));
+  }],
+  ["verify fails for a status without the base branch (round 3 format)", () => {
+    fails(runGate(["verify", "56"], { FAKE_STATUS: `success merge ${merge} base ${base} node 24.22.3 rustc 1.100.0 61s` }));
   }],
   ["verify fails without a status", () => {
     fails(runGate(["verify", "56"], {}), /has no macOS status/);
@@ -144,6 +165,48 @@ const cases = [
       }
     }
     assert.match(fs.readFileSync(gate, "utf8"), /^context="ci-local \/ macOS"$/m);
+  }],
+  ["the gate's deadline is no wider than the old hosted job's 360 minutes", () => {
+    const script = fs.readFileSync(gate, "utf8");
+    const match = script.match(/^deadline_seconds=(\d+)$/m);
+    assert.ok(match, "no deadline_seconds in the gate");
+    assert.ok(Number(match[1]) > 0 && Number(match[1]) <= 360 * 60, `deadline ${match[1]}s`);
+    assert.match(script, /node scripts\/run-with-deadline\.js "\$deadline_seconds"/);
+  }],
+  ["run-with-deadline passes the command's exit code through", () => {
+    const result = spawnSync(process.execPath, [deadlineRunner, "5", "sh", "-c", "exit 3"], { encoding: "utf8" });
+    assert.strictEqual(result.status, 3, result.stderr);
+  }],
+  ["run-with-deadline stops the whole process group at the deadline and exits 124", () => {
+    const pids = path.join(root, "deadline-pids");
+    const started = Date.now();
+    const result = spawnSync(
+      process.execPath,
+      [deadlineRunner, "1", "sh", "-c", 'sleep 30 & echo "$$ $!" > "$1"; wait', "_", pids],
+      { encoding: "utf8", timeout: 20_000 },
+    );
+    assert.strictEqual(result.status, 124, result.stderr);
+    assert.ok(Date.now() - started < 15_000, "the runner did not stop at its deadline");
+    assert.match(result.stderr, /passed its 1s deadline/);
+    // An orphaned child can stay a zombie for a moment until init reaps it.
+    const running = (pid) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    for (const pid of fs.readFileSync(pids, "utf8").trim().split(" ").map(Number)) {
+      for (let i = 0; i < 30 && running(pid); i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+      assert.ok(!running(pid), `process ${pid} is still running`);
+    }
+  }],
+  ["run-with-deadline rejects a missing or bad deadline", () => {
+    for (const args of [[], ["0", "true"], ["1.5", "true"], ["x", "true"], ["5"]]) {
+      const result = spawnSync(process.execPath, [deadlineRunner, ...args], { encoding: "utf8" });
+      assert.strictEqual(result.status, 2, args.join(" "));
+    }
   }],
 ];
 
