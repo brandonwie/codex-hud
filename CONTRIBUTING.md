@@ -53,8 +53,10 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     `http.followRedirects` for it is not `initial`), and the fetched merge
     commit and both parents are checked before checkout. Refusals never print
     a rejected origin or rewritten URL, since either can hold a token, and the
-    gate turns off shell tracing (`set +x`) and Git tracing (`GIT_TRACE*`,
-    trace2 targets) so no trace prints them either. Any rewrite of the fetch
+    gate turns off shell tracing (`set +xv`), Git tracing (`GIT_TRACE*`,
+    trace2 targets) and gh debug output, and discards the error output of every
+    git and gh call (Git prints a malformed config key, URL included, in its
+    own errors), printing a fixed message for each failed step instead. Any rewrite of the fetch
     URL is refused, even to the same repository's bare URL. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
     and a fork PR. It also refuses a branch PR unless every commit has a

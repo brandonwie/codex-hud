@@ -52,16 +52,23 @@
 # with a record of the candidate. If the candidate changed during the run (new
 # head, retarget, base moved), it posts error or nothing, so the run must
 # repeat. verify compares the record with the PR's current one.
+set +xv
 set -u
-# Tracing would print URLs and Git config that can hold a user name and token
-# (the origin, a rewritten fetch URL, url.<base>.insteadOf keys). Turn shell
-# tracing off, drop every inherited Git trace variable, and disable trace2
-# targets set in Git config (the environment overrides them) for every git call.
-set +x
+# Credential safety. Git config and the origin can hold a user name and token
+# (an origin URL, a rewritten fetch URL, a url.<base>.insteadOf key), so no
+# output path may carry them:
+#   - shell tracing and verbose mode are off (set +xv above);
+#   - inherited Git trace variables are dropped, and trace2 targets set in Git
+#     config are disabled (the environment overrides them);
+#   - gh and curl debug output is off (GH_DEBUG, DEBUG; curl -q skips .curlrc);
+#   - every git and gh call sends its stderr to /dev/null: Git prints a
+#     malformed or valueless config key, URL included, in its own errors. Each
+#     failure prints a fixed message naming the step and the trusted URL only;
+#   - the script's own messages never print a rejected URL or config key.
 for var in $(env | sed -n 's/^\(GIT_TRACE[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset "$var"
 done
-unset GIT_CURL_VERBOSE
+unset GIT_CURL_VERBOSE GH_DEBUG DEBUG
 GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
 export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
 
@@ -152,7 +159,7 @@ if [ "$mode" = run ]; then
   if [ "$rc" -eq 124 ] && [ -s "$run_dir/head" ]; then
     timed_head=$(cat "$run_dir/head")
     node scripts/run-with-deadline.js "$status_post_seconds" \
-      gh api --hostname "$trusted_host" -X POST "repos/$trusted_repo/statuses/$timed_head" -f state=failure -f context="$context" \
+      gh api --hostname "$trusted_host" -X POST "repos/$trusted_repo/statuses/$timed_head" -f state=failure -f context="$context" 2>/dev/null \
       -f description="timeout: the gate passed its $((deadline_seconds / 60))-minute deadline; rerun" >/dev/null ||
       echo "ci-mac-gate: timed out, and posting the failure status failed" >&2
     echo "ci-mac-gate: timed out after $((deadline_seconds / 60)) minutes" >&2
@@ -163,7 +170,7 @@ fi
 
 # Every GitHub call goes to the trusted host and names the trusted repository.
 ghapi() {
-  gh api --hostname "$trusted_host" "$@"
+  gh api --hostname "$trusted_host" "$@" 2>/dev/null
 }
 
 post() {
@@ -190,7 +197,7 @@ EOF
 candidate_record() {
   record="merge $merge base $base ref $base_name"
   if [ ${#record} -gt 140 ]; then
-    ref_id=$(printf '%s' "$base_name" | git hash-object --stdin) || return 1
+    ref_id=$(printf '%s' "$base_name" | git hash-object --stdin 2>/dev/null) || return 1
     record="merge $merge base $base refid $(printf '%.24s' "$ref_id")"
   fi
 }
@@ -233,7 +240,7 @@ untrusted_commits() {
   done
 }
 
-read_candidate || die "cannot read PR $pr"
+read_candidate || die "cannot read PR $pr from $trusted_repo on $trusted_host; check gh auth status and the PR number"
 [ "$base_repo" = "$trusted_repo" ] ||
   die "PR $pr belongs to $base_repo, not $trusted_repo; the gate checks only $trusted_repo"
 case $merge in
@@ -259,7 +266,8 @@ if [ "$mode" = verify ]; then
 fi
 
 # Worker: trust checks first, before any state write, fetch or install.
-origin_url=$(git remote get-url origin) || die "no origin remote"
+origin_url=$(git remote get-url origin 2>/dev/null) ||
+  die "cannot read this clone's origin (remote.origin.url); check that it is a clone of $trusted_url and that git config --list works"
 case $origin_url in
   "git@$trusted_host:$trusted_repo" | "git@$trusted_host:$trusted_repo.git" | \
     "ssh://git@$trusted_host/$trusted_repo" | "ssh://git@$trusted_host/$trusted_repo.git" | \
@@ -310,8 +318,9 @@ src="$tmp/src"
 # be "initial". Refusals never print a rewritten URL or a config key that holds
 # one: either can carry a user name and token.
 redirect_limit="http.$trusted_url.followRedirects=initial"
-git init -q "$src" || die "git init failed"
-fetch_url=$(git -C "$src" ls-remote --get-url "$trusted_url") || die "cannot resolve the fetch URL"
+git init -q "$src" >/dev/null 2>&1 || die "cannot create the temporary fetch repository"
+fetch_url=$(git -C "$src" ls-remote --get-url "$trusted_url" 2>/dev/null) ||
+  die "Git cannot resolve the fetch URL $trusted_url; check that git config --list works and has no url.<base>.insteadOf rule without a value"
 # Only the literal URL: the redirect limit below is keyed to it, so a rewrite
 # even to the bare form of the same repository is refused.
 case $fetch_url in
@@ -322,16 +331,16 @@ case $fetch_url in
     die "Git rewrites $trusted_url with a url.<base>.insteadOf rule (defined in: ${rewrite_sources:-your Git config}); the gate fetches only from $trusted_url. Remove the rule and rerun"
     ;;
 esac
-redirects=$(git -C "$src" -c "$redirect_limit" config --get-urlmatch http.followRedirects "$trusted_url")
+redirects=$(git -C "$src" -c "$redirect_limit" config --get-urlmatch http.followRedirects "$trusted_url" 2>/dev/null)
 [ "$redirects" = initial ] ||
   die "Git's effective http.followRedirects for $trusted_url is not 'initial'; the gate allows redirects on the first request only. Remove the overriding http.<url>.followRedirects setting and rerun"
-git -C "$src" -c "$redirect_limit" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" ||
-  die "cannot fetch refs/pull/$pr/merge; the PR may have a merge conflict"
-fetched=$(git -C "$src" rev-parse --verify -q 'FETCH_HEAD^{commit}') || die "cannot resolve the fetched merge commit"
-parents=$(git -C "$src" cat-file -p "$fetched" | sed -n 's/^parent //p' | tr '\n' ' ')
+git -C "$src" -c "$redirect_limit" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" >/dev/null 2>&1 ||
+  die "cannot fetch refs/pull/$pr/merge from $trusted_url; check the network and that the PR has no merge conflict, then rerun"
+fetched=$(git -C "$src" rev-parse --verify -q 'FETCH_HEAD^{commit}' 2>/dev/null) || die "cannot resolve the fetched merge commit"
+parents=$(git -C "$src" cat-file -p "$fetched" 2>/dev/null | sed -n 's/^parent //p' | tr '\n' ' ')
 [ "$fetched" = "$merge" ] && [ "$parents" = "$base $head " ] ||
   die "GitHub's merge commit is not $base_name + PR head yet (fetched $fetched, parents: $parents); retry in a minute"
-git -C "$src" checkout -q --detach "$fetched" || die "checkout failed"
+git -C "$src" checkout -q --detach "$fetched" >/dev/null 2>&1 || die "checkout failed"
 
 want_node=$(sed -n 's/^ *node-version: *["'\'']\{0,1\}\([0-9][0-9]*\).*/\1/p' "$src/.github/workflows/ci.yml" | head -n 1)
 [ -n "$want_node" ] || die "no node-version in .github/workflows/ci.yml"
@@ -339,7 +348,7 @@ node_version=$(cd "$src" && node -p process.versions.node) || die "node not foun
 [ "${node_version%%.*}" = "$want_node" ] ||
   die "CI uses Node $want_node, this shell has Node $node_version; select Node $want_node (asdf: ASDF_NODEJS_VERSION=<$want_node.x.y>) and rerun"
 
-curl -fsSL -o "$tmp/channel.toml" "$rust_channel_url" || die "cannot read the current Rust stable version"
+curl -q -fsSL -o "$tmp/channel.toml" "$rust_channel_url" || die "cannot read the current Rust stable version"
 stable=$(sed -n '/^\[pkg\.rustc\]$/,/^\[/s/^version = "\([0-9.]*\) .*/\1/p' "$tmp/channel.toml")
 [ -n "$stable" ] || die "no rustc version in $rust_channel_url"
 rustc_line=$(cd "$src" && rustc -V) || die "rustc not found"

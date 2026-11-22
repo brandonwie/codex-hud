@@ -558,6 +558,45 @@ const cases = [
     const seen = new Set(calls.split("\n").filter((line) => line.startsWith("trace-env ")).map((line) => line.slice(10)));
     assert.deepStrictEqual([...seen].sort(), ["GIT_TRACE2=0", "GIT_TRACE2_EVENT=0", "GIT_TRACE2_PERF=0"]);
   }],
+  ["malformed Git config keys never print a credential, with tracing off", () => {
+    // Git prints a malformed or valueless config key, URL and token included,
+    // in its own error messages. No tracing is enabled here.
+    const marker = "SYNTHETIC-CONFIG-KEY-e5a9";
+    const noOutput = (result, label) =>
+      assert.ok(!(result.stdout + result.stderr).includes(marker), `${label}: a Git error printed the credential`);
+    // 1. An invalid key from the environment: every git call fails.
+    const envKey = {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: `url.https://u:${marker}@evil.example/.bad key`,
+      GIT_CONFIG_VALUE_0: "x",
+    };
+    const run = runWorker("", envKey);
+    refusedBeforeCheckout(run, /cannot read this clone's origin \(remote\.origin\.url\)/);
+    noOutput(run, "run, invalid key");
+    // verify reaches git only for a long base branch (its refid).
+    const longRef = `release/${"x".repeat(60)}`;
+    const verify = runGate(["verify", "56"], { ...envKey, FAKE_PR: `${head} ${longRef} ${repo} ${repo} ${merge}`, FAKE_OTHER_BASE: base });
+    fails(verify, /cannot build the candidate record/);
+    noOutput(verify, "verify, invalid key");
+    // 2. A valueless insteadOf key in the global config.
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const harness = { FAKE_GIT_CALLS: gitCalls, FAKE_FETCH_REPO: fixture.dir };
+    const valueless = runWorker("", { ...harness, ...fetchConfig(`[url "https://u:${marker}@evil.example/"]\n\tinsteadOf\n`) }, runDir, "", { pathPrefix: prefix });
+    fails(valueless, /cannot read this clone's origin/);
+    noOutput(valueless, "run, valueless key");
+    // 3. The same key only inside the temporary fetch repository, through a
+    // conditional include: the origin read passes, the URL resolver fails.
+    const include = path.join(root, "fetch-include.gitconfig");
+    fs.writeFileSync(include, `[url "https://u:${marker}@evil.example/"]\n\tinsteadOf\n`);
+    fs.rmSync(gitCalls, { force: true });
+    const scoped = runWorker("", { ...harness, ...fetchConfig(`[includeIf "gitdir:**/src/"]\n\tpath = ${include}\n`) }, runDir, "", { pathPrefix: prefix });
+    fails(scoped, /Git cannot resolve the fetch URL https:\/\/github\.com\/brandonwie\/codex-hud\.git/);
+    noOutput(scoped, "run, valueless key in the fetch repository");
+    const calls = fs.readFileSync(gitCalls, "utf8");
+    assert.match(calls, /ls-remote --get-url/);
+    assert.doesNotMatch(calls, /fetch -q|checkout/);
+    assert.doesNotMatch(scoped.ghCalls, /statuses/);
+  }],
   ["a rewrite to the bare repository URL is refused before any fetch", () => {
     // The bare form names the same repository, but the redirect limit is keyed
     // to the literal URL: an endpoint setting for the bare URL would win.
