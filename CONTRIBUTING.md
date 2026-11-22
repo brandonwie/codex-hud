@@ -18,12 +18,26 @@ When you touch `README.md`, mirror any heading or fenced-code change into the
 localized `README.*.md` files and run `npm run check:i18n` — the checker enforces
 matching heading and code-block skeletons across every translation.
 
+## Checks before a push
+
+`scripts/ci-local.sh` is the one list of CI checks: Rust format, clippy,
+`npm test` and `npm run test:rust`. It runs every check and lists each one that
+failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
+
+- GitHub runs it on Linux for each pull request (`.github/workflows/ci.yml`).
+- The macOS leg runs on your machine: after `npm install`, `.husky/pre-push`
+  runs the script at low priority (`nice -n 10`). The hook stops the push when
+  the working tree is dirty or the pushed ref is not `HEAD`, so the checks
+  cover the commit you push.
+- A manual CI run (`workflow_dispatch`) checks both Linux and macOS on GitHub.
+
 ## Maintainer scripts
 
 | Command | Purpose |
 | ------- | ------- |
 | `npm test` | Build `codex-hud` and run config, installer, version, golden, README, and site checks. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
+| `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
 | `npm run check:i18n` | Check localized README heading and code-block skeletons against `README.md`. |
 | `npm run hud` | Run the built Rust HUD renderer directly. |
 | `npm run build:rust` | Build the release Rust renderer. |

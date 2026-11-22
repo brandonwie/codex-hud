@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+zero=0000000000000000000000000000000000000000
+head=$(git rev-parse HEAD)
+checked=0
+
+while read -r local_ref local_sha _; do
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$(git rev-parse "$local_sha^{commit}")" != "$head" ]; then
+    echo "pre-push: $local_ref is not the checked-out HEAD. Check it out and push again, so the checks run on the commit you push." >&2
+    exit 1
+  fi
+  checked=1
+done
+
+[ "$checked" = 1 ] || exit 0
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "pre-push: the working tree has uncommitted or untracked files. Commit or remove them, so the checks run on the commit you push." >&2
+  exit 1
+fi
+
+exec nice -n 10 sh scripts/ci-local.sh
