@@ -28,6 +28,7 @@ fs.writeFileSync(
   path.join(bin, "gh"),
   `#!/bin/sh
 echo "$*" >> "$FAKE_GH_CALLS"
+env | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "$FAKE_GH_CALLS"
 if [ -n "\${GH_REPO:-}\${GH_HOST:-}" ]; then echo "fake gh: GH_REPO or GH_HOST reached gh" >&2; exit 1; fi
 case "$*" in
   "api --hostname github.com "*"repos/brandonwie/codex-hud/"*) ;;
@@ -272,12 +273,20 @@ function fetchHarness() {
   if (!fs.existsSync(fake)) {
     fs.mkdirSync(fake);
     fs.writeFileSync(path.join(fake, "uname"), `#!/bin/sh\n[ "$1" = -s ] && { echo Darwin; exit 0; }\nexec /usr/bin/uname "$@"\n`, { mode: 0o755 });
+    // No network: the fake curl records the proxy variable names it sees and
+    // fails as if the host were unreachable (curl exit 7).
+    fs.writeFileSync(
+      path.join(fake, "curl"),
+      `#!/bin/sh\necho "curl $*" >> "\${FAKE_CURL_CALLS:-/dev/null}"\nenv | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "\${FAKE_CURL_CALLS:-/dev/null}"\nexit 7\n`,
+      { mode: 0o755 },
+    );
     fs.writeFileSync(
       path.join(fake, "git"),
       `#!/bin/sh
 echo "$*" >> "$FAKE_GIT_CALLS"
 env | sed -n 's/^\\(GIT_TRACE[A-Za-z0-9_]*=.*\\)/trace-env \\1/p; s/^\\(GIT_CURL_VERBOSE=.*\\)/trace-env \\1/p' >> "$FAKE_GIT_CALLS"
-if [ "$1" = -C ] && { [ "$3" = fetch ] || [ "$5" = fetch ]; }; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
+env | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "$FAKE_GIT_CALLS"
+if [ "$1" = -C ] && { [ "$3" = fetch ] || [ "$5" = fetch ] || [ "$7" = fetch ]; }; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
 if [ "$1" = -C ] && [ "$3" = checkout ] && [ -z "\${FAKE_ALLOW_CHECKOUT:-}" ]; then echo "fake git: checkout refused" >&2; exit 1; fi
 if [ "$1" = -C ] && [ "$5" = config ] && [ -n "\${FAKE_REDIRECTS:-}" ]; then echo "$FAKE_REDIRECTS"; exit 0; fi
 exec "${realGit}" "$@"
@@ -493,8 +502,10 @@ const cases = [
     fails(stale, /merge commit is not main \+ PR head yet/);
     const git = fs.readFileSync(gitCalls, "utf8");
     const limit = `-c http\\.${trustedUrl.replace(/\./g, "\\.")}\\.followRedirects=initial`;
+    const noProxy = `-c http\\.${trustedUrl.replace(/\./g, "\\.")}\\.proxy=`;
     assert.match(git, new RegExp(`${limit} config --get-urlmatch http\\.followRedirects`));
-    assert.match(git, new RegExp(`${limit} fetch -q --depth=1 ${trustedUrl.replace(/\./g, "\\.")} refs/pull/56/merge`));
+    assert.match(git, new RegExp(`${noProxy} config --get-urlmatch http\\.proxy`));
+    assert.match(git, new RegExp(`${limit} ${noProxy} fetch -q --depth=1 ${trustedUrl.replace(/\./g, "\\.")} refs/pull/56/merge`));
     assert.doesNotMatch(git, /checkout/);
     assert.doesNotMatch(stale.ghCalls, /statuses/);
     // The same fetch with a matching PR passes the checks and only then checks out.
@@ -611,52 +622,53 @@ const cases = [
     assert.doesNotMatch(calls, /fetch -q|checkout/);
     assert.doesNotMatch(scoped.ghCalls, /statuses/);
   }],
-  ["proxy variables with a user name or password are refused before any tool runs", () => {
-    const marker = "SYNTHETIC-PROXY-USER-71d0";
-    for (const name of ["HTTPS_PROXY", "https_proxy", "ALL_PROXY"]) {
-      const proxy = { [name]: `http://u:${marker}@proxy.example:8080` };
-      const run = runWorker("", proxy);
-      refusedBeforeCheckout(run, new RegExp(`proxy variables ${name} hold a user name or password`));
-      assert.ok(!(run.stdout + run.stderr).includes(marker), `${name}: the proxy credential reached the output`);
-      assert.strictEqual(run.ghCalls, "", `${name}: gh ran before the refusal`);
-      const verify = runGate(["verify", "56"], { ...proxy, FAKE_STATUS: status("success") });
-      fails(verify, /hold a user name or password/);
-      assert.ok(!(verify.stdout + verify.stderr).includes(marker), `${name}: verify printed the proxy credential`);
-    }
-    // Every recognized proxy variable is checked, with or without a scheme.
-    for (const [name, value] of [
-      ["CARGO_HTTP_PROXY", `http://u:${marker}@proxy.example:8080`],
-      ["npm_config_https_proxy", `http://u:${marker}@proxy.example:8080/`],
-      ["http_proxy", `u:${marker}@proxy.example:8080`],
-    ]) {
-      const run = runWorker("", { [name]: value });
-      refusedBeforeCheckout(run, new RegExp(`proxy variables ${name} hold a user name or password`));
-      assert.ok(!(run.stdout + run.stderr).includes(marker), `${name}: the proxy credential reached the output`);
-    }
-    // A proxy without inline credentials passes the check, and so do an
-    // at-sign in the proxy URL's path and an unrelated variable with an email.
-    passedTrust(runWorker("", { HTTPS_PROXY: "http://proxy.example:8080" }));
-    passedTrust(runWorker("", { HTTPS_PROXY: "http://proxy.example:8080/a@b", https_proxy: "proxy.example:8080/team@x" }));
-    passedTrust(runWorker("", { PROXY_CONTACT: "ops@example.com", MY_PROXY_OWNER: "me@example.com" }));
-  }],
-  ["a malformed proxy URL never reaches the output from the Rust channel download", () => {
-    // No network: curl rejects the malformed proxy before it opens a socket.
+  ["every proxy variable is removed before any tool runs, so a proxy password never reaches the gate log", () => {
+    // Offline: the fake curl fails as if the host were unreachable. The values
+    // hold a synthetic password, one with an unescaped slash in it.
     const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
-    const marker = "SYNTHETIC-PROXY-URL-a42b";
+    const marker = "SYNTHETIC-PROXY-PASSWORD-a42b";
+    const curlCalls = path.join(root, "curl-calls");
+    fs.rmSync(curlCalls, { force: true });
+    const proxies = {
+      HTTPS_PROXY: `http://u:pa/ss${marker}@proxy.example:8080`,
+      https_proxy: `http://[${marker}`,
+      HTTP_PROXY: `u:${marker}@proxy.example:8080`,
+      all_proxy: `socks5://u:${marker}@proxy.example`,
+      NO_PROXY: `${marker}.example`,
+      CARGO_HTTP_PROXY: `http://u:${marker}@proxy.example`,
+      npm_config_https_proxy: `http://u:${marker}@proxy.example`,
+      GIT_PROXY_COMMAND: `/nonexistent/${marker}`,
+    };
     const result = runWorker("", {
       FAKE_GIT_CALLS: gitCalls,
+      FAKE_CURL_CALLS: curlCalls,
       FAKE_FETCH_REPO: fixture.dir,
       FAKE_ALLOW_CHECKOUT: "1",
       FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
       FAKE_BASE: fixture.base,
       FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
-      HTTPS_PROXY: `http://[${marker}`,
-      https_proxy: `http://[${marker}`,
+      ...proxies,
       ...fetchConfig(),
     }, runDir, "", { pathPrefix: prefix });
-    fails(result, /cannot read the current Rust stable version from https:\/\/static\.rust-lang\.org\/dist\/channel-rust-stable\.toml \(proxy variables set: .*HTTPS_PROXY.*values not shown\)/);
-    assert.ok(!(result.stdout + result.stderr).includes(marker), "a curl error printed the proxy URL");
-    assert.doesNotMatch(result.ghCalls, /statuses/);
+    fails(result, /^ci-mac-gate: cannot read the current Rust stable version from https:\/\/static\.rust-lang\.org\/dist\/channel-rust-stable\.toml; the gate uses no proxy, so check the direct network connection and rerun$/m);
+    assert.ok(!(result.stdout + result.stderr).includes(marker), "a proxy value reached the gate output");
+    // gh, git and curl ran, and none of them saw a proxy variable.
+    const curl = fs.readFileSync(curlCalls, "utf8");
+    assert.match(curl, /^curl -q -fsL /m);
+    assert.doesNotMatch(curl, /proxy-env/);
+    assert.match(fs.readFileSync(gitCalls, "utf8"), /fetch -q/);
+    assert.doesNotMatch(fs.readFileSync(gitCalls, "utf8"), /proxy-env/);
+    assert.match(result.ghCalls, /repos\/brandonwie\/codex-hud\/pulls\/56/);
+    assert.doesNotMatch(result.ghCalls, /proxy-env|statuses/);
+    // verify strips them too and still works.
+    const verify = runGate(["verify", "56"], { ...proxies, FAKE_STATUS: status("success") });
+    assert.strictEqual(verify.status, 0, "verify failed with proxy variables set");
+    assert.match(verify.stdout, /is green on macOS/);
+    assert.ok(!(verify.stdout + verify.stderr).includes(marker), "verify printed a proxy value");
+    assert.doesNotMatch(verify.ghCalls, /proxy-env/);
+    // The scan code is gone: nothing reads a proxy value.
+    const script = fs.readFileSync(gate, "utf8");
+    assert.doesNotMatch(script, /printenv|proxy_names|proxy_creds/);
   }],
   ["the PR's checks run with an empty global Git config and no system config", () => {
     // The probes and both checks run through run-isolated.sh; the probes also
@@ -734,6 +746,32 @@ const cases = [
       assert.ok(!leaked(result), `isolated ${args.join(" ")} printed the marker`);
     }
     assert.strictEqual(isolated(proj, ["npm", "config", "get", "proxy"]).stdout.trim(), "null");
+    // Command-level Git config (GIT_CONFIG_COUNT, GIT_CONFIG_PARAMETERS) and
+    // proxy variables do not reach the checks either.
+    const commandLevel = {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "core.bigFileThreshold",
+      GIT_CONFIG_VALUE_0: marker,
+      GIT_CONFIG_PARAMETERS: `'core.bigfilethreshold'='${marker}'`,
+      HTTPS_PROXY: `http://u:pa/ss${marker}@proxy.example`,
+      no_proxy: marker,
+      GIT_PROXY_COMMAND: `/nonexistent/${marker}`,
+    };
+    for (const [key, value] of [["GIT_CONFIG_COUNT", "1"], ["GIT_CONFIG_PARAMETERS", commandLevel.GIT_CONFIG_PARAMETERS]]) {
+      const only = key === "GIT_CONFIG_COUNT"
+        ? { GIT_CONFIG_COUNT: value, GIT_CONFIG_KEY_0: "core.bigFileThreshold", GIT_CONFIG_VALUE_0: marker }
+        : { GIT_CONFIG_PARAMETERS: value };
+      const control = run(proj, "git", ["hash-object", "--path=a", "Cargo.toml"], { GIT_CONFIG_GLOBAL: "/dev/null", ...only });
+      assert.ok(control.status !== 0 && leaked(control), `control: git ignored ${key}`);
+    }
+    const commandRun = (args) => run(proj, "sh", [helper, path.join(root, "tool-state-command"), proj, ...args], commandLevel);
+    const hashed = commandRun(["git", "hash-object", "--path=a", "Cargo.toml"]);
+    assert.strictEqual(hashed.status, 0, `isolated git with command-level config failed (exit ${hashed.status})`);
+    assert.ok(!leaked(hashed), "command-level Git config reached the isolated git");
+    const childEnv = commandRun(["env"]);
+    assert.strictEqual(childEnv.status, 0);
+    assert.doesNotMatch(childEnv.stdout, /^(GIT_CONFIG_(COUNT|KEY_0|VALUE_0|PARAMETERS)=|[^=\n]*[Pp][Rr][Oo][Xx][Yy][^=\n]*=)/m);
+    assert.ok(!leaked(childEnv), "a stripped value reached the child environment");
     // The home the checks see is empty and inside the state directory.
     const homes = isolated(proj, ["sh", "-c", 'printf "%s\\n%s\\n" "$HOME" "$CARGO_HOME"; ls -A "$HOME"']);
     const state = fs.realpathSync(path.join(root, "tool-state-tool-project"));

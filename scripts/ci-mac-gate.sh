@@ -62,16 +62,23 @@ set -u
 #     config are disabled (the environment overrides them);
 #   - gh and curl debug output is off (GH_DEBUG, DEBUG; curl -q skips .curlrc),
 #     and NODE_OPTIONS is unset (node prints a bad --require path in its error);
-#   - a recognized proxy variable (http_proxy, HTTPS_PROXY, ALL_PROXY,
-#     CARGO_HTTP_PROXY, npm_config_proxy, ...) with a user name or password in
-#     its URL authority is refused before any tool runs (curl, git, gh, npm and
-#     cargo can print a proxy URL in their errors), and the Rust channel
-#     download prints no curl error at all;
+#   - the gate uses no proxy. A proxy URL can hold a password, and curl, git,
+#     gh, npm and cargo print a malformed proxy URL in their errors, so proxy
+#     settings are removed, not inspected: every environment variable whose
+#     name contains "proxy" in any case (http_proxy, HTTPS_PROXY, ALL_PROXY,
+#     NO_PROXY, CARGO_HTTP_PROXY, npm_config_https_proxy, GIT_PROXY_COMMAND,
+#     ...) is unset before any tool runs; the fetch sets Git's http.proxy for
+#     the trusted URL to empty (no proxy), which outranks every Git config file
+#     and environment override, and Git's effective value must be empty; and the
+#     checks read no Cargo, npm or Git proxy config (run-isolated.sh below).
+#     Without a direct network connection a step fails with a fixed message;
+#   - the Rust channel download prints no curl error at all;
 #   - the toolchain probes and the PR's checks (npm ci, ci-local.sh) run through
 #     scripts/run-isolated.sh: an empty HOME, CARGO_HOME, npm config and global
-#     Git config, no system Git config, no CARGO_* or npm_config_* variables,
-#     like the hosted runner. A key in the maintainer's Cargo, npm or Git config
-#     cannot reach their output. The probes also discard their stderr;
+#     Git config, no system Git config, no CARGO_*, npm_config_*, proxy or
+#     command-line Git config variables, like the hosted runner. A key in the
+#     maintainer's Cargo, npm or Git config cannot reach their output. The
+#     probes also discard their stderr;
 #   - every git and gh call sends its stderr to /dev/null: Git prints a
 #     malformed or valueless config key, URL included, in its own errors. Each
 #     failure prints a fixed message naming the step and the trusted URL only;
@@ -82,32 +89,9 @@ done
 unset GIT_CURL_VERBOSE GH_DEBUG DEBUG NODE_OPTIONS
 GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
 export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
-# The proxy variables that curl, git, gh, npm and cargo read.
-proxy_vars="http_proxy HTTP_PROXY https_proxy HTTPS_PROXY all_proxy ALL_PROXY ftp_proxy FTP_PROXY
-  CARGO_HTTP_PROXY npm_config_proxy npm_config_https_proxy NPM_CONFIG_PROXY NPM_CONFIG_HTTPS_PROXY"
-# Prints the names (never the values) of the proxy variables that are set.
-proxy_names() {
-  for name in $proxy_vars; do
-    if [ -n "$(printenv "$name")" ]; then printf '%s\n' "$name"; fi
-  done
-}
-# Prints the names of proxy variables with a user name or password: an at-sign
-# in the URL authority, which ends at the first slash after the optional
-# scheme. An at-sign in the path (http://proxy:8080/a@b) is not userinfo.
-proxy_creds() {
-  for name in $(proxy_names); do
-    rest=$(printenv "$name")
-    rest=${rest#*://}
-    case ${rest%%/*} in
-      *@*) printf '%s ' "$name" ;;
-    esac
-  done
-}
-proxy_creds=$(proxy_creds)
-if [ -n "$proxy_creds" ]; then
-  echo "ci-mac-gate: proxy variables ${proxy_creds}hold a user name or password in the proxy URL; the gate does not run with credentials in proxy variables, because curl, git, gh, npm and cargo can print a proxy URL in their errors. Use a proxy without inline credentials and rerun" >&2
-  exit 1
-fi
+for var in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | grep -i proxy); do
+  unset "$var"
+done
 
 context="ci-local / macOS"
 trusted_host=github.com
@@ -372,8 +356,15 @@ esac
 redirects=$(git -C "$src" -c "$redirect_limit" config --get-urlmatch http.followRedirects "$trusted_url" 2>/dev/null)
 [ "$redirects" = initial ] ||
   die "Git's effective http.followRedirects for $trusted_url is not 'initial'; the gate allows redirects on the first request only. Remove the overriding http.<url>.followRedirects setting and rerun"
-git -C "$src" -c "$redirect_limit" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" >/dev/null 2>&1 ||
-  die "cannot fetch refs/pull/$pr/merge from $trusted_url; check the network and that the PR has no merge conflict, then rerun"
+# No proxy for the fetch: an empty http.proxy disables it, and this exact-URL
+# command-line setting outranks every Git config file and environment override.
+no_proxy_setting="http.$trusted_url.proxy="
+if ! git_proxy=$(git -C "$src" -c "$no_proxy_setting" config --get-urlmatch http.proxy "$trusted_url" 2>/dev/null) ||
+  [ -n "$git_proxy" ]; then
+  die "Git's effective http.proxy for $trusted_url is not empty; the gate fetches without a proxy. Check that git config --list works and rerun"
+fi
+git -C "$src" -c "$redirect_limit" -c "$no_proxy_setting" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" >/dev/null 2>&1 ||
+  die "cannot fetch refs/pull/$pr/merge from $trusted_url; the gate uses no proxy, so check the direct network connection and that the PR has no merge conflict, then rerun"
 fetched=$(git -C "$src" rev-parse --verify -q 'FETCH_HEAD^{commit}' 2>/dev/null) || die "cannot resolve the fetched merge commit"
 parents=$(git -C "$src" cat-file -p "$fetched" 2>/dev/null | sed -n 's/^parent //p' | tr '\n' ' ')
 [ "$fetched" = "$merge" ] && [ "$parents" = "$base $head " ] ||
@@ -392,10 +383,9 @@ node_version=$(sh "$isolated" "$iso" "$src" node -p process.versions.node 2>/dev
 [ "${node_version%%.*}" = "$want_node" ] ||
   die "CI uses Node $want_node, this shell has Node $node_version; select Node $want_node (asdf: ASDF_NODEJS_VERSION=<$want_node.x.y>) and rerun"
 
-# No -S and no stderr: curl prints a malformed proxy URL in its own errors.
+# No -S and no stderr: curl's own errors are not needed for this one download.
 if ! curl -q -fsL -o "$tmp/channel.toml" "$rust_channel_url" 2>/dev/null; then
-  proxies=$(proxy_names | tr '\n' ' ')
-  die "cannot read the current Rust stable version from $rust_channel_url${proxies:+ (proxy variables set: ${proxies}- check them; values not shown)}"
+  die "cannot read the current Rust stable version from $rust_channel_url; the gate uses no proxy, so check the direct network connection and rerun"
 fi
 stable=$(sed -n '/^\[pkg\.rustc\]$/,/^\[/s/^version = "\([0-9.]*\) .*/\1/p' "$tmp/channel.toml")
 [ -n "$stable" ] || die "no rustc version in $rust_channel_url"

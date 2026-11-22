@@ -19,13 +19,16 @@
 #   - npm reads empty user and global config files (two files: npm refuses to
 #     load one file twice); every npm_config_* variable is unset, and the npm
 #     cache stays the maintainer's ~/.npm (packages only);
-#   - Git reads an empty global config and no system config;
+#   - Git reads an empty global config and no system config, and no
+#     command-level config: GIT_CONFIG_COUNT, GIT_CONFIG_KEY_<n>,
+#     GIT_CONFIG_VALUE_<n> and GIT_CONFIG_PARAMETERS are unset;
+#   - every variable whose name contains "proxy" in any case (http_proxy,
+#     HTTPS_PROXY, ALL_PROXY, NO_PROXY, GIT_PROXY_COMMAND, ...) is unset, so no
+#     tool uses a proxy or prints a proxy URL;
 #   - NODE_OPTIONS is unset;
 #   - the Rust toolchain and Node binaries are found before HOME changes and put
 #     first in PATH, so version-manager shims (asdf keeps its data in HOME and
 #     sets CARGO_HOME itself) do not run.
-# The environment proxy variables (http_proxy, ...) stay: ci-mac-gate.sh refuses
-# them when they hold a user name or password.
 # This script's own messages are fixed and never print a configured value.
 set -u
 
@@ -59,6 +62,10 @@ npm_cache=$HOME/.npm
 jobs=${CARGO_BUILD_JOBS:-}
 unset NODE_OPTIONS XDG_CONFIG_HOME RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER RUSTFLAGS RUSTDOCFLAGS RUSTUP_TOOLCHAIN
 for var in $(env | sed -n 's/^\(CARGO_[A-Za-z0-9_]*\)=.*/\1/p; s/^\([Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  unset "$var"
+done
+for var in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' |
+  grep -i -e proxy -e '^GIT_CONFIG_COUNT$' -e '^GIT_CONFIG_KEY_' -e '^GIT_CONFIG_VALUE_' -e '^GIT_CONFIG_PARAMETERS$'); do
   unset "$var"
 done
 
