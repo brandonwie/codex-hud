@@ -52,7 +52,10 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     request for that exact URL, and refused when Git's effective
     `http.followRedirects` for it is not `initial`), and the fetched merge
     commit and both parents are checked before checkout. Refusals never print
-    a rejected origin or rewritten URL, since either can hold a token. Before any fetch it refuses a clone
+    a rejected origin or rewritten URL, since either can hold a token, and the
+    gate turns off shell tracing (`set +x`) and Git tracing (`GIT_TRACE*`,
+    trace2 targets) so no trace prints them either. Any rewrite of the fetch
+    URL is refused, even to the same repository's bare URL. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
     and a fork PR. It also refuses a branch PR unless every commit has a
     verified signature from a committer listed in

@@ -53,6 +53,17 @@
 # head, retarget, base moved), it posts error or nothing, so the run must
 # repeat. verify compares the record with the PR's current one.
 set -u
+# Tracing would print URLs and Git config that can hold a user name and token
+# (the origin, a rewritten fetch URL, url.<base>.insteadOf keys). Turn shell
+# tracing off, drop every inherited Git trace variable, and disable trace2
+# targets set in Git config (the environment overrides them) for every git call.
+set +x
+for var in $(env | sed -n 's/^\(GIT_TRACE[A-Za-z0-9_]*\)=.*/\1/p'); do
+  unset "$var"
+done
+unset GIT_CURL_VERBOSE
+GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
+export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
 
 context="ci-local / macOS"
 trusted_host=github.com
@@ -301,8 +312,10 @@ src="$tmp/src"
 redirect_limit="http.$trusted_url.followRedirects=initial"
 git init -q "$src" || die "git init failed"
 fetch_url=$(git -C "$src" ls-remote --get-url "$trusted_url") || die "cannot resolve the fetch URL"
+# Only the literal URL: the redirect limit below is keyed to it, so a rewrite
+# even to the bare form of the same repository is refused.
 case $fetch_url in
-  "https://$trusted_host/$trusted_repo" | "$trusted_url") ;;
+  "$trusted_url") ;;
   *)
     rewrite_sources=$(git -C "$src" config --show-origin --get-regexp '^url\..*\.insteadof$' 2>/dev/null |
       cut -f1 | sort -u | tr '\n' ' ')

@@ -73,10 +73,10 @@ const status = (state, m = merge, b = base, ref = "main") => `${state} merge ${m
 const commitLines = (...rows) => rows.map((row) => row.join(" ")).join("\n");
 const trustedCommits = commitLines([firstCommit, "true", "brandonwie", "brandonwie"], [head, "true", "brandonwie", "brandonwie"]);
 
-function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "" } = {}) {
+function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [] } = {}) {
   fs.rmSync(calls, { force: true });
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-  const result = spawnSync("sh", [gatePath, ...args], {
+  const result = spawnSync("sh", [...shellArgs, gatePath, ...args], {
     env: {
       ...env,
       // The gate must ignore these: the fake gh fails when it sees them.
@@ -262,6 +262,7 @@ function fetchHarness() {
       path.join(fake, "git"),
       `#!/bin/sh
 echo "$*" >> "$FAKE_GIT_CALLS"
+env | sed -n 's/^\\(GIT_TRACE[A-Za-z0-9_]*=.*\\)/trace-env \\1/p; s/^\\(GIT_CURL_VERBOSE=.*\\)/trace-env \\1/p' >> "$FAKE_GIT_CALLS"
 if [ "$1" = -C ] && { [ "$3" = fetch ] || [ "$5" = fetch ]; }; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
 if [ "$1" = -C ] && [ "$3" = checkout ]; then echo "fake git: checkout refused" >&2; exit 1; fi
 if [ "$1" = -C ] && [ "$5" = config ] && [ -n "\${FAKE_REDIRECTS:-}" ]; then echo "$FAKE_REDIRECTS"; exit 0; fi
@@ -513,6 +514,63 @@ const cases = [
     const git = fs.readFileSync(gitCalls, "utf8");
     assert.match(git, /ls-remote --get-url/);
     assert.doesNotMatch(git, /fetch|checkout/);
+    assert.doesNotMatch(result.ghCalls, /statuses/);
+  }],
+  ["inherited shell and Git tracing never print a credential", () => {
+    // Every Git trace switch the environment and Git config offer, on top of
+    // shell xtrace (sh -x).
+    const traces = {
+      GIT_TRACE: "2",
+      GIT_TRACE_SETUP: "2",
+      GIT_TRACE_PACKET: "2",
+      GIT_TRACE_CURL: "2",
+      GIT_CURL_VERBOSE: "1",
+      GIT_TRACE2: "2",
+      GIT_TRACE2_PERF: "2",
+      GIT_TRACE2_EVENT: "2",
+      GIT_TRACE2_CONFIG_PARAMS: "*",
+      GIT_TRACE2_ENV_VARS: "*",
+    };
+    const traceConfig = "[trace2]\n\tnormalTarget = /dev/stderr\n\tperfTarget = /dev/stderr\n\teventTarget = /dev/stderr\n\tconfigParams = *\n";
+    const xtrace = { shellArgs: ["-x"] };
+    // A rejected origin with a token.
+    const originSecret = "SYNTHETIC-TRACE-ORIGIN-4d1e";
+    const tokenClone = gateClone("clone-trace-token", `https://x-access-token:${originSecret}@github.com/someone/codex-hud.git`);
+    const origin = runWorker("", traces, missingRunDir, "", { ...xtrace, gatePath: tokenClone });
+    refusedBeforeCheckout(origin, /origin \(remote\.origin\.url\) is not/);
+    assert.ok(!(origin.stdout + origin.stderr).includes(originSecret), "a trace printed the origin credential");
+    // A fetch URL rewrite with a token, with trace2 targets also set in Git config.
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const rewriteSecret = "SYNTHETIC-TRACE-REWRITE-b07c";
+    const env = {
+      ...traces,
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      ...fetchConfig(`[url "https://user:${rewriteSecret}@evil.example/"]\n\tinsteadOf = https://github.com/\n${traceConfig}`),
+    };
+    const rewrite = runWorker("", env, runDir, "", { ...xtrace, pathPrefix: prefix });
+    fails(rewrite, /with a url\.<base>\.insteadOf rule/);
+    assert.match(rewrite.stderr, /^\+ /m, "sh -x did not trace the gate's first lines");
+    assert.ok(!(rewrite.stdout + rewrite.stderr).includes(rewriteSecret), "a trace printed the rewrite credential");
+    const calls = fs.readFileSync(gitCalls, "utf8");
+    assert.doesNotMatch(calls, /fetch|checkout/);
+    // Every git call saw no inherited trace switch, only the trace2 disables.
+    const seen = new Set(calls.split("\n").filter((line) => line.startsWith("trace-env ")).map((line) => line.slice(10)));
+    assert.deepStrictEqual([...seen].sort(), ["GIT_TRACE2=0", "GIT_TRACE2_EVENT=0", "GIT_TRACE2_PERF=0"]);
+  }],
+  ["a rewrite to the bare repository URL is refused before any fetch", () => {
+    // The bare form names the same repository, but the redirect limit is keyed
+    // to the literal URL: an endpoint setting for the bare URL would win.
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const bare = "https://github.com/brandonwie/codex-hud";
+    const env = {
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      ...fetchConfig(`[url "${bare}"]\n\tinsteadOf = ${trustedUrl}\n[http "${bare}"]\n\tfollowRedirects = true\n`),
+    };
+    const result = runWorker("", env, runDir, "", { pathPrefix: prefix });
+    fails(result, /rewrites https:\/\/github\.com\/brandonwie\/codex-hud\.git with a url\.<base>\.insteadOf rule/);
+    assert.doesNotMatch(fs.readFileSync(gitCalls, "utf8"), /fetch|checkout/);
     assert.doesNotMatch(result.ghCalls, /statuses/);
   }],
   ["a URL-specific redirect setting cannot widen the fetch's redirect limit", () => {
