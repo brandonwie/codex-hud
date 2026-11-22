@@ -19,9 +19,10 @@ jobs:
       fail-fast: false
       matrix:
         # Pull requests from branches of this repository: the macOS leg runs on
-        # the Mac through scripts/ci-mac-gate.sh, which posts the
-        # "ci-local / macOS" status (#55). Fork PRs and manual runs keep the
-        # hosted macOS job: the gate does not run untrusted code on the Mac.
+        # the Mac through scripts/ci-mac-gate.sh, which posts a commit status
+        # named "Test (macos-latest)", like the hosted job (#55). Fork PRs and
+        # manual runs keep the hosted macOS job: the gate does not run untrusted
+        # code on the Mac. Keep the job name in step with the gate's context.
         os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name != github.repository) && '["ubuntu-latest","macos-latest"]' || '["ubuntu-latest"]') }}
     steps:
       - name: Checkout

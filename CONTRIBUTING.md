@@ -36,13 +36,17 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
   - Merge gate: after the push, `sh scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
     (`npm ci`, then the script). It requires the Node major that `ci.yml` uses
-    and the current Rust stable with rustfmt and clippy. It posts the commit
-    status `ci-local / macOS` on the PR head: pending while it runs, then
-    success or failure with the full merge and base SHAs, or error when the base
-    branch moved during the run. It runs the PR's code with your account's
-    access, so it refuses fork PRs. Before a merge,
-    `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0; it fails when the
-    status is missing, not green, or for another base commit.
+    and the current Rust stable with rustfmt and clippy. It posts a commit
+    status on the PR head under the hosted macOS job's name,
+    `Test (macos-latest)`, so one required check covers both routes: pending
+    while it runs, then success or failure with the full merge and base SHAs,
+    or error when the base, the target branch or the merge commit changed during
+    the run. It runs the PR's code with your account's access, so it refuses
+    fork PRs.
+- Before a merge, `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0. For a
+  branch of this repository it needs a green gate status for the PR's current
+  merge commit and base tip. For a fork PR it needs a green hosted
+  `Test (macos-latest)` job.
 - A manual CI run (`workflow_dispatch`) checks both Linux and macOS on GitHub.
 
 ## Maintainer scripts
@@ -52,7 +56,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 | `npm test` | Build `codex-hud` and run config, installer, version, pre-push hook, Mac gate, golden, README, and site checks. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
 | `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
-| `sh scripts/ci-mac-gate.sh [verify] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |
+| `sh scripts/ci-mac-gate.sh [verify] <pr>` | Check a pull request's merge commit on macOS and post the `Test (macos-latest)` status, or verify the PR's macOS result before a merge. |
 | `npm run check:i18n` | Check localized README heading and code-block skeletons against `README.md`. |
 | `npm run hud` | Run the built Rust HUD renderer directly. |
 | `npm run build:rust` | Build the release Rust renderer. |
