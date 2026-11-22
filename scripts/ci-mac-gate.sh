@@ -3,9 +3,6 @@
 # the same checks on a Mac and records the result on the pull request.
 #
 #   sh scripts/ci-mac-gate.sh <pr>         check the PR on this Mac, post the status
-#   sh scripts/ci-mac-gate.sh --fork-reviewed <head-sha> <pr>
-#                                          same, for a fork PR whose code you
-#                                          reviewed at exactly <head-sha>
 #   sh scripts/ci-mac-gate.sh verify <pr>  exit 0 only when the PR's current merge
 #                                          candidate has a green macOS result
 #
@@ -13,24 +10,28 @@
 # runner (Brandon, 2026-11-22).
 #
 # Trust boundary: the run mode executes the PR's code (npm lifecycle scripts and
-# tests) with this account's access. Without a flag it only checks PRs whose
-# branch lives in the base repository, which only people with push access can
-# write. A fork PR needs --fork-reviewed with the head SHA a maintainer read;
-# the gate refuses when the PR head differs from it.
+# tests) with this account's access: files, credentials, Keychain, SSH agent and
+# the token that posts the status. It only checks PRs whose branch lives in the
+# base repository, which only people with push access can write. It never runs
+# fork code. A fork PR gets the Linux CI job only; its macOS leg stays unchecked
+# (verify fails) until a maintainer recreates the change on a branch of this
+# repository and runs the gate on that PR.
 #
 # The run mode checks GitHub's merge commit for the PR (refs/pull/<pr>/merge,
 # the commit the old hosted job checked out) in a clean temporary checkout. It
 # matches the old hosted job: the Node major set in ci.yml, the current Rust
-# stable with rustfmt and clippy, `npm ci`, then scripts/ci-local.sh, at nice 10,
-# within the old hosted job's deadline (GitHub's default 360 minutes; a timeout
-# is a failure). It posts pending while it runs, then success or failure with
-# the record "merge <sha> base <sha> ref <base-branch>". If the candidate changed
-# during the run (new head, retarget, base moved), it posts error or nothing,
-# so the run must repeat. verify compares that record with the PR's current one.
+# stable with rustfmt and clippy, `npm ci`, then scripts/ci-local.sh, at nice 10.
+# The whole run, from the first GitHub read to the final status, has the old
+# hosted job's deadline (GitHub's default 360 minutes); a timeout posts failure.
+# It posts pending while it runs, then success or failure with a record of the
+# candidate. If the candidate changed during the run (new head, retarget, base
+# moved), it posts error or nothing, so the run must repeat. verify compares the
+# record with the PR's current one.
 set -u
 
 context="ci-local / macOS"
 deadline_seconds=21600
+status_post_seconds=120
 rust_channel_url="https://static.rust-lang.org/dist/channel-rust-stable.toml"
 
 die() {
@@ -47,30 +48,38 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
   GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX GIT_NAMESPACE
 
 cd "$(dirname "$0")/.." || exit 1
+self="$(pwd)/scripts/ci-mac-gate.sh"
 
-usage="usage: sh scripts/ci-mac-gate.sh [verify | --fork-reviewed <head-sha>] <pr-number>"
+usage="usage: sh scripts/ci-mac-gate.sh [verify] <pr-number>"
 mode=run
-reviewed_head=
-case ${1:-} in
-  verify)
-    mode=verify
-    shift
-    ;;
-  --fork-reviewed)
-    [ $# -ge 3 ] || die "$usage"
-    reviewed_head=$2
-    shift 2
-    case $reviewed_head in
-      *[!0-9a-f]*) die "--fork-reviewed needs the full 40-character head SHA" ;;
-    esac
-    [ ${#reviewed_head} -eq 40 ] || die "--fork-reviewed needs the full 40-character head SHA"
-    ;;
-esac
+if [ "${1:-}" = verify ]; then
+  mode=verify
+  shift
+fi
 pr=${1:-}
 case $pr in
   '' | *[!0-9]*) die "$usage" ;;
 esac
 command -v gh >/dev/null 2>&1 || die "gh is required"
+
+# Run mode: restart this script under one deadline for the whole run. On a
+# timeout, post failure on the head the run recorded, with its own short limit.
+if [ "$mode" = run ] && [ -z "${CI_MAC_GATE_RUN_DIR:-}" ]; then
+  [ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
+  run_dir=$(mktemp -d) || die "mktemp failed"
+  CI_MAC_GATE_RUN_DIR=$run_dir node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" "$pr"
+  rc=$?
+  if [ "$rc" -eq 124 ] && [ -s "$run_dir/head" ]; then
+    timed_head=$(cat "$run_dir/head")
+    node scripts/run-with-deadline.js "$status_post_seconds" \
+      gh api -X POST "repos/{owner}/{repo}/statuses/$timed_head" -f state=failure -f context="$context" \
+      -f description="timeout: the gate passed its $((deadline_seconds / 60))-minute deadline; rerun" >/dev/null ||
+      echo "ci-mac-gate: timed out, and posting the failure status failed" >&2
+    echo "ci-mac-gate: timed out after $((deadline_seconds / 60)) minutes" >&2
+  fi
+  rm -rf "$run_dir"
+  exit "$rc"
+fi
 
 post() {
   gh api -X POST "repos/{owner}/{repo}/statuses/$head" \
@@ -89,14 +98,26 @@ EOF
   base=$(gh api "repos/{owner}/{repo}/git/ref/heads/$base_name" --jq .object.sha)
 }
 
+# The candidate record: full merge and base SHAs, and the base branch. A branch
+# name that would push the record past GitHub's 140-character description limit
+# is stored as "refid" + the first 24 hex digits of its Git blob hash instead.
+candidate_record() {
+  record="merge $merge base $base ref $base_name"
+  if [ ${#record} -gt 140 ]; then
+    ref_id=$(printf '%s' "$base_name" | git hash-object --stdin) || return 1
+    record="merge $merge base $base refid $(printf '%.24s' "$ref_id")"
+  fi
+}
+
 read_candidate || die "cannot read PR $pr"
 case $merge in
   '' | null) die "PR $pr has no merge commit; resolve its merge conflict first" ;;
 esac
-record="merge $merge base $base ref $base_name"
-[ ${#record} -le 140 ] || die "base branch name $base_name is too long for the 140-character status record"
+candidate_record || die "cannot build the candidate record"
+fork_note="PR $pr comes from $head_repo, not $base_repo. The gate never runs fork code on the Mac, so macOS stays unchecked: recreate the change on a branch of $base_repo and run the gate on that PR"
 
 if [ "$mode" = verify ]; then
+  [ "$head_repo" = "$base_repo" ] || die "$fork_note"
   latest=$(gh api "repos/{owner}/{repo}/commits/$head/statuses" \
     --jq "[.[] | select(.context == \"$context\")][0] | \"\(.state) \(.description)\"") ||
     die "cannot read statuses for $head"
@@ -111,13 +132,9 @@ if [ "$mode" = verify ]; then
   esac
 fi
 
-if [ -n "$reviewed_head" ] && [ "$reviewed_head" != "$head" ]; then
-  die "PR $pr head is $head, not the reviewed $reviewed_head; review the new commits first"
-fi
-if [ "$head_repo" != "$base_repo" ] && [ -z "$reviewed_head" ]; then
-  die "PR $pr comes from $head_repo, not $base_repo. The gate runs its code with your access: review the PR at head $head, then run: sh scripts/ci-mac-gate.sh --fork-reviewed $head $pr"
-fi
+[ "$head_repo" = "$base_repo" ] || die "$fork_note"
 [ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
+printf '%s\n' "$head" >"$CI_MAC_GATE_RUN_DIR/head" || die "cannot write the run state"
 candidate="$head $base_name $base $merge"
 
 tmp=$(mktemp -d) || die "mktemp failed"
@@ -158,19 +175,12 @@ post pending "running on merge $(short "$merge") base $(short "$base")" || die "
 
 start=$(date +%s)
 state=success
-note=
-# shellcheck disable=SC2016 # $1 expands in the inner shell.
-node scripts/run-with-deadline.js "$deadline_seconds" \
-  sh -c 'cd "$1" && nice -n 10 npm ci && nice -n 10 sh "$1/scripts/ci-local.sh"' _ "$src"
-rc=$?
-if [ "$rc" -eq 124 ]; then
-  state=failure
-  note="timeout $((deadline_seconds / 60))m"
-elif [ "$rc" -ne 0 ]; then
-  state=failure
+(cd "$src" && nice -n 10 npm ci) || state=failure
+if [ "$state" = success ]; then
+  nice -n 10 sh "$src/scripts/ci-local.sh" || state=failure
 fi
 elapsed=$(($(date +%s) - start))
-echo "ci-mac-gate: checks $state in ${elapsed}s${note:+ ($note)}"
+echo "ci-mac-gate: checks $state in ${elapsed}s"
 
 tested_head=$head
 read_candidate || die "cannot read PR $pr after the run; status left pending"
@@ -183,8 +193,7 @@ fi
 # The record comes first and stays whole; extras are added only while the
 # description fits GitHub's 140 characters.
 description=$record
-for extra in "$note" "node $node_version" "rustc $rustc_version" "${elapsed}s"; do
-  [ -n "$extra" ] || continue
+for extra in "node $node_version" "rustc $rustc_version" "${elapsed}s"; do
   [ $((${#description} + 1 + ${#extra})) -le 140 ] && description="$description $extra"
 done
 post "$state" "$description" || die "checks finished ($state) but posting the status failed"
