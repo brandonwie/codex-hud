@@ -245,7 +245,9 @@ function refusedBeforeCheckout(result, pattern) {
 
 // For the fetch tests: a fake uname that reports macOS, and a fake git that
 // records each call, fetches from a local fixture instead of GitHub and fails
-// every checkout. The fixture holds base, head and a merge of the two.
+// every checkout. The fixture holds base, head and a merge of the two. Global
+// and system Git config are replaced by fetchConfig, so URL rewrites in the
+// machine's own config do not leak into the tests.
 const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
 function fetchHarness() {
   const fake = path.join(root, "fetch-bin");
@@ -260,7 +262,7 @@ function fetchHarness() {
       path.join(fake, "git"),
       `#!/bin/sh
 echo "$*" >> "$FAKE_GIT_CALLS"
-if [ "$1" = -C ] && [ "$3" = fetch ]; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
+if [ "$1" = -C ] && { [ "$3" = fetch ] || [ "$5" = fetch ]; }; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
 if [ "$1" = -C ] && [ "$3" = checkout ]; then echo "fake git: checkout refused" >&2; exit 1; fi
 exec "${realGit}" "$@"
 `,
@@ -287,7 +289,12 @@ exec "${realGit}" "$@"
   }
   const merge = git("rev-parse", "HEAD");
   const [base, head] = git("rev-parse", "HEAD^1", "HEAD^2").split("\n");
-  return { prefix: `${fake}${path.delimiter}`, gitCalls, runDir, fixture: { dir, base, head, merge } };
+  const fetchConfig = (text = "") => {
+    const file = path.join(root, "fetch-gitconfig");
+    fs.writeFileSync(file, text);
+    return { GIT_CONFIG_GLOBAL: file, GIT_CONFIG_NOSYSTEM: "1" };
+  };
+  return { prefix: `${fake}${path.delimiter}`, gitCalls, runDir, fixture: { dir, base, head, merge }, fetchConfig };
 }
 
 // Wraps job-level YAML lines (4-space indent) in a workflow with one job.
@@ -456,13 +463,13 @@ const cases = [
     }
   }],
   ["a stale fetched merge commit is refused before any checkout", () => {
-    const { prefix, gitCalls, runDir, fixture } = fetchHarness();
-    const env = { FAKE_GIT_CALLS: gitCalls, FAKE_FETCH_REPO: fixture.dir };
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const env = { FAKE_GIT_CALLS: gitCalls, FAKE_FETCH_REPO: fixture.dir, ...fetchConfig() };
     // GitHub's PR still names merge d…d while the fetched ref is a newer merge.
     const stale = runWorker("", env, runDir, "", { pathPrefix: prefix });
     fails(stale, /merge commit is not main \+ PR head yet/);
     const git = fs.readFileSync(gitCalls, "utf8");
-    assert.match(git, new RegExp(`fetch -q --depth=1 ${trustedUrl.replace(/\./g, "\\.")} refs/pull/56/merge`));
+    assert.match(git, new RegExp(`-c http\\.followRedirects=initial fetch -q --depth=1 ${trustedUrl.replace(/\./g, "\\.")} refs/pull/56/merge`));
     assert.doesNotMatch(git, /checkout/);
     assert.doesNotMatch(stale.ghCalls, /statuses/);
     // The same fetch with a matching PR passes the checks and only then checks out.
@@ -475,6 +482,22 @@ const cases = [
     }, runDir, "", { pathPrefix: prefix });
     fails(matching, /checkout failed/);
     assert.match(fs.readFileSync(gitCalls, "utf8"), new RegExp(`checkout -q --detach ${fixture.merge}`));
+  }],
+  ["an inherited URL rewrite of the trusted fetch URL is refused before any fetch", () => {
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    // The clone's origin is the approved SSH URL; the inherited global config
+    // rewrites the HTTPS URL the gate fetches from.
+    const env = {
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      ...fetchConfig('[url "https://evil.example/"]\n\tinsteadOf = https://github.com/\n'),
+    };
+    const result = runWorker("", env, runDir, "", { pathPrefix: prefix });
+    fails(result, /rewrites https:\/\/github\.com\/brandonwie\/codex-hud\.git to https:\/\/evil\.example\/brandonwie\/codex-hud\.git/);
+    const git = fs.readFileSync(gitCalls, "utf8");
+    assert.match(git, /ls-remote --get-url/);
+    assert.doesNotMatch(git, /fetch|checkout/);
+    assert.doesNotMatch(result.ghCalls, /statuses/);
   }],
   ["an inherited run directory cannot skip the deadline", () => {
     // The public command always takes the bounded path: on macOS it announces

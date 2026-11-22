@@ -290,9 +290,17 @@ trap 'exit 130' INT TERM
 src="$tmp/src"
 
 # Fetch from the trusted URL, then check the fetched commit and both parents
-# before anything is checked out.
+# before anything is checked out. Git config (url.<base>.insteadOf) can rewrite
+# the URL, so resolve it in the same repository and config the fetch uses and
+# refuse a rewrite before connecting. Redirects stay limited to the first
+# request.
 git init -q "$src" || die "git init failed"
-git -C "$src" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" ||
+fetch_url=$(git -C "$src" ls-remote --get-url "$trusted_url") || die "cannot resolve the fetch URL"
+case $fetch_url in
+  "https://$trusted_host/$trusted_repo" | "$trusted_url") ;;
+  *) die "Git rewrites $trusted_url to $fetch_url (url.<base>.insteadOf in your Git config); the gate fetches only from $trusted_url. Remove the rewrite and rerun" ;;
+esac
+git -C "$src" -c http.followRedirects=initial fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" ||
   die "cannot fetch refs/pull/$pr/merge; the PR may have a merge conflict"
 fetched=$(git -C "$src" rev-parse --verify -q 'FETCH_HEAD^{commit}') || die "cannot resolve the fetched merge commit"
 parents=$(git -C "$src" cat-file -p "$fetched" | sed -n 's/^parent //p' | tr '\n' ' ')

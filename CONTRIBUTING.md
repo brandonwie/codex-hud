@@ -47,8 +47,10 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     credentials, Keychain, SSH agent, the status token). It works only on
     `brandonwie/codex-hud` on github.com: every GitHub call names that
     repository (`GH_REPO`, `GH_HOST` and the clone's defaults are ignored), the
-    merge ref is fetched from its URL, and the fetched merge commit and both
-    parents are checked before checkout. Before any fetch it refuses a clone
+    merge ref is fetched from its URL (refused when your Git config rewrites
+    that URL with `url.<base>.insteadOf`; redirects limited to the first
+    request), and the fetched merge commit and both parents are checked before
+    checkout. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
     and a fork PR. It also refuses a branch PR unless every commit has a
     verified signature from a committer listed in
