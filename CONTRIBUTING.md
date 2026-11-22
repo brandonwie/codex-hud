@@ -56,7 +56,11 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     gate turns off shell tracing (`set +xv`), Git tracing (`GIT_TRACE*`,
     trace2 targets) and gh debug output, and discards the error output of every
     git and gh call (Git prints a malformed config key, URL included, in its
-    own errors), printing a fixed message for each failed step instead. Any rewrite of the fetch
+    own errors), printing a fixed message for each failed step instead. It
+    refuses to run when a proxy variable holds a user name or password, prints
+    no curl error for the Rust channel download, and runs the pull request's
+    checks with an empty global Git config and no system config, like the
+    hosted runner. Any rewrite of the fetch
     URL is refused, even to the same repository's bare URL. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
     and a fork PR. It also refuses a branch PR unless every commit has a

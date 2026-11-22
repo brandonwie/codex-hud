@@ -61,6 +61,12 @@ set -u
 #   - inherited Git trace variables are dropped, and trace2 targets set in Git
 #     config are disabled (the environment overrides them);
 #   - gh and curl debug output is off (GH_DEBUG, DEBUG; curl -q skips .curlrc);
+#   - proxy variables that hold a user name or password are refused before any
+#     tool runs (curl, git, gh, npm and cargo can print a proxy URL in their
+#     errors), and the Rust channel download prints no curl error at all;
+#   - the PR's checks (npm ci, ci-local.sh) run with an empty global Git config
+#     and no system config, like the hosted runner, so a key in the maintainer's
+#     Git config cannot reach their output;
 #   - every git and gh call sends its stderr to /dev/null: Git prints a
 #     malformed or valueless config key, URL included, in its own errors. Each
 #     failure prints a fixed message naming the step and the trusted URL only;
@@ -71,6 +77,23 @@ done
 unset GIT_CURL_VERBOSE GH_DEBUG DEBUG
 GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
 export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
+proxy_names() {
+  env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | grep -i 'proxy' | grep -iv '^no_proxy$'
+}
+# Prints the names (never the values) of proxy variables with a user name or
+# password.
+proxy_creds() {
+  for name in $(proxy_names); do
+    case $(printenv "$name") in
+      *@*) printf '%s ' "$name" ;;
+    esac
+  done
+}
+proxy_creds=$(proxy_creds)
+if [ -n "$proxy_creds" ]; then
+  echo "ci-mac-gate: proxy variables ${proxy_creds}hold a user name or password; the gate does not run with credentials in proxy variables, because curl, git, gh, npm and cargo can print a proxy URL in their errors. Use a proxy without inline credentials and rerun" >&2
+  exit 1
+fi
 
 context="ci-local / macOS"
 trusted_host=github.com
@@ -348,7 +371,11 @@ node_version=$(cd "$src" && node -p process.versions.node) || die "node not foun
 [ "${node_version%%.*}" = "$want_node" ] ||
   die "CI uses Node $want_node, this shell has Node $node_version; select Node $want_node (asdf: ASDF_NODEJS_VERSION=<$want_node.x.y>) and rerun"
 
-curl -q -fsSL -o "$tmp/channel.toml" "$rust_channel_url" || die "cannot read the current Rust stable version"
+# No -S and no stderr: curl prints a malformed proxy URL in its own errors.
+if ! curl -q -fsL -o "$tmp/channel.toml" "$rust_channel_url" 2>/dev/null; then
+  proxies=$(proxy_names | tr '\n' ' ')
+  die "cannot read the current Rust stable version from $rust_channel_url${proxies:+ (proxy variables set: ${proxies}- check them; values not shown)}"
+fi
 stable=$(sed -n '/^\[pkg\.rustc\]$/,/^\[/s/^version = "\([0-9.]*\) .*/\1/p' "$tmp/channel.toml")
 [ -n "$stable" ] || die "no rustc version in $rust_channel_url"
 rustc_line=$(cd "$src" && rustc -V) || die "rustc not found"
@@ -364,10 +391,12 @@ echo "ci-mac-gate: Node $node_version, Rust $rustc_version (stable), $(uname -sm
 post pending "running on merge $(short "$merge") base $(short "$base")" || die "cannot post the pending status"
 
 start=$(date +%s)
+checks_gitconfig="$tmp/checks.gitconfig"
+: >"$checks_gitconfig" || die "cannot create the checks' Git config"
 state=success
-(cd "$src" && nice -n 10 npm ci) || state=failure
+(cd "$src" && GIT_CONFIG_GLOBAL="$checks_gitconfig" GIT_CONFIG_NOSYSTEM=1 nice -n 10 npm ci) || state=failure
 if [ "$state" = success ]; then
-  nice -n 10 sh "$src/scripts/ci-local.sh" || state=failure
+  GIT_CONFIG_GLOBAL="$checks_gitconfig" GIT_CONFIG_NOSYSTEM=1 nice -n 10 sh "$src/scripts/ci-local.sh" || state=failure
 fi
 elapsed=$(($(date +%s) - start))
 echo "ci-mac-gate: checks $state in ${elapsed}s"

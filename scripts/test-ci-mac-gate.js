@@ -54,6 +54,24 @@ const firstCommit = "f".repeat(40);
 const repo = "brandonwie/codex-hud";
 const trustedUrl = "https://github.com/brandonwie/codex-hud.git";
 
+// Every git command here and every gate run uses an empty global Git config
+// and no system config, so the maintainer's Git config (a conditional include,
+// a URL rewrite holding a token) can neither change the tests nor reach their
+// output. Fixture git failures report the command and exit code, never stderr.
+const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+const isolatedGitConfig = path.join(root, "isolated.gitconfig");
+fs.writeFileSync(isolatedGitConfig, "");
+const baseEnv = () => ({
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+  GIT_CONFIG_GLOBAL: isolatedGitConfig,
+  GIT_CONFIG_NOSYSTEM: "1",
+});
+function fixtureGit(args, { cwd, input, env = {} } = {}) {
+  const result = spawnSync(realGit, args, { cwd, input, encoding: "utf8", env: { ...baseEnv(), ...env } });
+  assert.strictEqual(result.status, 0, `fixture git ${args[0] === "-C" ? args[2] : args[0]} failed (exit ${result.status})`);
+  return result.stdout.trim();
+}
+
 // Fixture clones that hold the gate and its helper files, with a chosen origin.
 function gateClone(name, origin) {
   const dir = path.join(root, name);
@@ -61,10 +79,8 @@ function gateClone(name, origin) {
   for (const file of ["ci-mac-gate.sh", "run-with-deadline.js", "ci-mac-gate-maintainers.txt"]) {
     fs.copyFileSync(path.join(repoRoot, "scripts", file), path.join(dir, "scripts", file));
   }
-  for (const args of [["init", "-q"], ["remote", "add", "origin", origin]]) {
-    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
-    assert.strictEqual(result.status, 0, result.stderr);
-  }
+  fixtureGit(["init", "-q"], { cwd: dir });
+  fixtureGit(["remote", "add", "origin", origin], { cwd: dir });
   return path.join(dir, "scripts", "ci-mac-gate.sh");
 }
 const trustedGate = gateClone("clone-ssh", "git@github.com:brandonwie/codex-hud.git");
@@ -75,10 +91,9 @@ const trustedCommits = commitLines([firstCommit, "true", "brandonwie", "brandonw
 
 function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [] } = {}) {
   fs.rmSync(calls, { force: true });
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
   const result = spawnSync("sh", [...shellArgs, gatePath, ...args], {
     env: {
-      ...env,
+      ...baseEnv(),
       // The gate must ignore these: the fake gh fails when it sees them.
       GH_REPO: "someone/codex-hud",
       GH_HOST: "example.com",
@@ -248,7 +263,6 @@ function refusedBeforeCheckout(result, pattern) {
 // every checkout. The fixture holds base, head and a merge of the two. Global
 // and system Git config are replaced by fetchConfig, so URL rewrites in the
 // machine's own config do not leak into the tests.
-const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
 function fetchHarness() {
   const fake = path.join(root, "fetch-bin");
   const gitCalls = path.join(root, "git-calls");
@@ -264,7 +278,7 @@ function fetchHarness() {
 echo "$*" >> "$FAKE_GIT_CALLS"
 env | sed -n 's/^\\(GIT_TRACE[A-Za-z0-9_]*=.*\\)/trace-env \\1/p; s/^\\(GIT_CURL_VERBOSE=.*\\)/trace-env \\1/p' >> "$FAKE_GIT_CALLS"
 if [ "$1" = -C ] && { [ "$3" = fetch ] || [ "$5" = fetch ]; }; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
-if [ "$1" = -C ] && [ "$3" = checkout ]; then echo "fake git: checkout refused" >&2; exit 1; fi
+if [ "$1" = -C ] && [ "$3" = checkout ] && [ -z "\${FAKE_ALLOW_CHECKOUT:-}" ]; then echo "fake git: checkout refused" >&2; exit 1; fi
 if [ "$1" = -C ] && [ "$5" = config ] && [ -n "\${FAKE_REDIRECTS:-}" ]; then echo "$FAKE_REDIRECTS"; exit 0; fi
 exec "${realGit}" "$@"
 `,
@@ -272,18 +286,18 @@ exec "${realGit}" "$@"
     );
   }
   const dir = path.join(root, "fetch-src");
-  const git = (...args) => {
-    const result = spawnSync(realGit, ["-C", dir, ...args], {
-      encoding: "utf8",
-      env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" },
-    });
-    assert.strictEqual(result.status, 0, result.stderr);
-    return result.stdout.trim();
-  };
+  const author = { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
+  const git = (...args) => fixtureGit(["-C", dir, ...args], { env: author });
+  const gitIn = (input, ...args) => fixtureGit(["-C", dir, ...args], { env: author, input });
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir);
     git("init", "-q");
-    const tree = git("hash-object", "-t", "tree", "-w", "/dev/null");
+    // The merge tree holds .github/workflows/ci.yml with this Node major, so a
+    // run that is allowed to check out reaches the toolchain steps.
+    const ciYml = gitIn(`      - uses: actions/setup-node@x\n        with:\n          node-version: ${process.versions.node.split(".")[0]}\n`, "hash-object", "-w", "--stdin");
+    const workflows = gitIn(`100644 blob ${ciYml}\tci.yml\n`, "mktree");
+    const github = gitIn(`040000 tree ${workflows}\tworkflows\n`, "mktree");
+    const tree = gitIn(`040000 tree ${github}\t.github\n`, "mktree");
     const b = git("commit-tree", tree, "-m", "base");
     const h = git("commit-tree", tree, "-p", b, "-m", "head");
     const m = git("commit-tree", tree, "-p", b, "-p", h, "-m", "merge");
@@ -597,6 +611,72 @@ const cases = [
     assert.doesNotMatch(calls, /fetch -q|checkout/);
     assert.doesNotMatch(scoped.ghCalls, /statuses/);
   }],
+  ["proxy variables with a user name or password are refused before any tool runs", () => {
+    const marker = "SYNTHETIC-PROXY-USER-71d0";
+    for (const name of ["HTTPS_PROXY", "https_proxy", "ALL_PROXY"]) {
+      const proxy = { [name]: `http://u:${marker}@proxy.example:8080` };
+      const run = runWorker("", proxy);
+      refusedBeforeCheckout(run, new RegExp(`proxy variables ${name} hold a user name or password`));
+      assert.ok(!(run.stdout + run.stderr).includes(marker), `${name}: the proxy credential reached the output`);
+      assert.strictEqual(run.ghCalls, "", `${name}: gh ran before the refusal`);
+      const verify = runGate(["verify", "56"], { ...proxy, FAKE_STATUS: status("success") });
+      fails(verify, /hold a user name or password/);
+      assert.ok(!(verify.stdout + verify.stderr).includes(marker), `${name}: verify printed the proxy credential`);
+    }
+    // A proxy without inline credentials passes the check.
+    passedTrust(runWorker("", { HTTPS_PROXY: "http://proxy.example:8080" }));
+  }],
+  ["a malformed proxy URL never reaches the output from the Rust channel download", () => {
+    // No network: curl rejects the malformed proxy before it opens a socket.
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const marker = "SYNTHETIC-PROXY-URL-a42b";
+    const result = runWorker("", {
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      FAKE_ALLOW_CHECKOUT: "1",
+      FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
+      FAKE_BASE: fixture.base,
+      FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
+      HTTPS_PROXY: `http://[${marker}`,
+      https_proxy: `http://[${marker}`,
+      ...fetchConfig(),
+    }, runDir, "", { pathPrefix: prefix });
+    fails(result, /cannot read the current Rust stable version from https:\/\/static\.rust-lang\.org\/dist\/channel-rust-stable\.toml \(proxy variables set: .*HTTPS_PROXY.*values not shown\)/);
+    assert.ok(!(result.stdout + result.stderr).includes(marker), "a curl error printed the proxy URL");
+    assert.doesNotMatch(result.ghCalls, /statuses/);
+  }],
+  ["the PR's checks run with an empty global Git config and no system config", () => {
+    const script = fs.readFileSync(gate, "utf8");
+    assert.match(script, /GIT_CONFIG_GLOBAL="\$checks_gitconfig" GIT_CONFIG_NOSYSTEM=1 nice -n 10 npm ci/);
+    assert.match(script, /GIT_CONFIG_GLOBAL="\$checks_gitconfig" GIT_CONFIG_NOSYSTEM=1 nice -n 10 sh "\$src\/scripts\/ci-local\.sh"/);
+  }],
+  ["the maintainer's Git config, even an include for the test clones only, cannot reach the tests", () => {
+    // A maintainer home whose Git config includes a valueless URL rewrite with
+    // a token, only for repositories under the test clone directory.
+    const marker = "SYNTHETIC-MAINTAINER-INCLUDE-3c6f";
+    const home = path.join(root, "maintainer-home");
+    fs.mkdirSync(home, { recursive: true });
+    const include = path.join(home, "clones.gitconfig");
+    fs.writeFileSync(include, `[url "https://u:${marker}@evil.example/"]\n\tinsteadOf\n`);
+    const cloneDir = path.join(fs.realpathSync(root), "clone-include");
+    fs.writeFileSync(path.join(home, ".gitconfig"), `[includeIf "gitdir:${cloneDir}/"]\n\tpath = ${include}\n`);
+    const savedHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const gatePath = gateClone("clone-include", "git@github.com:brandonwie/codex-hud.git");
+      // Control: plain git with that home fails in the clone and prints the token.
+      const plainEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1" };
+      const plain = spawnSync(realGit, ["remote", "get-url", "origin"], { cwd: path.dirname(path.dirname(gatePath)), encoding: "utf8", env: plainEnv });
+      assert.notStrictEqual(plain.status, 0, "the include did not apply to the clone");
+      assert.ok(plain.stderr.includes(marker), "the control did not show the token");
+      // The tests' git and the gate run ignore it.
+      const result = runWorker("", {}, missingRunDir, "", { gatePath });
+      passedTrust(result);
+      assert.ok(!(result.stdout + result.stderr).includes(marker), "the maintainer config reached the gate output");
+    } finally {
+      process.env.HOME = savedHome;
+    }
+  }],
   ["a rewrite to the bare repository URL is refused before any fetch", () => {
     // The bare form names the same repository, but the redirect limit is keyed
     // to the literal URL: an endpoint setting for the bare URL would win.
@@ -620,7 +700,7 @@ const cases = [
     const urlmatch = (...extra) =>
       spawnSync(realGit, ["-C", fixture.dir, ...extra, "config", "--get-urlmatch", "http.followRedirects", trustedUrl], {
         encoding: "utf8",
-        env: { ...process.env, ...conflicting },
+        env: { ...baseEnv(), ...conflicting },
       }).stdout.trim();
     assert.strictEqual(urlmatch("-c", "http.followRedirects=initial"), "true");
     assert.strictEqual(urlmatch("-c", `http.${trustedUrl}.followRedirects=initial`), "initial");
@@ -659,7 +739,7 @@ const cases = [
     const longRef = `release/${"x".repeat(60)}`;
     const otherLongRef = `release/${"y".repeat(60)}`;
     const refId = (name) =>
-      spawnSync("git", ["hash-object", "--stdin"], { input: name, encoding: "utf8" }).stdout.trim().slice(0, 24);
+      spawnSync(realGit, ["hash-object", "--stdin"], { input: name, encoding: "utf8", env: baseEnv() }).stdout.trim().slice(0, 24);
     const record = `success merge ${merge} base ${base} refid ${refId(longRef)}`;
     const pr = (ref) => ({ FAKE_PR: `${head} ${ref} ${repo} ${repo} ${merge}`, FAKE_OTHER_BASE: base });
     const green = runGate(["verify", "56"], { ...pr(longRef), FAKE_STATUS: record });
@@ -711,7 +791,8 @@ const cases = [
     for (const [name, text] of Object.entries(bad)) {
       assert.notDeepStrictEqual(runnerProblems(name, inJob(text)), [], name);
     }
-    const round3 = spawnSync("git", ["show", "b9396f31568f6b9ad0c025f56668c1d7d64c0fe6:.github/workflows/ci.yml"], {
+    const round3 = spawnSync(realGit, ["show", "b9396f31568f6b9ad0c025f56668c1d7d64c0fe6:.github/workflows/ci.yml"], {
+      env: baseEnv(),
       cwd: repoRoot,
       encoding: "utf8",
     });
