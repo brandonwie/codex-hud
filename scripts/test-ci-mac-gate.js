@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 // Runs scripts/ci-mac-gate.sh with a fake `gh` on PATH, so the verify mode and
-// the fork rules are checked without GitHub and without running any checks.
+// the fork rules are checked without GitHub and without running any checks. The
+// gate runs from fixture clones whose origin each test controls.
 
 const assert = require("assert");
 const fs = require("fs");
@@ -18,7 +19,8 @@ process.on("exit", () => {
 });
 
 // The fake gh answers each API read the gate makes from FAKE_* variables and
-// records every call. It never calls gh itself.
+// records every call. It never calls gh itself. It fails any call that does not
+// name the trusted host and repository, or that still sees GH_REPO or GH_HOST.
 const bin = path.join(root, "bin");
 const calls = path.join(root, "gh-calls");
 fs.mkdirSync(bin);
@@ -26,6 +28,11 @@ fs.writeFileSync(
   path.join(bin, "gh"),
   `#!/bin/sh
 echo "$*" >> "$FAKE_GH_CALLS"
+if [ -n "\${GH_REPO:-}\${GH_HOST:-}" ]; then echo "fake gh: GH_REPO or GH_HOST reached gh" >&2; exit 1; fi
+case "$*" in
+  "api --hostname github.com "*"repos/brandonwie/codex-hud/"*) ;;
+  *) echo "fake gh: call not bound to github.com brandonwie/codex-hud: $*" >&2; exit 1 ;;
+esac
 case "$*" in
   *"/statuses"*) printf '%s\\n' "$FAKE_STATUS" ;;
   *"/pulls/"*"/commits"*) printf '%s\\n' "$FAKE_COMMITS" ;;
@@ -44,19 +51,38 @@ const otherBase = "c".repeat(40);
 const merge = "d".repeat(40);
 const otherMerge = "e".repeat(40);
 const firstCommit = "f".repeat(40);
-const repo = "owner/repo";
+const repo = "brandonwie/codex-hud";
+const trustedUrl = "https://github.com/brandonwie/codex-hud.git";
+
+// Fixture clones that hold the gate and its helper files, with a chosen origin.
+function gateClone(name, origin) {
+  const dir = path.join(root, name);
+  fs.mkdirSync(path.join(dir, "scripts"), { recursive: true });
+  for (const file of ["ci-mac-gate.sh", "run-with-deadline.js", "ci-mac-gate-maintainers.txt"]) {
+    fs.copyFileSync(path.join(repoRoot, "scripts", file), path.join(dir, "scripts", file));
+  }
+  for (const args of [["init", "-q"], ["remote", "add", "origin", origin]]) {
+    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    assert.strictEqual(result.status, 0, result.stderr);
+  }
+  return path.join(dir, "scripts", "ci-mac-gate.sh");
+}
+const trustedGate = gateClone("clone-ssh", "git@github.com:brandonwie/codex-hud.git");
 const status = (state, m = merge, b = base, ref = "main") => `${state} merge ${m} base ${b} ref ${ref} node 24.22.3 rustc 1.100.0 61s`;
 // PR commit lines as the gate's jq prints them: sha, verified, committer, author.
 const commitLines = (...rows) => rows.map((row) => row.join(" ")).join("\n");
 const trustedCommits = commitLines([firstCommit, "true", "brandonwie", "brandonwie"], [head, "true", "brandonwie", "brandonwie"]);
 
-function runGate(args, fake) {
+function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "" } = {}) {
   fs.rmSync(calls, { force: true });
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
-  const result = spawnSync("sh", [gate, ...args], {
+  const result = spawnSync("sh", [gatePath, ...args], {
     env: {
       ...env,
-      PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+      // The gate must ignore these: the fake gh fails when it sees them.
+      GH_REPO: "someone/codex-hud",
+      GH_HOST: "example.com",
+      PATH: `${pathPrefix}${bin}${path.delimiter}${process.env.PATH}`,
       FAKE_GH_CALLS: calls,
       FAKE_PR: `${head} main ${repo} ${repo} ${merge} 2 main`,
       FAKE_COMMITS: trustedCommits,
@@ -200,9 +226,9 @@ function fails(result, pattern) {
 // run-state directory does not exist, elsewhere the macOS check stops it.
 const missingRunDir = path.join(root, "no-run-dir");
 let lastRunDir = "";
-function runWorker(trust, fake, runDir = missingRunDir, trustBase = "") {
+function runWorker(trust, fake, runDir = missingRunDir, trustBase = "", options = {}) {
   lastRunDir = runDir;
-  return runGate(["__worker", runDir, trust, trustBase, "56"], fake);
+  return runGate(["__worker", runDir, trust, trustBase, "56"], fake, options);
 }
 
 function passedTrust(result) {
@@ -215,6 +241,53 @@ function refusedBeforeCheckout(result, pattern) {
   assert.doesNotMatch(result.stderr, /cannot write the run state|run this on macOS/);
   assert.doesNotMatch(result.ghCalls, /statuses/);
   assert.ok(!fs.existsSync(lastRunDir), "the worker wrote run state");
+}
+
+// For the fetch tests: a fake uname that reports macOS, and a fake git that
+// records each call, fetches from a local fixture instead of GitHub and fails
+// every checkout. The fixture holds base, head and a merge of the two.
+const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+function fetchHarness() {
+  const fake = path.join(root, "fetch-bin");
+  const gitCalls = path.join(root, "git-calls");
+  const runDir = path.join(root, "fetch-run");
+  fs.rmSync(gitCalls, { force: true });
+  fs.mkdirSync(runDir, { recursive: true });
+  if (!fs.existsSync(fake)) {
+    fs.mkdirSync(fake);
+    fs.writeFileSync(path.join(fake, "uname"), `#!/bin/sh\n[ "$1" = -s ] && { echo Darwin; exit 0; }\nexec /usr/bin/uname "$@"\n`, { mode: 0o755 });
+    fs.writeFileSync(
+      path.join(fake, "git"),
+      `#!/bin/sh
+echo "$*" >> "$FAKE_GIT_CALLS"
+if [ "$1" = -C ] && [ "$3" = fetch ]; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
+if [ "$1" = -C ] && [ "$3" = checkout ]; then echo "fake git: checkout refused" >&2; exit 1; fi
+exec "${realGit}" "$@"
+`,
+      { mode: 0o755 },
+    );
+  }
+  const dir = path.join(root, "fetch-src");
+  const git = (...args) => {
+    const result = spawnSync(realGit, ["-C", dir, ...args], {
+      encoding: "utf8",
+      env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" },
+    });
+    assert.strictEqual(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir);
+    git("init", "-q");
+    const tree = git("hash-object", "-t", "tree", "-w", "/dev/null");
+    const b = git("commit-tree", tree, "-m", "base");
+    const h = git("commit-tree", tree, "-p", b, "-m", "head");
+    const m = git("commit-tree", tree, "-p", b, "-p", h, "-m", "merge");
+    git("update-ref", "HEAD", m);
+  }
+  const merge = git("rev-parse", "HEAD");
+  const [base, head] = git("rev-parse", "HEAD^1", "HEAD^2").split("\n");
+  return { prefix: `${fake}${path.delimiter}`, gitCalls, runDir, fixture: { dir, base, head, merge } };
 }
 
 // Wraps job-level YAML lines (4-space indent) in a workflow with one job.
@@ -359,6 +432,49 @@ const cases = [
     for (const value of ["", " null"]) {
       refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 2${value}` }), /cannot read the default branch/);
     }
+  }],
+  ["every GitHub call names the trusted host and repository, whatever GH_REPO says", () => {
+    const result = runWorker("", {});
+    passedTrust(result);
+    const lines = result.ghCalls.trim().split("\n");
+    assert.ok(lines.length >= 3, result.ghCalls);
+    for (const line of lines) assert.match(line, /^api --hostname github\.com .*repos\/brandonwie\/codex-hud\//);
+    assert.strictEqual(runGate(["verify", "56"], { FAKE_STATUS: status("success") }).status, 0);
+  }],
+  ["verified maintainer commits in a different repository are refused", () => {
+    const other = { FAKE_PR: `${head} main someone/codex-hud someone/codex-hud ${merge} 2 main` };
+    refusedBeforeCheckout(runWorker("", other), /belongs to someone\/codex-hud, not brandonwie\/codex-hud/);
+    refusedBeforeCheckout(runWorker(head, other, missingRunDir, base), /belongs to someone\/codex-hud/);
+    fails(runGate(["verify", "56"], { ...other, FAKE_STATUS: status("success") }), /belongs to someone\/codex-hud/);
+  }],
+  ["the worker refuses a clone whose origin is another repository", () => {
+    const forkClone = gateClone("clone-fork", "git@github.com:someone/codex-hud.git");
+    const result = runWorker("", {}, missingRunDir, "", { gatePath: forkClone });
+    refusedBeforeCheckout(result, /origin is git@github.com:someone\/codex-hud.git, not brandonwie\/codex-hud/);
+    for (const [name, origin] of [["clone-https", trustedUrl], ["clone-https-bare", "https://github.com/brandonwie/codex-hud"]]) {
+      passedTrust(runWorker("", {}, missingRunDir, "", { gatePath: gateClone(name, origin) }));
+    }
+  }],
+  ["a stale fetched merge commit is refused before any checkout", () => {
+    const { prefix, gitCalls, runDir, fixture } = fetchHarness();
+    const env = { FAKE_GIT_CALLS: gitCalls, FAKE_FETCH_REPO: fixture.dir };
+    // GitHub's PR still names merge d…d while the fetched ref is a newer merge.
+    const stale = runWorker("", env, runDir, "", { pathPrefix: prefix });
+    fails(stale, /merge commit is not main \+ PR head yet/);
+    const git = fs.readFileSync(gitCalls, "utf8");
+    assert.match(git, new RegExp(`fetch -q --depth=1 ${trustedUrl.replace(/\./g, "\\.")} refs/pull/56/merge`));
+    assert.doesNotMatch(git, /checkout/);
+    assert.doesNotMatch(stale.ghCalls, /statuses/);
+    // The same fetch with a matching PR passes the checks and only then checks out.
+    fs.rmSync(gitCalls, { force: true });
+    const matching = runWorker("", {
+      ...env,
+      FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
+      FAKE_BASE: fixture.base,
+      FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
+    }, runDir, "", { pathPrefix: prefix });
+    fails(matching, /checkout failed/);
+    assert.match(fs.readFileSync(gitCalls, "utf8"), new RegExp(`checkout -q --detach ${fixture.merge}`));
   }],
   ["an inherited run directory cannot skip the deadline", () => {
     // The public command always takes the bounded path: on macOS it announces

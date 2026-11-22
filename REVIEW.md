@@ -144,7 +144,8 @@ merge semantics are product changes; review them across both surfaces.
 pull request, fork pull requests included, and for a manual run. No workflow
 uses a GitHub-hosted macOS runner. The macOS leg runs only on a Mac:
 `sh scripts/ci-mac-gate.sh <pr>` checks the PR's merge commit and posts the
-`ci-local / macOS` commit status. It never runs fork code, so a fork PR's
+`ci-local / macOS` commit status. It is bound to `brandonwie/codex-hud` on
+github.com and checks the fetched merge commit before checkout. It never runs fork code, so a fork PR's
 macOS leg stays unchecked until a maintainer recreates the change on a branch
 of this repository. On a branch it runs only commits signed by a listed
 maintainer (`scripts/ci-mac-gate-maintainers.txt`), unless a maintainer passes

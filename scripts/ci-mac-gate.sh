@@ -21,7 +21,12 @@
 #
 # Trust boundary: the run mode executes the PR's code (npm lifecycle scripts and
 # tests) with this account's access: files, credentials, Keychain, SSH agent and
-# the token that posts the status. Before any checkout it requires:
+# the token that posts the status. The trusted repository is fixed below
+# (trusted_host, trusted_repo): every GitHub call names it, GH_REPO, GH_HOST and
+# the clone's defaults are ignored, and the merge ref is fetched from its URL.
+# Before any fetch it requires:
+#   0. The PR's base and head repositories and this clone's origin are the
+#      trusted repository.
 #   1. The PR branch lives in the base repository. Fork PRs are always refused:
 #      their macOS leg stays unchecked (verify fails) until a maintainer
 #      recreates the change on a branch of this repository.
@@ -50,6 +55,9 @@
 set -u
 
 context="ci-local / macOS"
+trusted_host=github.com
+trusted_repo=brandonwie/codex-hud
+trusted_url="https://$trusted_host/$trusted_repo.git"
 deadline_seconds=21600
 status_post_seconds=120
 maintainers_file=scripts/ci-mac-gate-maintainers.txt
@@ -72,6 +80,9 @@ full_sha() {
 }
 
 # Git variables set by a calling hook would point git at another repository.
+# GH_REPO and GH_HOST would point gh at another repository; every call below
+# names the trusted one explicitly anyway.
+unset GH_REPO GH_HOST
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
   GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX GIT_NAMESPACE
 
@@ -130,7 +141,7 @@ if [ "$mode" = run ]; then
   if [ "$rc" -eq 124 ] && [ -s "$run_dir/head" ]; then
     timed_head=$(cat "$run_dir/head")
     node scripts/run-with-deadline.js "$status_post_seconds" \
-      gh api -X POST "repos/{owner}/{repo}/statuses/$timed_head" -f state=failure -f context="$context" \
+      gh api --hostname "$trusted_host" -X POST "repos/$trusted_repo/statuses/$timed_head" -f state=failure -f context="$context" \
       -f description="timeout: the gate passed its $((deadline_seconds / 60))-minute deadline; rerun" >/dev/null ||
       echo "ci-mac-gate: timed out, and posting the failure status failed" >&2
     echo "ci-mac-gate: timed out after $((deadline_seconds / 60)) minutes" >&2
@@ -139,8 +150,13 @@ if [ "$mode" = run ]; then
   exit "$rc"
 fi
 
+# Every GitHub call goes to the trusted host and names the trusted repository.
+ghapi() {
+  gh api --hostname "$trusted_host" "$@"
+}
+
 post() {
-  gh api -X POST "repos/{owner}/{repo}/statuses/$head" \
+  ghapi -X POST "repos/$trusted_repo/statuses/$head" \
     -f state="$1" -f context="$context" -f description="$2" >/dev/null
 }
 
@@ -148,13 +164,13 @@ post() {
 # commit for the PR), commit_count, default_branch (the repository's) and base
 # (the current tip of the PR's current base branch).
 read_candidate() {
-  pr_line=$(gh api "repos/{owner}/{repo}/pulls/$pr" \
+  pr_line=$(ghapi "repos/$trusted_repo/pulls/$pr" \
     --jq '"\(.head.sha) \(.base.ref) \(.head.repo.full_name) \(.base.repo.full_name) \(.merge_commit_sha) \(.commits) \(.base.repo.default_branch)"') ||
     return 1
   read -r head base_name head_repo base_repo merge commit_count default_branch <<EOF
 $pr_line
 EOF
-  base=$(gh api "repos/{owner}/{repo}/git/ref/heads/$base_name" --jq .object.sha)
+  base=$(ghapi "repos/$trusted_repo/git/ref/heads/$base_name" --jq .object.sha)
 }
 
 # The candidate record: full merge and base SHAs, and the base branch. A branch
@@ -189,7 +205,7 @@ untrusted_commits() {
     echo "the PR has $commit_count commits; GitHub lists at most 250" >&2
     return 1
   }
-  commits=$(gh api --paginate "repos/{owner}/{repo}/pulls/$pr/commits?per_page=100" \
+  commits=$(ghapi --paginate "repos/$trusted_repo/pulls/$pr/commits?per_page=100" \
     --jq '.[] | "\(.sha) \(.commit.verification.verified) \(.committer.login) \(.author.login)"') || return 1
   listed=$(printf '%s\n' "$commits" | grep -c .)
   last=$(printf '%s\n' "$commits" | tail -n 1 | cut -d' ' -f1)
@@ -207,6 +223,8 @@ untrusted_commits() {
 }
 
 read_candidate || die "cannot read PR $pr"
+[ "$base_repo" = "$trusted_repo" ] ||
+  die "PR $pr belongs to $base_repo, not $trusted_repo; the gate checks only $trusted_repo"
 case $merge in
   '' | null) die "PR $pr has no merge commit; resolve its merge conflict first" ;;
 esac
@@ -215,7 +233,7 @@ fork_note="PR $pr comes from $head_repo, not $base_repo. The gate never runs for
 
 if [ "$mode" = verify ]; then
   [ "$head_repo" = "$base_repo" ] || die "$fork_note"
-  latest=$(gh api "repos/{owner}/{repo}/commits/$head/statuses" \
+  latest=$(ghapi "repos/$trusted_repo/commits/$head/statuses" \
     --jq "[.[] | select(.context == \"$context\")][0] | \"\(.state) \(.description)\"") ||
     die "cannot read statuses for $head"
   case $latest in
@@ -229,7 +247,14 @@ if [ "$mode" = verify ]; then
   esac
 fi
 
-# Worker: trust checks first, before any state write, checkout or install.
+# Worker: trust checks first, before any state write, fetch or install.
+origin_url=$(git remote get-url origin) || die "no origin remote"
+case $origin_url in
+  "git@$trusted_host:$trusted_repo" | "git@$trusted_host:$trusted_repo.git" | \
+    "ssh://git@$trusted_host/$trusted_repo" | "ssh://git@$trusted_host/$trusted_repo.git" | \
+    "https://$trusted_host/$trusted_repo" | "$trusted_url") ;;
+  *) die "this clone's origin is $origin_url, not $trusted_repo on $trusted_host; run the gate from a clone of $trusted_url" ;;
+esac
 [ "$head_repo" = "$base_repo" ] || die "$fork_note"
 if [ -n "$trust_head" ] && [ "$trust_head" != "$head" ]; then
   die "PR $pr head is $head, not the trusted $trust_head; review the new commits first"
@@ -243,7 +268,7 @@ esac
 if [ "$base_name" != "$default_branch" ]; then
   [ -n "$trust_base" ] ||
     die "PR $pr targets $base_name, not the default branch $default_branch. The merge commit holds the target's contents, and the gate trusts only $default_branch.
-Review the whole merge candidate without checking it out: the target against $default_branch (gh api repos/{owner}/{repo}/compare/$default_branch...$base) and the PR's diff (gh pr diff $pr). Then rerun with: sh scripts/ci-mac-gate.sh --trust-candidate $head $base $pr"
+Review the whole merge candidate without checking it out: the target against $default_branch (gh api repos/$trusted_repo/compare/$default_branch...$base) and the PR's diff (gh pr diff $pr --repo $trusted_repo). Then rerun with: sh scripts/ci-mac-gate.sh --trust-candidate $head $base $pr"
   echo "ci-mac-gate: --trust-candidate given; running target $base_name at $base, not the default branch"
 fi
 untrusted=$(untrusted_commits) || die "cannot check the provenance of PR $pr"
@@ -251,7 +276,7 @@ if [ -n "$untrusted" ]; then
   [ "$trust_head" = "$head" ] ||
     die "PR $pr has commits outside the maintainer provenance rule (signed and verified, committer in $maintainers_file):
 $untrusted
-Review the PR's diff without checking it out (gh pr diff $pr), then rerun with: sh scripts/ci-mac-gate.sh --trust-head $head $pr"
+Review the PR's diff without checking it out (gh pr diff $pr --repo $trusted_repo), then rerun with: sh scripts/ci-mac-gate.sh --trust-head $head $pr"
   echo "ci-mac-gate: --trust-head $head given; running commits outside the provenance rule:"
   echo "$untrusted"
 fi
@@ -264,15 +289,16 @@ trap 'rm -rf "$tmp"' EXIT
 trap 'exit 130' INT TERM
 src="$tmp/src"
 
-remote=$(git remote get-url origin) || die "no origin remote"
+# Fetch from the trusted URL, then check the fetched commit and both parents
+# before anything is checked out.
 git init -q "$src" || die "git init failed"
-git -C "$src" fetch -q --depth=1 "$remote" "refs/pull/$pr/merge" ||
+git -C "$src" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" ||
   die "cannot fetch refs/pull/$pr/merge; the PR may have a merge conflict"
-git -C "$src" checkout -q --detach FETCH_HEAD || die "checkout failed"
-fetched=$(git -C "$src" rev-parse HEAD) || die "rev-parse failed"
-parents=$(git -C "$src" cat-file -p HEAD | sed -n 's/^parent //p' | tr '\n' ' ')
+fetched=$(git -C "$src" rev-parse --verify -q 'FETCH_HEAD^{commit}') || die "cannot resolve the fetched merge commit"
+parents=$(git -C "$src" cat-file -p "$fetched" | sed -n 's/^parent //p' | tr '\n' ' ')
 [ "$fetched" = "$merge" ] && [ "$parents" = "$base $head " ] ||
   die "GitHub's merge commit is not $base_name + PR head yet (fetched $fetched, parents: $parents); retry in a minute"
+git -C "$src" checkout -q --detach "$fetched" || die "checkout failed"
 
 want_node=$(sed -n 's/^ *node-version: *["'\'']\{0,1\}\([0-9][0-9]*\).*/\1/p' "$src/.github/workflows/ci.yml" | head -n 1)
 [ -n "$want_node" ] || die "no node-version in .github/workflows/ci.yml"

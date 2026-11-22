@@ -44,8 +44,13 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     fixed-length `refid`), or error when the base, the target branch or the
     merge commit changed during the run.
   - Trust: the gate runs the PR's code with your account's access (files,
-    credentials, Keychain, SSH agent, the status token). Before any checkout it
-    refuses a fork PR, and it refuses a branch PR unless every commit has a
+    credentials, Keychain, SSH agent, the status token). It works only on
+    `brandonwie/codex-hud` on github.com: every GitHub call names that
+    repository (`GH_REPO`, `GH_HOST` and the clone's defaults are ignored), the
+    merge ref is fetched from its URL, and the fetched merge commit and both
+    parents are checked before checkout. Before any fetch it refuses a clone
+    whose origin is another repository, a pull request of another repository,
+    and a fork PR. It also refuses a branch PR unless every commit has a
     verified signature from a committer listed in
     `scripts/ci-mac-gate-maintainers.txt` (or GitHub's `web-flow` with a listed
     author). Fork code copied onto a branch keeps its commits and is refused
