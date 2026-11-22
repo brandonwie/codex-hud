@@ -14,7 +14,12 @@ done
 
 [ "$checked" = 1 ] || exit 0
 
-if [ -n "$(git status --porcelain)" ]; then
+if ! status=$(git status --porcelain); then
+  echo "pre-push: git status failed, so the hook cannot show that the checks run on the commit you push. Fix the repository and push again." >&2
+  exit 1
+fi
+
+if [ -n "$status" ]; then
   echo "pre-push: the working tree has uncommitted or untracked files. Commit or remove them, so the checks run on the commit you push." >&2
   exit 1
 fi

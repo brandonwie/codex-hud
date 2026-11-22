@@ -18,7 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Pull requests: macOS leg runs in .husky/pre-push on the Mac (#55).
+        # Pull requests: the macOS leg runs on the Mac through
+        # scripts/ci-mac-gate.sh, which posts the "ci-local / macOS" status (#55).
         os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["ubuntu-latest","macos-latest"]' || '["ubuntu-latest"]') }}
     steps:
       - name: Checkout

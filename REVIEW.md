@@ -137,11 +137,17 @@ merge semantics are product changes; review them across both surfaces.
 
 ## Verification
 
-CI (`.github/workflows/ci.yml`, every pull request, Ubuntu and macOS) runs
+`scripts/ci-local.sh` runs
 `cargo fmt --manifest-path rust/Cargo.toml -- --check`,
 `cargo clippy --manifest-path rust/Cargo.toml -- -D warnings`, `npm test` and
-`npm run test:rust`; `release.yml` repeats them before a release, and the Husky
-pre-commit hook runs `npm test`. Name the gates the change needs:
+`npm run test:rust`. CI (`.github/workflows/ci.yml`) runs it on Ubuntu for every
+pull request, and on Ubuntu and macOS for a manual run. The macOS leg of a pull
+request runs on a Mac: `sh scripts/ci-mac-gate.sh <pr>` checks the PR's merge
+commit and posts the `ci-local / macOS` status, and
+`sh scripts/ci-mac-gate.sh verify <pr>` must pass before a merge. A green Linux
+check alone does not cover macOS. `release.yml` repeats the checks before a
+release, the Husky pre-commit hook runs `npm test`, and the pre-push hook runs
+`scripts/ci-local.sh`. Name the gates the change needs:
 
 | Area changed                                  | Gate                                                                                                                                                   |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
