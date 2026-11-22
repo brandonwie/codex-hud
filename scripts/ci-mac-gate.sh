@@ -60,13 +60,18 @@ set -u
 #   - shell tracing and verbose mode are off (set +xv above);
 #   - inherited Git trace variables are dropped, and trace2 targets set in Git
 #     config are disabled (the environment overrides them);
-#   - gh and curl debug output is off (GH_DEBUG, DEBUG; curl -q skips .curlrc);
-#   - proxy variables that hold a user name or password are refused before any
-#     tool runs (curl, git, gh, npm and cargo can print a proxy URL in their
-#     errors), and the Rust channel download prints no curl error at all;
-#   - the PR's checks (npm ci, ci-local.sh) run with an empty global Git config
-#     and no system config, like the hosted runner, so a key in the maintainer's
-#     Git config cannot reach their output;
+#   - gh and curl debug output is off (GH_DEBUG, DEBUG; curl -q skips .curlrc),
+#     and NODE_OPTIONS is unset (node prints a bad --require path in its error);
+#   - a recognized proxy variable (http_proxy, HTTPS_PROXY, ALL_PROXY,
+#     CARGO_HTTP_PROXY, npm_config_proxy, ...) with a user name or password in
+#     its URL authority is refused before any tool runs (curl, git, gh, npm and
+#     cargo can print a proxy URL in their errors), and the Rust channel
+#     download prints no curl error at all;
+#   - the toolchain probes and the PR's checks (npm ci, ci-local.sh) run through
+#     scripts/run-isolated.sh: an empty HOME, CARGO_HOME, npm config and global
+#     Git config, no system Git config, no CARGO_* or npm_config_* variables,
+#     like the hosted runner. A key in the maintainer's Cargo, npm or Git config
+#     cannot reach their output. The probes also discard their stderr;
 #   - every git and gh call sends its stderr to /dev/null: Git prints a
 #     malformed or valueless config key, URL included, in its own errors. Each
 #     failure prints a fixed message naming the step and the trusted URL only;
@@ -74,24 +79,33 @@ set -u
 for var in $(env | sed -n 's/^\(GIT_TRACE[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset "$var"
 done
-unset GIT_CURL_VERBOSE GH_DEBUG DEBUG
+unset GIT_CURL_VERBOSE GH_DEBUG DEBUG NODE_OPTIONS
 GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
 export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
+# The proxy variables that curl, git, gh, npm and cargo read.
+proxy_vars="http_proxy HTTP_PROXY https_proxy HTTPS_PROXY all_proxy ALL_PROXY ftp_proxy FTP_PROXY
+  CARGO_HTTP_PROXY npm_config_proxy npm_config_https_proxy NPM_CONFIG_PROXY NPM_CONFIG_HTTPS_PROXY"
+# Prints the names (never the values) of the proxy variables that are set.
 proxy_names() {
-  env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | grep -i 'proxy' | grep -iv '^no_proxy$'
+  for name in $proxy_vars; do
+    if [ -n "$(printenv "$name")" ]; then printf '%s\n' "$name"; fi
+  done
 }
-# Prints the names (never the values) of proxy variables with a user name or
-# password.
+# Prints the names of proxy variables with a user name or password: an at-sign
+# in the URL authority, which ends at the first slash after the optional
+# scheme. An at-sign in the path (http://proxy:8080/a@b) is not userinfo.
 proxy_creds() {
   for name in $(proxy_names); do
-    case $(printenv "$name") in
+    rest=$(printenv "$name")
+    rest=${rest#*://}
+    case ${rest%%/*} in
       *@*) printf '%s ' "$name" ;;
     esac
   done
 }
 proxy_creds=$(proxy_creds)
 if [ -n "$proxy_creds" ]; then
-  echo "ci-mac-gate: proxy variables ${proxy_creds}hold a user name or password; the gate does not run with credentials in proxy variables, because curl, git, gh, npm and cargo can print a proxy URL in their errors. Use a proxy without inline credentials and rerun" >&2
+  echo "ci-mac-gate: proxy variables ${proxy_creds}hold a user name or password in the proxy URL; the gate does not run with credentials in proxy variables, because curl, git, gh, npm and cargo can print a proxy URL in their errors. Use a proxy without inline credentials and rerun" >&2
   exit 1
 fi
 
@@ -129,6 +143,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
 
 cd "$(dirname "$0")/.." || exit 1
 self="$(pwd)/scripts/ci-mac-gate.sh"
+isolated="$(pwd)/scripts/run-isolated.sh"
 
 usage="usage: sh scripts/ci-mac-gate.sh [verify | --trust-head <head-sha> | --trust-candidate <head-sha> <base-sha>] <pr-number>"
 mode=run
@@ -367,7 +382,13 @@ git -C "$src" checkout -q --detach "$fetched" >/dev/null 2>&1 || die "checkout f
 
 want_node=$(sed -n 's/^ *node-version: *["'\'']\{0,1\}\([0-9][0-9]*\).*/\1/p' "$src/.github/workflows/ci.yml" | head -n 1)
 [ -n "$want_node" ] || die "no node-version in .github/workflows/ci.yml"
-node_version=$(cd "$src" && node -p process.versions.node) || die "node not found"
+# The probes and checks run with the hosted runner's clean configuration (see
+# scripts/run-isolated.sh). Its setup messages are fixed, so this first call
+# keeps them; the probes then discard stderr: Cargo prints a malformed Cargo
+# config line, a proxy URL included, in its errors.
+iso="$tmp/iso"
+sh "$isolated" "$iso" "$src" true || die "cannot set up the isolated check environment"
+node_version=$(sh "$isolated" "$iso" "$src" node -p process.versions.node 2>/dev/null) || die "node not found"
 [ "${node_version%%.*}" = "$want_node" ] ||
   die "CI uses Node $want_node, this shell has Node $node_version; select Node $want_node (asdf: ASDF_NODEJS_VERSION=<$want_node.x.y>) and rerun"
 
@@ -378,25 +399,23 @@ if ! curl -q -fsL -o "$tmp/channel.toml" "$rust_channel_url" 2>/dev/null; then
 fi
 stable=$(sed -n '/^\[pkg\.rustc\]$/,/^\[/s/^version = "\([0-9.]*\) .*/\1/p' "$tmp/channel.toml")
 [ -n "$stable" ] || die "no rustc version in $rust_channel_url"
-rustc_line=$(cd "$src" && rustc -V) || die "rustc not found"
+rustc_line=$(sh "$isolated" "$iso" "$src" rustc -V 2>/dev/null) || die "rustc not found"
 rustc_version=${rustc_line#rustc }
 rustc_version=${rustc_version%% *}
 [ "$rustc_version" = "$stable" ] ||
   die "CI uses Rust stable $stable, this shell has rustc $rustc_version; select Rust $stable and rerun"
-(cd "$src" && cargo fmt --version >/dev/null) || die "rustfmt is missing for Rust $rustc_version"
-(cd "$src" && cargo clippy --version >/dev/null) || die "clippy is missing for Rust $rustc_version"
+sh "$isolated" "$iso" "$src" cargo fmt --version >/dev/null 2>&1 || die "rustfmt is missing for Rust $rustc_version"
+sh "$isolated" "$iso" "$src" cargo clippy --version >/dev/null 2>&1 || die "clippy is missing for Rust $rustc_version"
 
 echo "ci-mac-gate: PR $pr merge $merge = $base_name $base + head $head"
 echo "ci-mac-gate: Node $node_version, Rust $rustc_version (stable), $(uname -sm)"
 post pending "running on merge $(short "$merge") base $(short "$base")" || die "cannot post the pending status"
 
 start=$(date +%s)
-checks_gitconfig="$tmp/checks.gitconfig"
-: >"$checks_gitconfig" || die "cannot create the checks' Git config"
 state=success
-(cd "$src" && GIT_CONFIG_GLOBAL="$checks_gitconfig" GIT_CONFIG_NOSYSTEM=1 nice -n 10 npm ci) || state=failure
+nice -n 10 sh "$isolated" "$iso" "$src" npm ci || state=failure
 if [ "$state" = success ]; then
-  GIT_CONFIG_GLOBAL="$checks_gitconfig" GIT_CONFIG_NOSYSTEM=1 nice -n 10 sh "$src/scripts/ci-local.sh" || state=failure
+  nice -n 10 sh "$isolated" "$iso" "$src" sh "$src/scripts/ci-local.sh" || state=failure
 fi
 elapsed=$(($(date +%s) - start))
 echo "ci-mac-gate: checks $state in ${elapsed}s"

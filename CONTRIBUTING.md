@@ -57,10 +57,15 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     trace2 targets) and gh debug output, and discards the error output of every
     git and gh call (Git prints a malformed config key, URL included, in its
     own errors), printing a fixed message for each failed step instead. It
-    refuses to run when a proxy variable holds a user name or password, prints
-    no curl error for the Rust channel download, and runs the pull request's
-    checks with an empty global Git config and no system config, like the
-    hosted runner. Any rewrite of the fetch
+    refuses to run when a proxy variable (`http_proxy`, `HTTPS_PROXY`,
+    `ALL_PROXY`, `CARGO_HTTP_PROXY`, `npm_config_proxy`, ...) has a user name
+    or password in its URL, prints no curl error for the Rust channel
+    download, and unsets `NODE_OPTIONS`. Its toolchain checks and the pull
+    request's checks run through `scripts/run-isolated.sh`, like the hosted
+    runner: an empty `HOME`, `CARGO_HOME`, npm config and global Git config,
+    no system Git config, and no `CARGO_*` or `npm_config_*` variables, so a
+    value in your Cargo, npm or Git config cannot reach their output. It stops
+    when a Cargo config file sits above the temporary checkout. Any rewrite of the fetch
     URL is refused, even to the same repository's bare URL. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
     and a fork PR. It also refuses a branch PR unless every commit has a

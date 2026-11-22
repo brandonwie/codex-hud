@@ -76,7 +76,7 @@ function fixtureGit(args, { cwd, input, env = {} } = {}) {
 function gateClone(name, origin) {
   const dir = path.join(root, name);
   fs.mkdirSync(path.join(dir, "scripts"), { recursive: true });
-  for (const file of ["ci-mac-gate.sh", "run-with-deadline.js", "ci-mac-gate-maintainers.txt"]) {
+  for (const file of ["ci-mac-gate.sh", "run-with-deadline.js", "run-isolated.sh", "ci-mac-gate-maintainers.txt"]) {
     fs.copyFileSync(path.join(repoRoot, "scripts", file), path.join(dir, "scripts", file));
   }
   fixtureGit(["init", "-q"], { cwd: dir });
@@ -623,8 +623,21 @@ const cases = [
       fails(verify, /hold a user name or password/);
       assert.ok(!(verify.stdout + verify.stderr).includes(marker), `${name}: verify printed the proxy credential`);
     }
-    // A proxy without inline credentials passes the check.
+    // Every recognized proxy variable is checked, with or without a scheme.
+    for (const [name, value] of [
+      ["CARGO_HTTP_PROXY", `http://u:${marker}@proxy.example:8080`],
+      ["npm_config_https_proxy", `http://u:${marker}@proxy.example:8080/`],
+      ["http_proxy", `u:${marker}@proxy.example:8080`],
+    ]) {
+      const run = runWorker("", { [name]: value });
+      refusedBeforeCheckout(run, new RegExp(`proxy variables ${name} hold a user name or password`));
+      assert.ok(!(run.stdout + run.stderr).includes(marker), `${name}: the proxy credential reached the output`);
+    }
+    // A proxy without inline credentials passes the check, and so do an
+    // at-sign in the proxy URL's path and an unrelated variable with an email.
     passedTrust(runWorker("", { HTTPS_PROXY: "http://proxy.example:8080" }));
+    passedTrust(runWorker("", { HTTPS_PROXY: "http://proxy.example:8080/a@b", https_proxy: "proxy.example:8080/team@x" }));
+    passedTrust(runWorker("", { PROXY_CONTACT: "ops@example.com", MY_PROXY_OWNER: "me@example.com" }));
   }],
   ["a malformed proxy URL never reaches the output from the Rust channel download", () => {
     // No network: curl rejects the malformed proxy before it opens a socket.
@@ -646,9 +659,96 @@ const cases = [
     assert.doesNotMatch(result.ghCalls, /statuses/);
   }],
   ["the PR's checks run with an empty global Git config and no system config", () => {
+    // The probes and both checks run through run-isolated.sh; the probes also
+    // discard stderr.
     const script = fs.readFileSync(gate, "utf8");
-    assert.match(script, /GIT_CONFIG_GLOBAL="\$checks_gitconfig" GIT_CONFIG_NOSYSTEM=1 nice -n 10 npm ci/);
-    assert.match(script, /GIT_CONFIG_GLOBAL="\$checks_gitconfig" GIT_CONFIG_NOSYSTEM=1 nice -n 10 sh "\$src\/scripts\/ci-local\.sh"/);
+    assert.match(script, /\nnice -n 10 sh "\$isolated" "\$iso" "\$src" npm ci \|\| state=failure\n/);
+    assert.match(script, /\n {2}nice -n 10 sh "\$isolated" "\$iso" "\$src" sh "\$src\/scripts\/ci-local\.sh" \|\| state=failure\n/);
+    assert.match(script, /node_version=\$\(sh "\$isolated" "\$iso" "\$src" node -p process\.versions\.node 2>\/dev\/null\)/);
+    assert.match(script, /rustc_line=\$\(sh "\$isolated" "\$iso" "\$src" rustc -V 2>\/dev\/null\)/);
+    assert.match(script, /\nsh "\$isolated" "\$iso" "\$src" cargo fmt --version >\/dev\/null 2>&1 \|\|/);
+    assert.match(script, /\nsh "\$isolated" "\$iso" "\$src" cargo clippy --version >\/dev\/null 2>&1 \|\|/);
+    assert.doesNotMatch(script, /\(cd "\$src" && (npm|cargo|rustc|node) /);
+    const helper = fs.readFileSync(path.join(repoRoot, "scripts", "run-isolated.sh"), "utf8");
+    assert.match(helper, /\nGIT_CONFIG_GLOBAL=\$state\/gitconfig\nGIT_CONFIG_NOSYSTEM=1\n/);
+    assert.match(helper, /\nexport HOME CARGO_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM PATH\n/);
+  }],
+  ["the maintainer's Cargo, npm, Node and Git config cannot reach the probes or the checks", () => {
+    // Offline. Each control shows that the poisoned setting reaches the tool and
+    // prints its marker; run-isolated.sh keeps it out, with the expected status.
+    const marker = "SYNTHETIC-TOOL-CONFIG-5e1d";
+    const poison = path.join(root, "tool-poison");
+    fs.mkdirSync(path.join(poison, "cargo-home"), { recursive: true });
+    fs.mkdirSync(path.join(poison, "xdg", "git"), { recursive: true });
+    const badCargo = `[http]\nproxy = "http://u:${marker}@proxy.example" junk\n`;
+    fs.writeFileSync(path.join(poison, "cargo-home", "config.toml"), badCargo);
+    fs.writeFileSync(path.join(poison, "xdg", "git", "config"), `[core]\n\tbigFileThreshold = ${marker}\n`);
+    fs.writeFileSync(path.join(poison, "global.gitconfig"), `[core]\n\tbigFileThreshold = ${marker}\n`);
+    fs.writeFileSync(path.join(poison, "npmrc"), `proxy=http://u:${marker}@[bad\n//registry.npmjs.org/:_authToken=${marker}\n`);
+    const project = (dir) => {
+      fs.mkdirSync(dir, { recursive: true });
+      for (const file of ["Cargo.toml", "Cargo.lock"]) fs.copyFileSync(path.join(repoRoot, "rust", file), path.join(dir, file));
+      fs.cpSync(path.join(repoRoot, "rust", "src"), path.join(dir, "src"), { recursive: true });
+      return dir;
+    };
+    const proj = project(path.join(root, "tool-project"));
+    const env = {
+      ...process.env,
+      CARGO_HOME: path.join(poison, "cargo-home"),
+      XDG_CONFIG_HOME: path.join(poison, "xdg"),
+      GIT_CONFIG_GLOBAL: path.join(poison, "global.gitconfig"),
+      NODE_OPTIONS: `--require /nonexistent/${marker}`,
+      npm_config_userconfig: path.join(poison, "npmrc"),
+    };
+    delete env.GIT_CONFIG_NOSYSTEM;
+    const run = (cwd, cmd, args, extraEnv = {}) => spawnSync(cmd, args, { cwd, encoding: "utf8", env: { ...env, ...extraEnv } });
+    const leaked = (r) => (r.stdout + r.stderr).includes(marker);
+    const sysroot = spawnSync("rustc", ["--print", "sysroot"], { cwd: proj, encoding: "utf8" }).stdout.trim();
+    const directCargo = path.join(sysroot, "bin", "cargo");
+    const helper = path.join(repoRoot, "scripts", "run-isolated.sh");
+    const isolated = (cwd, args) => run(cwd, "sh", [helper, path.join(root, `tool-state-${path.basename(cwd)}`), cwd, ...args]);
+    // Controls: the poisoned config reaches each tool.
+    for (const [cmd, args] of [
+      [directCargo, ["fmt", "--version"]],
+      [directCargo, ["clippy", "--version"]],
+      [directCargo, ["fmt", "--manifest-path", "Cargo.toml", "--", "--check"]],
+      [process.execPath, ["-p", "1"]],
+      ["git", ["hash-object", "--path=a", "Cargo.toml"]],
+    ]) {
+      const control = run(proj, cmd, args);
+      assert.notStrictEqual(control.status, 0, `control ${path.basename(cmd)} ${args.join(" ")} passed`);
+      assert.ok(leaked(control), `control ${path.basename(cmd)} ${args.join(" ")} did not show the marker`);
+    }
+    // The version probes and the format check pass and print no marker.
+    for (const args of [
+      ["rustc", "-V"],
+      ["cargo", "fmt", "--version"],
+      ["cargo", "clippy", "--version"],
+      ["cargo", "fmt", "--manifest-path", "Cargo.toml", "--", "--check"],
+      ["node", "-p", "1"],
+      ["npm", "config", "get", "proxy"],
+      ["git", "hash-object", "--path=a", "Cargo.toml"],
+    ]) {
+      const result = isolated(proj, args);
+      assert.strictEqual(result.status, 0, `isolated ${args.join(" ")} failed (exit ${result.status})`);
+      assert.ok(!leaked(result), `isolated ${args.join(" ")} printed the marker`);
+    }
+    assert.strictEqual(isolated(proj, ["npm", "config", "get", "proxy"]).stdout.trim(), "null");
+    // The home the checks see is empty and inside the state directory.
+    const homes = isolated(proj, ["sh", "-c", 'printf "%s\\n%s\\n" "$HOME" "$CARGO_HOME"; ls -A "$HOME"']);
+    const state = fs.realpathSync(path.join(root, "tool-state-tool-project"));
+    assert.strictEqual(homes.stdout, `${state}/home\n${state}/cargo-home\n`);
+    // A Cargo config above the project stops the run with a fixed message.
+    const ancestor = path.join(root, "tool-ancestor");
+    fs.mkdirSync(path.join(ancestor, ".cargo"), { recursive: true });
+    fs.writeFileSync(path.join(ancestor, ".cargo", "config.toml"), badCargo);
+    const nested = project(path.join(ancestor, "proj"));
+    const control = run(nested, directCargo, ["fmt", "--version"], { CARGO_HOME: path.join(root, "tool-empty-cargo-home") });
+    assert.ok(control.status !== 0 && leaked(control), "control: the ancestor Cargo config did not apply");
+    const refused = isolated(nested, ["cargo", "fmt", "--version"]);
+    assert.strictEqual(refused.status, 1);
+    assert.match(refused.stderr, /^run-isolated: Cargo would read .*\/tool-ancestor\/\.cargo\/config\.toml, which is above the project directory/);
+    assert.ok(!leaked(refused), "the refusal printed the marker");
   }],
   ["the maintainer's Git config, even an include for the test clones only, cannot reach the tests", () => {
     // A maintainer home whose Git config includes a valueless URL rewrite with
@@ -734,6 +834,23 @@ const cases = [
     assert.deepStrictEqual(fs.readdirSync(runDir), []);
     fails(runGate(["__worker", runDir, "56"], {}), /usage/);
     fails(runGate(["__worker", runDir, "", "56"], {}), /usage/);
+  }],
+  ["an inherited NODE_OPTIONS cannot reach the deadline runner's output", () => {
+    // node prints a bad --require path in its error; the gate unsets
+    // NODE_OPTIONS before it starts run-with-deadline.js (macOS only).
+    const marker = "SYNTHETIC-NODE-OPTIONS-0f3a";
+    const control = spawnSync(process.execPath, ["-p", "1"], { encoding: "utf8", env: { ...process.env, NODE_OPTIONS: `--require /nonexistent/${marker}` } });
+    assert.ok(control.status !== 0 && control.stderr.includes(marker), "control: node ignored NODE_OPTIONS");
+    const result = runGate(["56"], {
+      NODE_OPTIONS: `--require /nonexistent/${marker}`,
+      FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2`,
+    });
+    fails(result);
+    if (process.platform === "darwin") {
+      assert.match(result.stdout, /under a 360-minute deadline/);
+      assert.match(result.stderr, /comes from someone\/fork/);
+    }
+    assert.ok(!(result.stdout + result.stderr).includes(marker), "NODE_OPTIONS reached the gate output");
   }],
   ["verify matches a long base branch by its fixed-length ID", () => {
     const longRef = `release/${"x".repeat(60)}`;

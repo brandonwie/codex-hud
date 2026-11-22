@@ -37,9 +37,19 @@ const TEST_CONTEXT_WINDOW = 1000;
 // suite runs inside a pre-commit hook, git exports those vars pointing at the
 // real repo; without stripping them the fixture would bind to the parent index
 // and report a bogus porcelain state (clean fixture reads as dirty).
-const GIT_CLEAN_ENV = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))
-);
+// Then give git an empty global config and no system config, like the hosted
+// runner: the maintainer's user or XDG Git config can neither change the
+// fixture nor print a key (a URL with a token) in a git error. The binary's git
+// gets the same two settings.
+const ISOLATED_GIT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "cph-gitconfig-"));
+const ISOLATED_GIT_CONFIG = path.join(ISOLATED_GIT_DIR, "gitconfig");
+fs.writeFileSync(ISOLATED_GIT_CONFIG, "");
+process.on("exit", () => fs.rmSync(ISOLATED_GIT_DIR, { recursive: true, force: true }));
+const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: ISOLATED_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: "1" };
+const GIT_CLEAN_ENV = {
+  ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+  ...GIT_ISOLATION,
+};
 
 function rustBinaryName() {
   return process.platform === "win32" ? "codex-hud.exe" : "codex-hud";
@@ -60,7 +70,9 @@ function resolveBinary(argv = process.argv.slice(2)) {
   throw new Error("codex-hud binary not found - run: npm run build:rust");
 }
 
-function git(cwd, args) {
+// A failure reports the command and exit code, never git's stderr: git prints
+// a malformed config key, URL included, in its own errors.
+function git(cwd, args, env = GIT_CLEAN_ENV) {
   const r = spawnSync(
     "git",
     [
@@ -70,10 +82,48 @@ function git(cwd, args) {
       "-c", "init.defaultBranch=trunk",
       ...args,
     ],
-    { cwd, encoding: "utf8", env: GIT_CLEAN_ENV }
+    { cwd, encoding: "utf8", env }
   );
-  if (r.status !== 0) throw new Error("git " + args.join(" ") + " failed: " + (r.stderr || ""));
+  if (r.status !== 0) throw new Error("git " + args.join(" ") + " failed (exit " + r.status + ")");
   return r.stdout;
+}
+
+// Regression: an inherited user or XDG Git config stays out of the fixture.
+// Each control shows plain git reading the config and printing its marker; the
+// fixture's git ignores it, and a failing fixture git prints no stderr.
+function checkGitIsolation() {
+  const marker = "SYNTHETIC-PARSING-GIT-CONFIG-8b27";
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cph-isolation-"));
+  try {
+    const home = path.join(dir, "home");
+    const xdg = path.join(dir, "xdg");
+    const repo = path.join(dir, "repo");
+    fs.mkdirSync(path.join(xdg, "git"), { recursive: true });
+    fs.mkdirSync(home);
+    fs.mkdirSync(repo);
+    const badConfig = "[core]\n\tbigFileThreshold = " + marker + "\n";
+    const plain = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+    git(repo, ["init", "-q"]);
+    fs.writeFileSync(path.join(repo, "file.txt"), "x\n");
+    for (const [name, file, env] of [
+      ["user", path.join(home, ".gitconfig"), { HOME: home, XDG_CONFIG_HOME: path.join(dir, "no-xdg") }],
+      ["XDG", path.join(xdg, "git", "config"), { HOME: home, XDG_CONFIG_HOME: xdg }],
+    ]) {
+      fs.writeFileSync(file, badConfig);
+      const control = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: { ...plain, ...env } });
+      assert.notStrictEqual(control.status, 0, "control: git ignored the " + name + " config");
+      assert.ok(control.stderr.includes(marker), "control: git did not print the " + name + " config marker");
+      git(repo, ["add", "file.txt"], { ...GIT_CLEAN_ENV, ...env });
+      git(repo, ["reset", "-q"], { ...GIT_CLEAN_ENV, ...env });
+      fs.rmSync(file);
+    }
+    assert.throws(
+      () => git(repo, ["no-such-command-" + marker]),
+      (err) => err.message === "git no-such-command-" + marker + " failed (exit 1)"
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 // Build a temp git repo in a known state. "clean" = committed, no changes;
@@ -205,6 +255,7 @@ function collectParsed(binary, gitState, rolloutKey) {
     HOME: process.env.HOME,
     PATH: process.env.PATH,
     USERPROFILE: process.env.USERPROFILE,
+    ...GIT_ISOLATION,
   };
   try {
     const r = spawnSync(binary, ["--json"], {
@@ -274,6 +325,7 @@ function build(binary) {
 
 function main() {
   const update = process.argv.includes("--update");
+  checkGitIsolation();
   const binary = resolveBinary();
   const built = build(binary);
   const count = splitBlocks(built).length;
