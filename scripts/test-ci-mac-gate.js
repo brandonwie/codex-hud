@@ -66,8 +66,10 @@ const trustedUrl = "https://github.com/brandonwie/codex-hud.git";
 // a URL rewrite holding a token) can neither change the tests nor reach their
 // output. Fixture git failures report the command and exit code, never stderr.
 const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
-// The gate needs -p under bash (macOS /bin/sh); dash has no -p.
+// The gate needs -p under bash (macOS /bin/sh). Some dash builds take -p too
+// (Ubuntu's), others refuse it (macOS's); dash reads no SHELLOPTS either way.
 const shellP = spawnSync("sh", ["-p", "-c", ":"]).status === 0 ? ["-p"] : [];
+const shIsBash = spawnSync("sh", ["-c", 'printf %s "${BASH_VERSION:-}"'], { encoding: "utf8" }).stdout !== "";
 const isolatedGitConfig = path.join(root, "isolated.gitconfig");
 fs.writeFileSync(isolatedGitConfig, "");
 // Attributes too: an empty XDG_CONFIG_HOME (no default git/attributes) and no
@@ -1275,7 +1277,7 @@ const cases = [
     const fork = { ...traced, FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2` };
     const options = { pathPrefix: fetchHarness().prefix };
     const output = (r) => r.stdout + r.stderr;
-    if (shellP.length) {
+    if (shIsBash) {
       // Control: without -p the first line is traced, and the gate refuses.
       const control = runGate(["56"], fork, { ...options, privileged: false });
       assert.ok(output(control).includes(marker), "control: bash ignored SHELLOPTS");
