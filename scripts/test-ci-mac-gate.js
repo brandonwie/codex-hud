@@ -9,10 +9,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const dropRepositoryGitEnv = require("./drop-git-env");
-const { isRepositoryVariable } = dropRepositoryGitEnv;
-
-dropRepositoryGitEnv();
+require("./drop-git-env")();
 
 const repoRoot = path.resolve(__dirname, "..");
 const gate = path.join(repoRoot, "scripts", "ci-mac-gate.sh");
@@ -1651,7 +1648,9 @@ const cases = [
     const child = spawnSync(process.execPath, [__filename, "--git-env-probe"], { encoding: "utf8", env: { ...process.env, ...hook, ...repositoryLevel, ...kept, CI_MAC_GATE_TEST_PROBE_CHILD: "1" } });
     assert.strictEqual(child.status, 0, `hook-environment start failed (exit ${child.status})`);
     const seen = child.stdout.trim().split(/\s+/).filter(Boolean);
-    assert.deepStrictEqual(seen.filter(isRepositoryVariable), [], `repository variables reached the cases: ${seen.join(" ")}`);
+    // By name, not through the helper's own list, so an entry missing there fails here.
+    const injected = [...Object.keys(hook), ...Object.keys(repositoryLevel)];
+    assert.deepStrictEqual(seen.filter((key) => injected.includes(key)), [], `repository variables reached the cases: ${seen.join(" ")}`);
     for (const key of Object.keys(kept)) assert.ok(seen.includes(key), `${key} was dropped`);
     assert.strictEqual(bare(), "false");
   }],

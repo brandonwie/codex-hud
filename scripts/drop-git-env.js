@@ -36,4 +36,3 @@ module.exports = function dropRepositoryGitEnv() {
     if (isRepositoryVariable(key)) delete process.env[key];
   }
 };
-module.exports.isRepositoryVariable = isRepositoryVariable;
