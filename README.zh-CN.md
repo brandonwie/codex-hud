@@ -332,6 +332,8 @@ codex-hud/
 
 欢迎提交 issue 和 pull request。贡献流程及完整的维护者脚本参考请见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+维护者须知：检出、提交或安装他人的代码，可能会通过本仓库的 Git hook 或 npm 脚本以你的账户运行代码。检出导入的变更之前，先通过它的 diff（`gh pr diff <pr>`）审查，并且不要跳过 hook。CI 只在 Linux 上运行；macOS 检查通过 `scripts/ci-mac-gate.sh` 在维护者的 Mac 上运行。该脚本拒绝来自 fork 的 pull request。对于提交未通过其来源检查的 pull request，或目标分支不是 `main` 的 pull request，只有在维护者审查之后并传入精确指定这些提交的信任参数，才会运行。规则见 CONTRIBUTING.md。
+
 ## 许可证
 
 [MIT](LICENSE) © Brandon Wie

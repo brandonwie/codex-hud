@@ -332,6 +332,8 @@ codex-hud/
 
 Sorunlar (issue) ve çekme istekleri (pull request) memnuniyetle karşılanır. Katkı iş akışı ve tam bakımcı betikleri referansı için bkz. [CONTRIBUTING.md](CONTRIBUTING.md).
 
+Bakımcılar için: başkasının kodunu checkout etmek, commit etmek veya kurmak, bu deponun Git hook'ları veya npm betikleri aracılığıyla sizin hesabınızla kod çalıştırabilir. İçe aktarılan bir değişikliği checkout etmeden önce diff'i (`gh pr diff <pr>`) üzerinden inceleyin ve hook'ları atlamayın. CI yalnızca Linux'ta çalışır; macOS denetimleri bir bakımcının Mac'inde `scripts/ci-mac-gate.sh` ile çalışır. Bu betik fork'lardan gelen çekme isteklerini reddeder. Commit'leri köken denetimini geçemeyen bir çekme isteğini veya `main` dışındaki bir dala açılan bir çekme isteğini ancak bir bakımcı onu inceleyip tam o commit'leri belirten bir güven bayrağı verdikten sonra çalıştırır. Kurallar CONTRIBUTING.md'de.
+
 ## Lisans
 
 [MIT](LICENSE) © Brandon Wie

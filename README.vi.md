@@ -332,6 +332,8 @@ codex-hud/
 
 Hoan nghênh các issue và pull request. Xem [CONTRIBUTING.md](CONTRIBUTING.md) để biết quy trình đóng góp và tài liệu tham khảo đầy đủ về các script bảo trì.
 
+Dành cho người bảo trì: checkout, commit hoặc cài đặt mã của người khác có thể chạy mã dưới tài khoản của bạn thông qua các Git hook hoặc script npm của repo này. Trước khi checkout, hãy dùng diff (`gh pr diff <pr>`) để xem xét thay đổi sắp đưa vào repo, và đừng bỏ qua các hook. CI chỉ chạy trên Linux; các bước kiểm tra macOS chạy trên máy Mac của người bảo trì thông qua `scripts/ci-mac-gate.sh`. Script này từ chối các pull request đến từ fork. Một pull request có commit không qua được bước kiểm tra nguồn gốc, hoặc nhắm vào nhánh khác `main`, chỉ được chạy sau khi người bảo trì đã xem xét nó và truyền một cờ tin cậy chỉ đúng các commit đó. Quy tắc nằm trong CONTRIBUTING.md.
+
 ## Giấy phép
 
 [MIT](LICENSE) © Brandon Wie

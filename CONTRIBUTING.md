@@ -121,8 +121,10 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     and a fork PR. It also refuses a branch PR unless every commit has a
     verified signature from a committer listed in
     `scripts/ci-mac-gate-maintainers.txt` (or GitHub's `web-flow` with a listed
-    author). Fork code copied onto a branch keeps its commits and is refused
-    too. After reviewing such a PR's diff, run
+    author). Fork commits pushed onto a branch unchanged keep their author,
+    committer and signature, so this same check applies to them. When the gate
+    refuses a PR into `main` and lists commits outside this rule, review the
+    PR's diff without checking it out (`gh pr diff <pr>`), then run
     `sh -p scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>`; the flag covers
     that exact head only.
   - Target branch: the merge commit also holds the target branch's contents,
@@ -138,11 +140,13 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     unchecked: `verify` fails for them. To check macOS, a maintainer recreates
     the change on a branch of this repository and runs the gate on that pull
     request.
-- Imported code and local hooks: checking out or committing code from someone
-  else runs the Husky hooks under your account (`pre-commit` runs `npm test`),
-  and so does `npm install`. Review an
-  imported change by its diff (`gh pr diff <pr>`) before you check it out or
-  commit it. Do not skip or weaken the hooks to get around this.
+- Imported code and local hooks: the Husky hooks run the hook files of the
+  checked-out tree under your account, so a change can add a hook that runs
+  when you check it out (`post-checkout`) or commit it. Today only `pre-commit`
+  exists (it runs `npm test`). `npm install` and `npm ci` run the change's npm
+  lifecycle scripts (today only `prepare`). Review an imported change by its
+  diff (`gh pr diff <pr>`) before you check it out or commit it. Do not skip or
+  weaken the hooks to get around this.
 - Before a merge, `sh -p scripts/ci-mac-gate.sh verify <pr>` must exit 0. It needs
   a green `ci-local / macOS` status whose record matches the PR's current merge
   commit, base tip and base branch.

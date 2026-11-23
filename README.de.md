@@ -335,6 +335,8 @@ codex-hud/
 
 Issues und Pull Requests sind willkommen. Siehe [CONTRIBUTING.md](CONTRIBUTING.md) für den Beitragsworkflow und die vollständige Referenz der Maintainer-Skripte.
 
+Maintainer: Wenn du Code von jemand anderem auscheckst, committest oder installierst, kann über die Git-Hooks oder npm-Skripte dieses Repositorys Code unter deinem Konto laufen. Prüfe eine importierte Änderung anhand ihres Diffs (`gh pr diff <pr>`), bevor du sie auscheckst, und überspringe die Hooks nicht. CI läuft nur unter Linux; die macOS-Prüfungen laufen auf dem Mac eines Maintainers über `scripts/ci-mac-gate.sh`. Das Skript lehnt Pull Requests aus Forks ab. Einen Pull Request, dessen Commits seine Herkunftsprüfung nicht bestehen, oder einen in einen anderen Branch als `main` führt es erst aus, nachdem ein Maintainer ihn geprüft und ein Vertrauens-Flag mit genau diesen Commits übergeben hat. Die Regeln stehen in CONTRIBUTING.md.
+
 ## Lizenz
 
 [MIT](LICENSE) © Brandon Wie

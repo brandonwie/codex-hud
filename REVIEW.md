@@ -1,7 +1,7 @@
 ---
 tags: [personal, reference]
 created: 2026-10-09
-updated: 2026-11-18
+updated: 2026-11-23
 status: active
 ---
 
@@ -145,14 +145,17 @@ pull request, fork pull requests included, and for a manual run. No workflow
 uses a GitHub-hosted macOS runner. The macOS leg runs only on a Mac:
 `sh -p scripts/ci-mac-gate.sh <pr>` checks the PR's merge commit and posts the
 `ci-local / macOS` commit status. It is bound to `brandonwie/codex-hud` on
-github.com and checks the fetched merge commit before checkout. It never runs fork code, so a fork PR's
-macOS leg stays unchecked until a maintainer recreates the change on a branch
-of this repository. On a branch it runs only commits signed by a listed
-maintainer (`scripts/ci-mac-gate-maintainers.txt`), unless a maintainer passes
-`--trust-head <head-sha>` after reviewing the diff. No workflow runs it: a
-maintainer starts it on a Mac. A pull request into the default branch needs no
-flag; for any other target the maintainer reviews the target and the diff,
-then passes `--trust-candidate <head-sha> <base-sha>`.
+github.com and checks the fetched merge commit before checkout. It refuses
+every fork PR, so a fork PR's macOS leg stays unchecked and `verify` fails for
+it; to check macOS, a maintainer recreates the change on a branch of this
+repository and runs the gate on that new PR. For a branch PR it runs only
+commits that pass its provenance check: a verified signature from a committer
+listed in `scripts/ci-mac-gate-maintainers.txt`, or GitHub's `web-flow` with a
+listed author. For other commits a maintainer reviews the diff and passes
+`--trust-head <head-sha>`. It trusts only the default branch (`main`) as a
+target: for a PR into any other branch the maintainer reviews the target and
+the diff, then passes `--trust-candidate <head-sha> <base-sha>`, which also
+covers provenance. No workflow runs it: a maintainer starts it on a Mac.
 `sh -p scripts/ci-mac-gate.sh verify <pr>` must pass before a merge. A green Linux
 check alone does not cover macOS. `release.yml` runs `ci-local.sh` again on
 Ubuntu before a release, and the Husky pre-commit hook runs `npm test`. Name the gates the change needs:
