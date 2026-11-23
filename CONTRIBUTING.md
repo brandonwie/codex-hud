@@ -27,15 +27,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 - GitHub runs it on Linux for each pull request, fork pull requests included,
   and for a manual run (`.github/workflows/ci.yml`). No workflow uses a
   GitHub-hosted macOS runner.
-- The macOS leg runs only on a Mac, in two steps:
-  - Early feedback: after `npm install` (run it in each clone or worktree, since
-    it installs the hooks), `.husky/pre-push` runs the script at low priority
-    (`nice -n 10`) through `scripts/run-isolated.sh`, like the merge gate: no
-    proxy variable and none of your Cargo, npm or Git config reach the checks,
-    so pushing needs a direct network connection. Its state directory sits in
-    the Git directory (`codex-hud-ci-local`) and keeps Cargo's downloaded
-    crates between pushes. The hook stops the push when `git status` fails, the
-    working tree is dirty or the pushed ref is not `HEAD`.
+- The macOS leg runs only on a Mac:
   - Merge gate: after the push, `sh scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
     (`npm ci`, then the script). It requires the Node major that `ci.yml` uses
@@ -67,14 +59,18 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     fetches with Git's `http.proxy` set to empty for the trusted URL, so it
     needs a direct network connection. Without one, the merge-ref fetch and
     the Rust channel download fail with a fixed message, and `npm ci` or Cargo
-    prints its own error for a package registry it cannot reach; no proxy or
-    config value reaches them, so none can appear in that error. It prints no curl error for the Rust channel download and unsets
+    prints its own error for a package registry it cannot reach. That error
+    holds no proxy setting and nothing from your Cargo, npm or Git config,
+    since none of them reaches the checks (below), but it can name another
+    inherited setting, such as the `NODE_EXTRA_CA_CERTS` path. It prints no
+    curl error for the Rust channel download and unsets
     `NODE_OPTIONS`. Its toolchain checks and the pull request's checks run
     through `scripts/run-isolated.sh`, like the hosted runner: an empty
     `HOME`, `CARGO_HOME`, npm config and global Git config, no system Git
     config, and no `CARGO_*`, `npm_config_*`, proxy or command-level Git config
     (`GIT_CONFIG_COUNT`, `GIT_CONFIG_PARAMETERS`) variables, so a value in your
-    Cargo, npm or Git config cannot reach their output. It stops when a Cargo
+    Cargo, npm or Git config, or in one of those variables, cannot reach their
+    output. Other inherited variables still reach them. It stops when a Cargo
     config file sits above the temporary checkout. Any rewrite of the fetch
     URL is refused, even to the same repository's bare URL. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
@@ -99,8 +95,8 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     the change on a branch of this repository and runs the gate on that pull
     request.
 - Imported code and local hooks: checking out or committing code from someone
-  else runs the Husky hooks under your account (`pre-commit` runs `npm test`,
-  `pre-push` runs `scripts/ci-local.sh`), and so does `npm install`. Review an
+  else runs the Husky hooks under your account (`pre-commit` runs `npm test`),
+  and so does `npm install`. Review an
   imported change by its diff (`gh pr diff <pr>`) before you check it out or
   commit it. Do not skip or weaken the hooks to get around this.
 - Before a merge, `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0. It needs
@@ -111,7 +107,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 
 | Command | Purpose |
 | ------- | ------- |
-| `npm test` | Build `codex-hud` and run config, installer, version, pre-push hook, Mac gate, golden, README, and site checks. |
+| `npm test` | Build `codex-hud` and run config, installer, version, Mac gate, golden, README, and site checks. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
 | `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
 | `sh scripts/ci-mac-gate.sh [verify \| --trust-head <sha> \| --trust-candidate <head> <base>] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |

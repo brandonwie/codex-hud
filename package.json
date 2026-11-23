@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "test": "npm run build:rust && node scripts/test-codex-hud.js rust/target/release/codex-hud && node scripts/test-codex-hud-config.js rust/target/release/codex-hud && node scripts/test-patched-codex-installer.js && node scripts/test-sync-release-version.js && node scripts/test-pre-push-hook.js && node scripts/test-ci-mac-gate.js &&node scripts/test-golden.js rust/target/release/codex-hud && node scripts/test-parsing-golden.js rust/target/release/codex-hud && node scripts/test-readme-i18n.js && node scripts/check-readme-i18n.js && node scripts/sync-release-version.js --check && npm run site:check",
+    "test": "npm run build:rust && node scripts/test-codex-hud.js rust/target/release/codex-hud && node scripts/test-codex-hud-config.js rust/target/release/codex-hud && node scripts/test-patched-codex-installer.js && node scripts/test-sync-release-version.js && node scripts/test-ci-mac-gate.js && node scripts/test-golden.js rust/target/release/codex-hud && node scripts/test-parsing-golden.js rust/target/release/codex-hud && node scripts/test-readme-i18n.js && node scripts/check-readme-i18n.js && node scripts/sync-release-version.js --check && npm run site:check",
     "site:check": "node scripts/check-site.js",
     "check:i18n": "node scripts/check-readme-i18n.js",
     "hud": "rust/target/release/codex-hud",

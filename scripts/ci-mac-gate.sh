@@ -73,8 +73,10 @@ set -u
 #     checks read no Cargo, npm or Git proxy config (run-isolated.sh below).
 #     Without a direct network connection the merge-ref fetch and the Rust
 #     channel download fail with a fixed message; npm ci and Cargo print their
-#     own error for a registry they cannot reach (no proxy or config value can
-#     appear in it, since none reaches them);
+#     own error for a registry they cannot reach (it holds no proxy setting and
+#     nothing from the maintainer's Cargo, npm or Git config, since none reaches
+#     them, but it can name another inherited setting such as the
+#     NODE_EXTRA_CA_CERTS path);
 #   - the Rust channel download prints no curl error at all;
 #   - the toolchain probes and the PR's checks (npm ci, ci-local.sh) run through
 #     scripts/run-isolated.sh: an empty HOME, CARGO_HOME, npm config and global

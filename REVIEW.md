@@ -155,8 +155,7 @@ reviews the target and the diff, then passes
 `--trust-candidate <head-sha> <base-sha>`.
 `sh scripts/ci-mac-gate.sh verify <pr>` must pass before a merge. A green Linux
 check alone does not cover macOS. `release.yml` repeats the checks before a
-release, the Husky pre-commit hook runs `npm test`, and the pre-push hook runs
-`scripts/ci-local.sh`. Name the gates the change needs:
+release, and the Husky pre-commit hook runs `npm test`. Name the gates the change needs:
 
 | Area changed                                  | Gate                                                                                                                                                   |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
