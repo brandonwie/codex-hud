@@ -9,6 +9,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
+require("./drop-git-env")();
 
 const repoRoot = path.resolve(__dirname, "..");
 const gate = path.join(repoRoot, "scripts", "ci-mac-gate.sh");
@@ -1161,7 +1162,7 @@ const cases = [
     try {
       const gatePath = gateClone("clone-include", "git@github.com:brandonwie/codex-hud.git");
       // Control: plain git with that home fails in the clone and prints the token.
-      const plainEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1" };
+      const plainEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1", XDG_CONFIG_HOME: isolatedXdg };
       const plain = spawnSync(realGit, ["remote", "get-url", "origin"], { cwd: path.dirname(path.dirname(gatePath)), encoding: "utf8", env: plainEnv });
       assert.notStrictEqual(plain.status, 0, "the include did not apply to the clone");
       assert.ok(plain.stderr.includes(marker), "the control did not show the token");
@@ -1618,9 +1619,51 @@ const cases = [
       assert.strictEqual(result.status, 2, args.join(" "));
     }
   }],
+  ["a Git hook's GIT_* variables cannot reach the caller's repository", () => {
+    // Set only for the probe child below, which must stop before its first case.
+    assert.ok(!process.env.CI_MAC_GATE_TEST_PROBE_CHILD, "the probe child ran the cases instead of stopping before the first one");
+    // A disposable caller with a worktree, like the maintainer's checkout.
+    const caller = path.join(root, "hook-caller");
+    const worktree = path.join(root, "hook-caller-worktree");
+    fixtureGit(["init", "-q", caller]);
+    fixtureGit(["-C", caller, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "init"]);
+    fixtureGit(["-C", caller, "worktree", "add", "-q", "--detach", worktree]);
+    const gitDir = fixtureGit(["-C", worktree, "rev-parse", "--absolute-git-dir"]);
+    // What a pre-commit hook in that worktree exports; both paths are absolute.
+    const hook = { GIT_DIR: gitDir, GIT_INDEX_FILE: path.join(gitDir, "index"), GIT_PREFIX: "", GIT_CONFIG_PARAMETERS: "'core.hookspath'='/dev/null'" };
+    const bare = () => fixtureGit(["-C", caller, "config", "core.bare"]);
+    assert.strictEqual(bare(), "false");
+    // Control: the `git init` of a case, run with the hook's variables, marks the caller bare.
+    const scratch = path.join(root, "hook-scratch");
+    fs.mkdirSync(scratch);
+    const control = spawnSync(realGit, ["init", "-q", "t"], { cwd: scratch, encoding: "utf8", env: { ...baseEnv(), ...hook } });
+    assert.ok(control.status === 0 && bare() === "true", "control: git init with a hook's GIT_DIR left the caller as it was");
+    fixtureGit(["-C", caller, "config", "core.bare", "false"]);
+    // This file, started with the hook's variables, more repository variables
+    // and the settings a caller or the Mac gate uses, runs its normal startup and
+    // reports what the first case would see (--git-env-probe). The repository
+    // variables must be gone and the settings kept.
+    const repositoryLevel = { GIT_ATTR_SOURCE: "HEAD", GIT_WORK_TREE: worktree, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.bare", GIT_CONFIG_VALUE_0: "true" };
+    const kept = { GIT_OPTIONAL_LOCKS: "0", GIT_CONFIG_GLOBAL: isolatedGitConfig, GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1" };
+    const child = spawnSync(process.execPath, [__filename, "--git-env-probe"], { encoding: "utf8", env: { ...process.env, ...hook, ...repositoryLevel, ...kept, CI_MAC_GATE_TEST_PROBE_CHILD: "1" } });
+    assert.strictEqual(child.status, 0, `hook-environment start failed (exit ${child.status})`);
+    const seen = child.stdout.trim().split(/\s+/).filter(Boolean);
+    // By name, not through the helper's own list, so an entry missing there fails here.
+    const injected = [...Object.keys(hook), ...Object.keys(repositoryLevel)];
+    assert.deepStrictEqual(seen.filter((key) => injected.includes(key)), [], `repository variables reached the cases: ${seen.join(" ")}`);
+    for (const key of Object.keys(kept)) assert.ok(seen.includes(key), `${key} was dropped`);
+    assert.strictEqual(bare(), "false");
+  }],
 ];
 
+// --git-env-probe (only the hook regression passes it): print the names of the
+// GIT_* variables the first case would see, and stop before running it.
+const gitEnvProbe = process.argv[2] === "--git-env-probe";
 for (const [name, fn] of cases) {
+  if (gitEnvProbe) {
+    console.log(Object.keys(process.env).filter((key) => key.startsWith("GIT_")).join(" "));
+    process.exit(0);
+  }
   fn();
   console.log(`ok - ${name}`);
 }

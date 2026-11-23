@@ -21,6 +21,8 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+require("./drop-git-env")();
+
 const repoRoot = path.resolve(__dirname, "..");
 const FIXED_ISO = new RealDate(FIXED).toISOString();
 const GOLDEN = path.join(__dirname, "golden", "hud-output.golden");
