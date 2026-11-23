@@ -6,6 +6,8 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+require("./drop-git-env")();
+
 const repoRoot = path.resolve(__dirname, "..");
 const expectedVersion = require(path.join(repoRoot, "package.json")).version;
 const sessionEnvKeys = [
