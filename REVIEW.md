@@ -149,10 +149,10 @@ github.com and checks the fetched merge commit before checkout. It never runs fo
 macOS leg stays unchecked until a maintainer recreates the change on a branch
 of this repository. On a branch it runs only commits signed by a listed
 maintainer (`scripts/ci-mac-gate-maintainers.txt`), unless a maintainer passes
-`--trust-head <head-sha>` after reviewing the diff. It runs automatically only
-for pull requests into the default branch; for any other target a maintainer
-reviews the target and the diff, then passes
-`--trust-candidate <head-sha> <base-sha>`.
+`--trust-head <head-sha>` after reviewing the diff. No workflow runs it: a
+maintainer starts it on a Mac. A pull request into the default branch needs no
+flag; for any other target the maintainer reviews the target and the diff,
+then passes `--trust-candidate <head-sha> <base-sha>`.
 `sh scripts/ci-mac-gate.sh verify <pr>` must pass before a merge. A green Linux
 check alone does not cover macOS. `release.yml` repeats the checks before a
 release, and the Husky pre-commit hook runs `npm test`. Name the gates the change needs:

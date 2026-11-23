@@ -909,8 +909,10 @@ const cases = [
     assert.match(script, /\nsh "\$isolated" "\$iso" "\$src" cargo clippy --version >\/dev\/null 2>&1 \|\|/);
     assert.doesNotMatch(script, /\(cd "\$src" && (npm|cargo|rustc|node) /);
     const helper = fs.readFileSync(path.join(repoRoot, "scripts", "run-isolated.sh"), "utf8");
-    assert.match(helper, /\nGIT_CONFIG_GLOBAL=\$state\/gitconfig\nGIT_CONFIG_NOSYSTEM=1\n/);
-    assert.match(helper, /\nexport HOME CARGO_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_ATTR_NOSYSTEM PATH\n/);
+    // The command gets a new environment (env -i) with the listed variables only.
+    assert.match(helper, /\nexec env -i \\\n {2}"PATH=\$sysroot\/bin:\$node_bin:\$PATH" \\\n {2}"HOME=\$state\/home" \\\n {2}"CARGO_HOME=\$state\/cargo-home" \\\n {2}"GIT_CONFIG_GLOBAL=\$state\/gitconfig" \\\n {2}GIT_CONFIG_NOSYSTEM=1 \\\n {2}GIT_ATTR_NOSYSTEM=1 \\\n/);
+    assert.match(helper, /\n {2}"\$@"\n$/);
+    assert.doesNotMatch(helper, /^export /m);
   }],
   ["the maintainer's Cargo, npm, Node and Git config cannot reach the probes or the checks", () => {
     // Offline. Each control shows that the poisoned setting reaches the tool and
@@ -1019,6 +1021,16 @@ const cases = [
     const gitVars = [...childEnv.stdout.matchAll(/^(GIT_[A-Za-z0-9_]*)=/gm)].map((m) => m[1]).sort();
     assert.deepStrictEqual(gitVars, ["GIT_ATTR_NOSYSTEM", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"]);
     assert.ok(!leaked(childEnv), "a stripped value reached the child environment");
+    // Every variable the child sees is on the helper's list; the inherited rest
+    // (CARGO_HOME, XDG_CONFIG_HOME, NODE_OPTIONS, the proxy variables) is gone.
+    const allowed = [
+      "PATH", "HOME", "CARGO_HOME", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_ATTR_NOSYSTEM",
+      "npm_config_userconfig", "npm_config_globalconfig", "npm_config_cache",
+      "CARGO_BUILD_JOBS", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "USER", "LOGNAME",
+    ];
+    const names = [...childEnv.stdout.matchAll(/^([^=\n]+)=/gm)].map((m) => m[1]);
+    assert.deepStrictEqual(names.filter((name) => !allowed.includes(name)), []);
+    assert.ok(names.includes("HOME") && names.includes("PATH"));
     // The home the checks see is empty and inside the state directory.
     const homes = isolated(proj, ["sh", "-c", 'printf "%s\\n%s\\n" "$HOME" "$CARGO_HOME"; ls -A "$HOME"']);
     const state = fs.realpathSync(path.join(root, "tool-state-tool-project"));
@@ -1032,8 +1044,72 @@ const cases = [
     assert.ok(control.status !== 0 && leaked(control), "control: the ancestor Cargo config did not apply");
     const refused = isolated(nested, ["cargo", "fmt", "--version"]);
     assert.strictEqual(refused.status, 1);
-    assert.match(refused.stderr, /^run-isolated: Cargo would read .*\/tool-ancestor\/\.cargo\/config\.toml, which is above the project directory/);
+    assert.match(refused.stderr, /^run-isolated: Cargo, rustfmt or Clippy would read .*\/tool-ancestor\/\.cargo\/config\.toml, which is above the project directory/);
     assert.ok(!leaked(refused), "the refusal printed the marker");
+  }],
+  ["inherited Rust tool settings and Rust tool config above the project cannot reach the checks", () => {
+    // Offline, on a one-file crate whose source is not formatted. Each control
+    // shows that the setting changes the tool's result or output; through
+    // run-isolated.sh the checks run as on the hosted runner.
+    const marker = "SYNTHETIC-RUST-TOOL-8b2d";
+    const markerKey = "SYNTHETIC_RUST_TOOL_8b2d";
+    const base = path.join(root, "rust-tool");
+    const crate = (dir) => {
+      fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+      fs.writeFileSync(path.join(dir, "Cargo.toml"), '[package]\nname = "probe"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n');
+      fs.writeFileSync(path.join(dir, "src", "lib.rs"), "pub fn f( ) -> u8 {   1 }\n");
+      return dir;
+    };
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !["RUSTFMT", "CLIPPY_CONF_DIR", "NODE_DEBUG"].includes(key)));
+    const run = (cwd, cmd, args, extraEnv = {}) => spawnSync(cmd, args, { cwd, encoding: "utf8", env: { ...env, CARGO_BUILD_JOBS: "2", ...extraEnv } });
+    const output = (r) => r.stdout + r.stderr;
+    const sysroot = spawnSync("rustc", ["--print", "sysroot"], { encoding: "utf8" }).stdout.trim();
+    const directCargo = path.join(sysroot, "bin", "cargo");
+    const helper = path.join(repoRoot, "scripts", "run-isolated.sh");
+    const isolated = (cwd, args, extraEnv = {}) => run(cwd, "sh", [helper, path.join(base, `state-${path.basename(path.dirname(cwd))}`), cwd, ...args], extraEnv);
+    const proj = crate(path.join(base, "plain", "proj"));
+    // RUSTFMT selects another formatter: the control's format check passes.
+    const fakeFmt = path.join(base, "fake-rustfmt");
+    fs.writeFileSync(fakeFmt, `#!/bin/sh\necho ${marker} >&2\nexit 0\n`, { mode: 0o755 });
+    const fmtControl = run(proj, directCargo, ["fmt", "--", "--check"], { RUSTFMT: fakeFmt });
+    assert.ok(fmtControl.status === 0 && output(fmtControl).includes(marker), "control: cargo fmt ignored RUSTFMT");
+    const fmt = isolated(proj, ["cargo", "fmt", "--", "--check"], { RUSTFMT: fakeFmt });
+    assert.strictEqual(fmt.status, 1, `isolated format check with RUSTFMT exited ${fmt.status}, not 1`);
+    assert.match(fmt.stdout, /^Diff in /m);
+    assert.ok(!output(fmt).includes(marker), "RUSTFMT reached the isolated format check");
+    // CLIPPY_CONF_DIR points Clippy at a config file elsewhere.
+    const confDir = path.join(base, "clippy-conf");
+    fs.mkdirSync(confDir, { recursive: true });
+    fs.writeFileSync(path.join(confDir, "clippy.toml"), `${markerKey} = 1\n`);
+    const clippyControl = run(proj, directCargo, ["clippy", "-q"], { CLIPPY_CONF_DIR: confDir });
+    assert.ok(clippyControl.status !== 0 && output(clippyControl).includes(markerKey), "control: Clippy ignored CLIPPY_CONF_DIR");
+    const clippy = isolated(proj, ["cargo", "clippy", "-q"], { CLIPPY_CONF_DIR: confDir });
+    assert.strictEqual(clippy.status, 0, `isolated Clippy with CLIPPY_CONF_DIR failed (exit ${clippy.status})`);
+    assert.ok(!output(clippy).includes(markerKey), "CLIPPY_CONF_DIR reached the isolated Clippy");
+    // NODE_DEBUG=child_process prints each child's environment.
+    const spawnTrue = ["-e", 'require("child_process").spawnSync("true")'];
+    const nodeControl = run(proj, process.execPath, spawnTrue, { NODE_DEBUG: "child_process" });
+    assert.match(nodeControl.stderr, /CHILD_PROCESS/, "control: node ignored NODE_DEBUG");
+    const node = isolated(proj, ["node", ...spawnTrue], { NODE_DEBUG: "child_process" });
+    assert.strictEqual(node.status, 0);
+    assert.doesNotMatch(output(node), /CHILD_PROCESS/);
+    // A rustfmt or Clippy config file above the project stops the run.
+    for (const [name, args] of [
+      ["rustfmt.toml", ["fmt", "--", "--check"]],
+      [".rustfmt.toml", ["fmt", "--", "--check"]],
+      ["clippy.toml", ["clippy", "-q"]],
+      [".clippy.toml", ["clippy", "-q"]],
+    ]) {
+      const ancestor = path.join(base, `ancestor${name}`);
+      const nested = crate(path.join(ancestor, "proj"));
+      fs.writeFileSync(path.join(ancestor, name), `${markerKey} = 1\n`);
+      const control = run(nested, directCargo, args);
+      assert.ok(output(control).includes(markerKey), `control: cargo ${args[0]} did not read ${name} above the project`);
+      const refused = isolated(nested, ["cargo", ...args]);
+      assert.strictEqual(refused.status, 1);
+      assert.strictEqual(refused.stderr, `run-isolated: Cargo, rustfmt or Clippy would read ${fs.realpathSync(ancestor)}/${name}, which is above the project directory; move the project or that file and rerun\n`);
+      assert.strictEqual(refused.stdout, "");
+    }
   }],
   ["the maintainer's Git config, even an include for the test clones only, cannot reach the tests", () => {
     // A maintainer home whose Git config includes a valueless URL rewrite with
@@ -1136,6 +1212,30 @@ const cases = [
       assert.match(result.stderr, /comes from someone\/fork/);
     }
     assert.ok(!(result.stdout + result.stderr).includes(marker), "NODE_OPTIONS reached the gate output");
+  }],
+  ["an inherited NODE_DEBUG cannot print the gate's environment", () => {
+    // NODE_DEBUG=child_process makes node print each child's environment; the
+    // gate unsets every NODE_* variable before it starts run-with-deadline.js.
+    const tokenMarker = "SYNTHETIC-GH-TOKEN-4d7e";
+    const configMarker = "SYNTHETIC-GIT-CONFIG-4d7e";
+    const secrets = { GH_TOKEN: tokenMarker, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "user.name", GIT_CONFIG_VALUE_0: configMarker };
+    const leaks = (r) => [tokenMarker, configMarker].filter((m) => (r.stdout + r.stderr).includes(m));
+    const deadline = path.join(repoRoot, "scripts", "run-with-deadline.js");
+    const control = spawnSync(process.execPath, [deadline, "60", "true"], { encoding: "utf8", env: { ...baseEnv(), ...secrets, NODE_DEBUG: "child_process" } });
+    assert.deepStrictEqual(leaks(control), [tokenMarker, configMarker], "control: NODE_DEBUG did not print the environment");
+    const result = runGate(["56"], {
+      ...secrets,
+      NODE_DEBUG: "child_process",
+      NODE_DEBUG_NATIVE: "child_process",
+      FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2`,
+    });
+    fails(result);
+    if (process.platform === "darwin") {
+      assert.match(result.stdout, /under a 360-minute deadline/);
+      assert.match(result.stderr, /comes from someone\/fork/);
+    }
+    assert.deepStrictEqual(leaks(result), [], "NODE_DEBUG printed the gate's environment");
+    assert.doesNotMatch(result.stdout + result.stderr, /CHILD_PROCESS/);
   }],
   ["verify matches a long base branch by its fixed-length ID", () => {
     const longRef = `release/${"x".repeat(60)}`;

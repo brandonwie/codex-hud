@@ -60,19 +60,22 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     needs a direct network connection. Without one, the merge-ref fetch and
     the Rust channel download fail with a fixed message, and `npm ci` or Cargo
     prints its own error for a package registry it cannot reach. That error
-    holds no proxy setting and nothing from your Cargo, npm or Git config,
-    since none of them reaches the checks (below), but it can name another
-    inherited setting, such as the `NODE_EXTRA_CA_CERTS` path. It prints no
-    curl error for the Rust channel download and unsets
-    `NODE_OPTIONS`. Its toolchain checks and the pull request's checks run
-    through `scripts/run-isolated.sh`, like the hosted runner: an empty
-    `HOME`, `CARGO_HOME`, npm config and global Git config, no system Git
-    config, and no `CARGO_*` (except `CARGO_BUILD_JOBS`), `npm_config_*`,
-    proxy or command-level Git config (`GIT_CONFIG_COUNT`,
-    `GIT_CONFIG_PARAMETERS`) variables, so a value in your Cargo, npm or Git
-    config, or in one of those variables, cannot reach their output. Other
-    inherited variables, such as `NODE_EXTRA_CA_CERTS`, still reach them. It
-    stops when a Cargo config file sits above the temporary checkout. Your Git
+    holds no proxy setting and nothing from your configuration or
+    environment, since none of it reaches the checks (below). A network that
+    needs an extra CA certificate (`NODE_EXTRA_CA_CERTS`) is not supported
+    either. The gate prints no curl error for the Rust channel download and
+    unsets every `NODE_*` variable before Node starts (`NODE_DEBUG` prints a
+    child's environment, `GH_TOKEN` included). Its toolchain checks and the
+    pull request's checks run through `scripts/run-isolated.sh`, like the
+    hosted runner, in a new environment that holds only `PATH`, an empty
+    `HOME` and `CARGO_HOME`, empty npm and global Git config files, no system
+    Git config, and, when set, `CARGO_BUILD_JOBS`, `TMPDIR`, the locale,
+    `TERM`, `USER` and `LOGNAME`. A value in your Cargo, npm, Git, rustfmt or
+    Clippy config, or in any other variable (`CARGO_*`, `RUSTFMT`,
+    `CLIPPY_CONF_DIR`, `npm_config_*`, `GIT_CONFIG_COUNT`, a proxy variable),
+    cannot reach them. It stops when a Cargo, rustfmt or Clippy config file
+    (`.cargo/config.toml`, `rustfmt.toml`, `clippy.toml`, or another name
+    those tools read) sits above the temporary checkout. Your Git
     setup cannot add or change files in the checkout: the temporary repository
     starts from an empty template, every git call into it runs with hooks and
     fsmonitor off (`core.hooksPath=/dev/null`, `core.fsmonitor=false`), the

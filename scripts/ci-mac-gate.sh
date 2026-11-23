@@ -61,7 +61,9 @@ set -u
 #   - inherited Git trace variables are dropped, and trace2 targets set in Git
 #     config are disabled (the environment overrides them);
 #   - gh and curl debug output is off (GH_DEBUG, DEBUG; curl -q skips .curlrc),
-#     and NODE_OPTIONS is unset (node prints a bad --require path in its error);
+#     and every NODE_* variable is unset before node runs (node prints a bad
+#     NODE_OPTIONS --require path in its error, and NODE_DEBUG=child_process
+#     prints each child's environment, GH_TOKEN included);
 #   - the gate uses no proxy. A proxy URL can hold a password, and curl, git,
 #     gh, npm and cargo print a malformed proxy URL in their errors, so proxy
 #     settings are removed, not inspected: every environment variable whose
@@ -74,17 +76,17 @@ set -u
 #     Without a direct network connection the merge-ref fetch and the Rust
 #     channel download fail with a fixed message; npm ci and Cargo print their
 #     own error for a registry they cannot reach (it holds no proxy setting and
-#     nothing from the maintainer's Cargo, npm or Git config, since none reaches
-#     them, but it can name another inherited setting such as the
-#     NODE_EXTRA_CA_CERTS path);
+#     nothing from the maintainer's Cargo, npm, Git, rustfmt or Clippy config
+#     or environment, since none reaches them; a network that needs an extra CA
+#     certificate is not supported, as NODE_EXTRA_CA_CERTS is removed);
 #   - the Rust channel download prints no curl error at all;
 #   - the toolchain probes and the PR's checks (npm ci, ci-local.sh) run through
-#     scripts/run-isolated.sh: an empty HOME, CARGO_HOME, npm config and global
-#     Git config, no system Git config, no CARGO_* (except CARGO_BUILD_JOBS),
-#     npm_config_*, proxy or command-line Git config variables, like the hosted
-#     runner; other inherited variables pass through. A key in the
-#     maintainer's Cargo, npm or Git config cannot reach their output. The
-#     probes also discard their stderr;
+#     scripts/run-isolated.sh, like the hosted runner: a new environment that
+#     holds only PATH, an empty HOME and CARGO_HOME, empty npm and global Git
+#     config files, no system Git config, CARGO_BUILD_JOBS, TMPDIR, the locale,
+#     TERM, USER and LOGNAME. A key in the maintainer's Cargo, npm, Git,
+#     rustfmt or Clippy config, or any other inherited variable, cannot reach
+#     their output. The probes also discard their stderr;
 #   - every git and gh call sends its stderr to /dev/null: Git prints a
 #     malformed or valueless config key, URL included, in its own errors. Each
 #     failure prints a fixed message naming the step and the trusted URL only;
@@ -92,7 +94,10 @@ set -u
 for var in $(env | sed -n 's/^\(GIT_TRACE[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset "$var"
 done
-unset GIT_CURL_VERBOSE GH_DEBUG DEBUG NODE_OPTIONS
+unset GIT_CURL_VERBOSE GH_DEBUG DEBUG
+for var in $(env | sed -n 's/^\(NODE_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  unset "$var"
+done
 GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
 export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
 for var in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | grep -i proxy); do
