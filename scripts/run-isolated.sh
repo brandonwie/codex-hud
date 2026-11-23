@@ -1,6 +1,8 @@
 #!/bin/sh
 # Runs one command in a project directory with the clean configuration of the
-# hosted runner: no maintainer Cargo, npm, Node or Git configuration applies.
+# hosted runner: no maintainer Cargo, npm or Git configuration applies, and of
+# the Node settings only NODE_OPTIONS is removed (other variables, such as
+# NODE_EXTRA_CA_CERTS, pass through; so does CARGO_BUILD_JOBS).
 #
 #   sh scripts/run-isolated.sh <state-dir> <project-dir> <command> [args...]
 #

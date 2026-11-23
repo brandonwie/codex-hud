@@ -80,8 +80,9 @@ set -u
 #   - the Rust channel download prints no curl error at all;
 #   - the toolchain probes and the PR's checks (npm ci, ci-local.sh) run through
 #     scripts/run-isolated.sh: an empty HOME, CARGO_HOME, npm config and global
-#     Git config, no system Git config, no CARGO_*, npm_config_*, proxy or
-#     command-line Git config variables, like the hosted runner. A key in the
+#     Git config, no system Git config, no CARGO_* (except CARGO_BUILD_JOBS),
+#     npm_config_*, proxy or command-line Git config variables, like the hosted
+#     runner; other inherited variables pass through. A key in the
 #     maintainer's Cargo, npm or Git config cannot reach their output. The
 #     probes also discard their stderr;
 #   - every git and gh call sends its stderr to /dev/null: Git prints a
@@ -345,36 +346,55 @@ src="$tmp/src"
 # be "initial". Refusals never print a rewritten URL or a config key that holds
 # one: either can carry a user name and token.
 redirect_limit="http.$trusted_url.followRedirects=initial"
-git init -q "$src" >/dev/null 2>&1 || die "cannot create the temporary fetch repository"
-fetch_url=$(git -C "$src" ls-remote --get-url "$trusted_url" 2>/dev/null) ||
+# The maintainer's Git setup must not add files to the checkout: a template
+# (init.templateDir) can bring hooks and config into the new repository, and a
+# hook (core.hooksPath) or fsmonitor command can write files, such as a Cargo
+# config with a proxy URL in an ignored .cargo directory, that the checks would
+# read. Even git init runs a hook (reference-transaction, for HEAD). So the
+# repository starts from an empty template, every git call into it runs no hook
+# and no fsmonitor (src_git; the command-line -c outranks every config file and
+# GIT_CONFIG_COUNT/GIT_CONFIG_PARAMETERS), and after checkout Git must report no
+# untracked or ignored file.
+no_hooks="core.hooksPath=/dev/null"
+src_git() {
+  git -C "$src" -c "$no_hooks" -c core.fsmonitor=false "$@"
+}
+mkdir "$tmp/git-template" || die "cannot create the empty Git template"
+git -c "$no_hooks" -c core.fsmonitor=false init -q --template="$tmp/git-template" "$src" >/dev/null 2>&1 ||
+  die "cannot create the temporary fetch repository"
+fetch_url=$(src_git ls-remote --get-url "$trusted_url" 2>/dev/null) ||
   die "Git cannot resolve the fetch URL $trusted_url; check that git config --list works and has no url.<base>.insteadOf rule without a value"
 # Only the literal URL: the redirect limit below is keyed to it, so a rewrite
 # even to the bare form of the same repository is refused.
 case $fetch_url in
   "$trusted_url") ;;
   *)
-    rewrite_sources=$(git -C "$src" config --show-origin --get-regexp '^url\..*\.insteadof$' 2>/dev/null |
+    rewrite_sources=$(src_git config --show-origin --get-regexp '^url\..*\.insteadof$' 2>/dev/null |
       cut -f1 | sort -u | tr '\n' ' ')
     die "Git rewrites $trusted_url with a url.<base>.insteadOf rule (defined in: ${rewrite_sources:-your Git config}); the gate fetches only from $trusted_url. Remove the rule and rerun"
     ;;
 esac
-redirects=$(git -C "$src" -c "$redirect_limit" config --get-urlmatch http.followRedirects "$trusted_url" 2>/dev/null)
+redirects=$(src_git -c "$redirect_limit" config --get-urlmatch http.followRedirects "$trusted_url" 2>/dev/null)
 [ "$redirects" = initial ] ||
   die "Git's effective http.followRedirects for $trusted_url is not 'initial'; the gate allows redirects on the first request only. Remove the overriding http.<url>.followRedirects setting and rerun"
 # No proxy for the fetch: an empty http.proxy disables it, and this exact-URL
 # command-line setting outranks every Git config file and environment override.
 no_proxy_setting="http.$trusted_url.proxy="
-if ! git_proxy=$(git -C "$src" -c "$no_proxy_setting" config --get-urlmatch http.proxy "$trusted_url" 2>/dev/null) ||
+if ! git_proxy=$(src_git -c "$no_proxy_setting" config --get-urlmatch http.proxy "$trusted_url" 2>/dev/null) ||
   [ -n "$git_proxy" ]; then
   die "Git's effective http.proxy for $trusted_url is not empty; the gate fetches without a proxy. Check that git config --list works and rerun"
 fi
-git -C "$src" -c "$redirect_limit" -c "$no_proxy_setting" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" >/dev/null 2>&1 ||
+src_git -c "$redirect_limit" -c "$no_proxy_setting" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" >/dev/null 2>&1 ||
   die "cannot fetch refs/pull/$pr/merge from $trusted_url; the gate uses no proxy, so check the direct network connection and that the PR has no merge conflict, then rerun"
-fetched=$(git -C "$src" rev-parse --verify -q 'FETCH_HEAD^{commit}' 2>/dev/null) || die "cannot resolve the fetched merge commit"
-parents=$(git -C "$src" cat-file -p "$fetched" 2>/dev/null | sed -n 's/^parent //p' | tr '\n' ' ')
+fetched=$(src_git rev-parse --verify -q 'FETCH_HEAD^{commit}' 2>/dev/null) || die "cannot resolve the fetched merge commit"
+parents=$(src_git cat-file -p "$fetched" 2>/dev/null | sed -n 's/^parent //p' | tr '\n' ' ')
 [ "$fetched" = "$merge" ] && [ "$parents" = "$base $head " ] ||
   die "GitHub's merge commit is not $base_name + PR head yet (fetched $fetched, parents: $parents); retry in a minute"
-git -C "$src" checkout -q --detach "$fetched" >/dev/null 2>&1 || die "checkout failed"
+src_git checkout -q --detach "$fetched" >/dev/null 2>&1 || die "checkout failed"
+if ! extra=$(src_git status --porcelain --ignored --untracked-files=all 2>/dev/null) ||
+  [ -n "$extra" ]; then
+  die "the checkout holds files that are not in the merge commit, or Git cannot list them; check your Git hooks and templates and rerun"
+fi
 
 want_node=$(sed -n 's/^ *node-version: *["'\'']\{0,1\}\([0-9][0-9]*\).*/\1/p' "$src/.github/workflows/ci.yml" | head -n 1)
 [ -n "$want_node" ] || die "no node-version in .github/workflows/ci.yml"

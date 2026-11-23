@@ -67,11 +67,16 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     `NODE_OPTIONS`. Its toolchain checks and the pull request's checks run
     through `scripts/run-isolated.sh`, like the hosted runner: an empty
     `HOME`, `CARGO_HOME`, npm config and global Git config, no system Git
-    config, and no `CARGO_*`, `npm_config_*`, proxy or command-level Git config
-    (`GIT_CONFIG_COUNT`, `GIT_CONFIG_PARAMETERS`) variables, so a value in your
-    Cargo, npm or Git config, or in one of those variables, cannot reach their
-    output. Other inherited variables still reach them. It stops when a Cargo
-    config file sits above the temporary checkout. Any rewrite of the fetch
+    config, and no `CARGO_*` (except `CARGO_BUILD_JOBS`), `npm_config_*`,
+    proxy or command-level Git config (`GIT_CONFIG_COUNT`,
+    `GIT_CONFIG_PARAMETERS`) variables, so a value in your Cargo, npm or Git
+    config, or in one of those variables, cannot reach their output. Other
+    inherited variables, such as `NODE_EXTRA_CA_CERTS`, still reach them. It
+    stops when a Cargo config file sits above the temporary checkout. Your Git
+    setup cannot add files to the checkout: the temporary repository starts
+    from an empty template, every git call into it runs with hooks and
+    fsmonitor off (`core.hooksPath=/dev/null`, `core.fsmonitor=false`), and
+    after checkout `git status --ignored` must list no file. Any rewrite of the fetch
     URL is refused, even to the same repository's bare URL. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
     and a fork PR. It also refuses a branch PR unless every commit has a

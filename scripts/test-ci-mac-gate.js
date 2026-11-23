@@ -286,9 +286,29 @@ function fetchHarness() {
 echo "$*" >> "$FAKE_GIT_CALLS"
 env | sed -n 's/^\\(GIT_TRACE[A-Za-z0-9_]*=.*\\)/trace-env \\1/p; s/^\\(GIT_CURL_VERBOSE=.*\\)/trace-env \\1/p' >> "$FAKE_GIT_CALLS"
 env | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "$FAKE_GIT_CALLS"
-if [ "$1" = -C ] && { [ "$3" = fetch ] || [ "$5" = fetch ] || [ "$7" = fetch ]; }; then exec "${realGit}" -C "$2" fetch -q "$FAKE_FETCH_REPO" HEAD; fi
-if [ "$1" = -C ] && [ "$3" = checkout ] && [ -z "\${FAKE_ALLOW_CHECKOUT:-}" ]; then echo "fake git: checkout refused" >&2; exit 1; fi
-if [ "$1" = -C ] && [ "$5" = config ] && [ -n "\${FAKE_REDIRECTS:-}" ]; then echo "$FAKE_REDIRECTS"; exit 0; fi
+# The subcommand is the first word that is not a -C or -c option or its value.
+sub=; skip=
+for word in "$@"; do
+  if [ -n "$skip" ]; then skip=; continue; fi
+  case "$word" in -C|-c) skip=1 ;; *) sub=$word; break ;; esac
+done
+# A fetch keeps the gate's -C and -c options and fetches from the local fixture.
+if [ "$1" = -C ] && [ "$sub" = fetch ]; then
+  total=$#
+  for word in "$@"; do [ "$word" = fetch ] && break; set -- "$@" "$word"; done
+  shift "$total"
+  exec "${realGit}" "$@" fetch -q "$FAKE_FETCH_REPO" HEAD
+fi
+if [ "$1" = -C ] && [ "$sub" = checkout ]; then
+  [ -n "\${FAKE_ALLOW_CHECKOUT:-}" ] || { echo "fake git: checkout refused" >&2; exit 1; }
+  "${realGit}" "$@" || exit
+  # FAKE_CHECKOUT_PLANT: a file the checkout leaves behind, as a hook could.
+  if [ -n "\${FAKE_CHECKOUT_PLANT:-}" ]; then mkdir -p "$2/.cargo" && echo "$FAKE_CHECKOUT_PLANT" > "$2/.cargo/config.toml"; fi
+  exit 0
+fi
+if [ "$1" = -C ] && [ "$sub" = config ] && [ -n "\${FAKE_REDIRECTS:-}" ]; then
+  case " $* " in *" --get-urlmatch "*) echo "$FAKE_REDIRECTS"; exit 0 ;; esac
+fi
 exec "${realGit}" "$@"
 `,
       { mode: 0o755 },
@@ -518,6 +538,65 @@ const cases = [
     }, runDir, "", { pathPrefix: prefix });
     fails(matching, /checkout failed/);
     assert.match(fs.readFileSync(gitCalls, "utf8"), new RegExp(`checkout -q --detach ${fixture.merge}`));
+  }],
+  ["the maintainer's Git templates, hooks and fsmonitor cannot add files to the checkout", () => {
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const marker = "SYNTHETIC-HOOK-PROXY-c19d";
+    const hookRan = path.join(root, "hook-ran");
+    fs.rmSync(hookRan, { force: true });
+    // Each hook records that it ran and writes a Cargo config with a proxy
+    // URL into the checkout's ignored .cargo directory.
+    const hook = `#!/bin/sh\necho "$0" >> "${hookRan}"\nmkdir -p .cargo && printf '[http]\\nproxy = "http://u:${marker}@x"\\n' > .cargo/config.toml\n`;
+    const template = path.join(root, "evil-template");
+    const hooksDir = path.join(root, "evil-hooks");
+    for (const dir of [path.join(template, "hooks"), hooksDir]) {
+      fs.mkdirSync(dir, { recursive: true });
+      for (const name of ["post-checkout", "reference-transaction", "post-index-change"]) {
+        fs.writeFileSync(path.join(dir, name), hook, { mode: 0o755 });
+      }
+    }
+    fs.writeFileSync(path.join(hooksDir, "fsmonitor"), hook, { mode: 0o755 });
+    const config = `[init]\n\ttemplateDir = ${template}\n[core]\n\thooksPath = ${hooksDir}\n\tfsmonitor = ${path.join(hooksDir, "fsmonitor")}\n`;
+    // Control: plain git with this config runs the hooks and leaves the file.
+    const control = path.join(root, "hook-control");
+    fs.rmSync(control, { recursive: true, force: true });
+    const controlEnv = { ...fetchConfig(config), GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
+    fixtureGit(["init", "-q", control], { env: controlEnv });
+    fixtureGit(["-C", control, "fetch", "-q", fixture.dir, "HEAD"], { env: controlEnv });
+    fixtureGit(["-C", control, "checkout", "-q", "--detach", "FETCH_HEAD"], { env: controlEnv });
+    assert.ok(fs.existsSync(path.join(control, ".cargo", "config.toml")), "control: the hook did not write the Cargo config");
+    assert.ok(fs.existsSync(hookRan), "control: no hook ran");
+    fs.rmSync(hookRan, { force: true });
+    const env = {
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      FAKE_ALLOW_CHECKOUT: "1",
+      FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
+      FAKE_BASE: fixture.base,
+      FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
+      ...fetchConfig(config),
+    };
+    // Through the gate: no hook runs, the checkout is clean, and the run reaches
+    // the (offline) Rust channel step.
+    const result = runWorker("", env, runDir, "", { pathPrefix: prefix });
+    fails(result, /cannot read the current Rust stable version/);
+    assert.ok(!fs.existsSync(hookRan), "a maintainer hook ran in the gate's repository");
+    assert.ok(!(result.stdout + result.stderr).includes(marker), "the hook's proxy value reached the gate output");
+    const calls = fs.readFileSync(gitCalls, "utf8");
+    assert.match(calls, /^-c core\.hooksPath=\/dev\/null -c core\.fsmonitor=false init -q --template=\S+git-template \S+$/m);
+    // Every call into the temporary repository runs with hooks and fsmonitor off.
+    const srcCalls = calls.split("\n").filter((line) => line.startsWith("-C "));
+    assert.ok(srcCalls.length >= 8, "too few git calls recorded");
+    for (const line of srcCalls) assert.match(line, /^-C \S+ -c core\.hooksPath=\/dev\/null -c core\.fsmonitor=false /, line);
+    assert.match(calls, /-c core\.hooksPath=\/dev\/null -c core\.fsmonitor=false -c http\.\S+ -c http\.\S+ fetch -q /);
+    assert.match(calls, /-c core\.hooksPath=\/dev\/null -c core\.fsmonitor=false checkout -q --detach /);
+    assert.match(calls, /-c core\.hooksPath=\/dev\/null -c core\.fsmonitor=false status --porcelain --ignored --untracked-files=all/);
+    // A file left in the checkout by any other route stops the run before the checks.
+    fs.rmSync(gitCalls, { force: true });
+    const planted = runWorker("", { ...env, FAKE_CHECKOUT_PLANT: `[http]\nproxy = "http://u:${marker}@x"` }, runDir, "", { pathPrefix: prefix });
+    fails(planted, /^ci-mac-gate: the checkout holds files that are not in the merge commit, or Git cannot list them; check your Git hooks and templates and rerun$/m);
+    assert.ok(!(planted.stdout + planted.stderr).includes(marker), "the planted proxy value reached the gate output");
+    assert.doesNotMatch(planted.stderr, /Rust stable/);
   }],
   ["an inherited URL rewrite of the trusted fetch URL is refused before any fetch", () => {
     const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
@@ -981,7 +1060,9 @@ const cases = [
     );
     assert.ok(wrap > 0, "the run is not wrapped in the deadline");
     assert.ok(wrap < script.indexOf("read_candidate || die"), "the deadline starts after the first GitHub read");
-    assert.ok(wrap < script.indexOf("git init -q"), "the deadline starts after the checkout");
+    const init = script.indexOf("init -q --template=");
+    assert.ok(init > 0, "no git init in the gate");
+    assert.ok(wrap < init, "the deadline starts after the checkout");
   }],
   ["run-with-deadline passes the command's exit code through", () => {
     const result = spawnSync(process.execPath, [deadlineRunner, "5", "sh", "-c", "exit 3"], { encoding: "utf8" });
