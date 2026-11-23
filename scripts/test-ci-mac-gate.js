@@ -8,6 +8,7 @@
 // crate with no dependencies, with Cargo capped at 2 build jobs.
 
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -70,6 +71,7 @@ const trustedUrl = "https://github.com/brandonwie/codex-hud.git";
 // a URL rewrite holding a token) can neither change the tests nor reach their
 // output. Fixture git failures report the command and exit code, never stderr.
 const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+const realMktemp = spawnSync("sh", ["-c", "command -v mktemp"], { encoding: "utf8" }).stdout.trim();
 // The gate needs -p under bash (macOS /bin/sh). Some dash builds take -p too
 // (Ubuntu's), others refuse it (macOS's); dash reads no SHELLOPTS either way.
 const shellP = spawnSync("sh", ["-p", "-c", ":"]).status === 0 ? ["-p"] : [];
@@ -316,6 +318,14 @@ function fetchHarness() {
     fs.writeFileSync(
       path.join(fake, "curl"),
       `#!/bin/sh\necho "curl $*" >> "\${FAKE_CURL_CALLS:-/dev/null}"\nenv | LC_ALL=C sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "\${FAKE_CURL_CALLS:-/dev/null}"\n[ -z "\${FAKE_CURL_KILL_PARENT:-}" ] || kill -KILL "$PPID"\nexit 7\n`,
+      { mode: 0o755 },
+    );
+    // macOS mktemp -d without a template ignores TMPDIR. With
+    // FAKE_MKTEMP_PARENT, the fake mktemp makes such a directory there instead;
+    // it passes every other call to the real mktemp.
+    fs.writeFileSync(
+      path.join(fake, "mktemp"),
+      `#!/bin/sh\nif [ -n "\${FAKE_MKTEMP_PARENT:-}" ] && [ "$*" = -d ]; then exec "${realMktemp}" -d "$FAKE_MKTEMP_PARENT/tmp.XXXXXX"; fi\nexec "${realMktemp}" "$@"\n`,
       { mode: 0o755 },
     );
     // The fake sleep records its argument and returns at once.
@@ -1244,11 +1254,14 @@ const cases = [
     // SIGKILL skips the worker's exit trap. The fake curl kills the worker at
     // the Rust channel step, after the checkout; the launcher's cleanup of its
     // run directory must still remove the checkout. The fake uname reports
-    // macOS, so the launcher runs on every platform.
+    // macOS, so the launcher runs on every platform. Every directory the gate
+    // makes with mktemp -d lands in a parent this case owns.
     const { prefix, gitCalls, fixture, fetchConfig } = fetchHarness();
+    const parent = fs.mkdtempSync(path.join(root, "killed-tmp-"));
     const curlCalls = path.join(root, "killed-curl-calls");
     fs.rmSync(gitCalls, { force: true });
     const result = runGate(["56"], {
+      FAKE_MKTEMP_PARENT: parent,
       FAKE_GIT_CALLS: gitCalls,
       FAKE_FETCH_REPO: fixture.dir,
       FAKE_ALLOW_CHECKOUT: "1",
@@ -1259,17 +1272,15 @@ const cases = [
       FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
       ...fetchConfig(),
     }, { pathPrefix: prefix });
-    const checkout = fs.readFileSync(gitCalls, "utf8").match(/^-C (\S+) .*\bcheckout -q --detach /m);
-    assert.ok(checkout, "the worker did not check out");
-    const src = checkout[1];
-    assert.strictEqual(path.basename(src), "src");
-    // The worker's temporary directory holds src; remove it if the gate left it.
     try {
       assert.strictEqual(result.status, 137, result.stdout + result.stderr);
+      const checkouts = fs.readFileSync(gitCalls, "utf8").split("\n").filter((line) => /\bcheckout -q --detach /.test(line));
+      assert.strictEqual(checkouts.length, 1, "the worker did not check out once");
+      assert.ok(checkouts[0].startsWith(`-C ${parent}${path.sep}`), "the checkout is not in the owned parent");
       assert.match(fs.readFileSync(curlCalls, "utf8"), /^curl /m, "the worker did not reach the Rust channel step");
-      assert.ok(!fs.existsSync(src), `the killed worker left its checkout at ${src}`);
+      assert.deepStrictEqual(fs.readdirSync(parent), [], "the killed worker left files behind");
     } finally {
-      fs.rmSync(path.dirname(src), { recursive: true, force: true });
+      fs.rmSync(parent, { recursive: true, force: true });
     }
   }],
   ["an inherited NODE_OPTIONS cannot reach the deadline runner's output", () => {
@@ -1530,8 +1541,13 @@ const cases = [
   ["verify matches a long base branch by its fixed-length ID", () => {
     const longRef = `release/${"x".repeat(60)}`;
     const otherLongRef = `release/${"y".repeat(60)}`;
-    const refId = (name) =>
-      spawnSync(realGit, ["hash-object", "--stdin"], { input: name, encoding: "utf8", env: baseEnv() }).stdout.trim().slice(0, 24);
+    // The SHA-1 Git blob ID, computed here without git: sha1("blob <len>\0" + name).
+    const refId = (name) => {
+      const bytes = Buffer.from(name, "utf8");
+      return crypto.createHash("sha1").update(Buffer.concat([Buffer.from(`blob ${bytes.length}\0`), bytes])).digest("hex").slice(0, 24);
+    };
+    // Known value: `printf '%s' 'release/a-very-long-branch-ü' | git hash-object --stdin` in a SHA-1 repository.
+    assert.strictEqual(refId("release/a-very-long-branch-ü"), "6dbf22dd13abd1cace1ec4ff");
     const record = `success merge ${merge} base ${base} refid ${refId(longRef)}`;
     const pr = (ref) => ({ FAKE_PR: `${head} ${ref} ${repo} ${repo} ${merge}`, FAKE_OTHER_BASE: base });
     const green = runGate(["verify", "56"], { ...pr(longRef), FAKE_STATUS: record });

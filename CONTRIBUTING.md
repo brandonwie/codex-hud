@@ -40,9 +40,11 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     the first GitHub read to the final status, gets the old hosted job's
     deadline, 360 minutes. A timeout after the trust checks (below) posts
     failure; a timeout before them, while the gate still reads GitHub, posts
-    nothing, and the gate needs a rerun. The temporary checkout sits in the
-    run's own temporary directory, which the gate removes when the run ends,
-    also after the deadline stops it. It posts the commit status
+    nothing, and the gate needs a rerun. The run's files, the checkout
+    included, sit in one temporary directory. The gate removes it when the run
+    ends, also after the deadline stops the worker; if the gate command itself
+    is interrupted or killed, the directory can stay behind. It posts the
+    commit status
     `ci-local / macOS` on the PR head: pending while it runs, then success or
     failure with the record `merge <sha> base <sha> ref <base-branch>` (a base
     branch name too long for GitHub's 140-character description is stored as a
