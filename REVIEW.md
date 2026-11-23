@@ -154,8 +154,8 @@ maintainer starts it on a Mac. A pull request into the default branch needs no
 flag; for any other target the maintainer reviews the target and the diff,
 then passes `--trust-candidate <head-sha> <base-sha>`.
 `sh -p scripts/ci-mac-gate.sh verify <pr>` must pass before a merge. A green Linux
-check alone does not cover macOS. `release.yml` repeats the checks before a
-release, and the Husky pre-commit hook runs `npm test`. Name the gates the change needs:
+check alone does not cover macOS. `release.yml` runs `ci-local.sh` again on
+Ubuntu before a release, and the Husky pre-commit hook runs `npm test`. Name the gates the change needs:
 
 | Area changed                                  | Gate                                                                                                                                                   |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |

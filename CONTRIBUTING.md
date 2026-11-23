@@ -25,8 +25,14 @@ matching heading and code-block skeletons across every translation.
 failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 
 - GitHub runs it on Linux for each pull request, fork pull requests included,
-  and for a manual run (`.github/workflows/ci.yml`). No workflow uses a
+  and for a manual run (`.github/workflows/ci.yml`), and again on each push to
+  `main` before a release (`.github/workflows/release.yml`). No workflow uses a
   GitHub-hosted macOS runner.
+- Both workflows cache Cargo's downloaded crates and `rust/target`. The key is
+  the runner OS, the rustc version and `rust/Cargo.lock`. The cache saves build
+  time only: every check still runs, and Cargo rebuilds what changed. A run
+  saves the cache only when it succeeds and the key is new. A pull request
+  reads its own cache, or the one saved on `main`.
 - The macOS leg runs only on a Mac:
   - Merge gate: after the push, `sh -p scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
