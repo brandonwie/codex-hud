@@ -193,9 +193,13 @@ for var in $names; do
 done
 GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
 export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
+# The names are matched with a shell pattern, not a filter program: a filter
+# that failed would print nothing and leave every proxy variable set.
 names=$(env_names '[A-Za-z_][A-Za-z0-9_]*') || env_scan_failed
-for var in $(printf '%s\n' "$names" | LC_ALL=C grep -i proxy); do
-  unset "$var"
+for var in $names; do
+  case $var in
+    *[Pp][Rr][Oo][Xx][Yy]*) unset "$var" ;;
+  esac
 done
 
 context="ci-local / macOS"

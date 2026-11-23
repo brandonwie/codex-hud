@@ -87,9 +87,14 @@ env_records=$( { env -0 && printf '%s' "$env_end"; } | LC_ALL=C tr '\n\000' '\r\
 names=$(printf '%s\n' "$env_records" | LC_ALL=C sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p') ||
   fail "cannot read the environment"
 unset env_records
-for var in $(printf '%s\n' "$names" |
-  LC_ALL=C grep -i -e '^CARGO_' -e '^npm_config_' -e proxy -e '^GIT_'); do
-  unset "$var"
+# Matched with shell patterns (any case), not a filter program that could fail
+# and print nothing.
+for var in $names; do
+  case $var in
+    [Cc][Aa][Rr][Gg][Oo]_* | [Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_* | [Gg][Ii][Tt]_* | *[Pp][Rr][Oo][Xx][Yy]*)
+      unset "$var"
+      ;;
+  esac
 done
 
 sysroot=$(rustc --print sysroot 2>/dev/null) || fail "rustc --print sysroot failed; install Rust and rerun"

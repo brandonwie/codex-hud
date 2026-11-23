@@ -39,13 +39,14 @@ const TEST_CONTEXT_WINDOW = 1000;
 // and report a bogus porcelain state (clean fixture reads as dirty).
 // Then give git an empty global config and no system config, like the hosted
 // runner: the maintainer's user or XDG Git config can neither change the
-// fixture nor print a key (a URL with a token) in a git error. The binary's git
-// gets the same two settings.
+// fixture nor print a key (a URL with a token) in a git error, and no system
+// attributes, so a system gitattributes file cannot change how the fixture's
+// files are added. The binary's git gets the same settings.
 const ISOLATED_GIT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "cph-gitconfig-"));
 const ISOLATED_GIT_CONFIG = path.join(ISOLATED_GIT_DIR, "gitconfig");
 fs.writeFileSync(ISOLATED_GIT_CONFIG, "");
 process.on("exit", () => fs.rmSync(ISOLATED_GIT_DIR, { recursive: true, force: true }));
-const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: ISOLATED_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: "1" };
+const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: ISOLATED_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1" };
 const GIT_CLEAN_ENV = {
   ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
   ...GIT_ISOLATION,

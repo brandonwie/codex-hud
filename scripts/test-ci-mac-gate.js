@@ -1425,6 +1425,32 @@ const cases = [
       assert.strictEqual(isolated.stdout, "", name);
     }
   }],
+  ["a filter program that fails cannot leave proxy or tool settings in place", () => {
+    // A grep that fails prints nothing: a cleanup loop over its output would
+    // remove nothing. The names are matched with shell patterns instead.
+    const marker = "SYNTHETIC-FILTER-PROXY-8d2e";
+    const badGrep = path.join(root, "failing-grep");
+    fs.mkdirSync(badGrep, { recursive: true });
+    fs.writeFileSync(path.join(badGrep, "grep"), "#!/bin/sh\nexit 2\n", { mode: 0o755 });
+    const settings = { HTTPS_PROXY: `http://u:${marker}@proxy.example`, all_proxy: marker };
+    const verify = runGate(["verify", "56"], { ...settings, FAKE_STATUS: status("success") }, { pathPrefix: `${badGrep}${path.delimiter}` });
+    assert.strictEqual(verify.status, 0, verify.stderr);
+    assert.doesNotMatch(verify.ghCalls, /proxy-env/, "a proxy variable reached gh");
+    assert.ok(!(verify.stdout + verify.stderr).includes(marker));
+    // run-isolated.sh: the rustc found in PATH during discovery records its
+    // environment and names a fake toolchain.
+    const tools = path.join(root, "filter-tools");
+    const sysroot = path.join(tools, "sysroot");
+    fs.mkdirSync(path.join(sysroot, "bin"), { recursive: true });
+    for (const tool of ["cargo", "rustc"]) fs.writeFileSync(path.join(sysroot, "bin", tool), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const record = path.join(tools, "rustc-env");
+    fs.writeFileSync(path.join(tools, "rustc"), `#!/bin/sh\nenv > "${record}"\nprintf '%s\\n' "${sysroot}"\n`, { mode: 0o755 });
+    const inherited = { ...settings, CARGO_HTTP_TIMEOUT: "1", npm_config_registry: "http://registry.example", GIT_CONFIG_PARAMETERS: "'a.b'='c'" };
+    const isolated = spawnSync("sh", [path.join(repoRoot, "scripts", "run-isolated.sh"), path.join(root, "filter-state"), repoRoot, "true"], { encoding: "utf8", env: { ...process.env, ...inherited, PATH: `${badGrep}${path.delimiter}${tools}${path.delimiter}${process.env.PATH}` } });
+    assert.strictEqual(isolated.status, 0, isolated.stderr);
+    const seen = [...fs.readFileSync(record, "utf8").matchAll(/^([A-Za-z_][A-Za-z0-9_]*)=/gm)].map((m) => m[1]);
+    assert.deepStrictEqual(seen.filter((name) => name in inherited), [], "an inherited setting reached tool discovery");
+  }],
   ["an inherited BASH_VERSION does not make dash take the bash path", () => {
     // dash keeps an inherited BASH_VERSION or BASH_VERSINFO as plain text; the
     // gate tells bash by its BASH_VERSINFO array instead.

@@ -79,10 +79,10 @@ const isolatedGitConfig = path.join(isolatedGitDir, "gitconfig");
 fs.writeFileSync(isolatedGitConfig, "");
 process.on("exit", () => fs.rmSync(isolatedGitDir, { recursive: true, force: true }));
 // An empty template too: an inherited GIT_TEMPLATE_DIR can copy config into a
-// fixture repository's local config.
+// fixture repository's local config. No system attributes either.
 const emptyGitTemplate = path.join(isolatedGitDir, "template");
 fs.mkdirSync(emptyGitTemplate);
-const gitIsolation = { GIT_CONFIG_GLOBAL: isolatedGitConfig, GIT_CONFIG_NOSYSTEM: "1", GIT_TEMPLATE_DIR: emptyGitTemplate };
+const gitIsolation = { GIT_CONFIG_GLOBAL: isolatedGitConfig, GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1", GIT_TEMPLATE_DIR: emptyGitTemplate };
 const localGitEnvResult = spawnSync("git", ["rev-parse", "--local-env-vars"], {
   encoding: "utf8",
   env: { ...process.env, ...gitIsolation },
