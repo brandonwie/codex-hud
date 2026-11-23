@@ -332,6 +332,8 @@ codex-hud/
 
 Issues e pull requests são bem-vindos. Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para o fluxo de contribuição e a referência completa de scripts de mantenedor.
 
+Mantenedores: fazer checkout, commit ou instalar código de outra pessoa executa os hooks do Git e os scripts npm deste repositório com a sua conta. Revise uma alteração importada pelo diff (`gh pr diff <pr>`) antes de fazer checkout e não pule os hooks. A CI roda apenas no Linux; as verificações de macOS rodam no Mac de um mantenedor por meio de `scripts/ci-mac-gate.sh`, que nunca executa código de forks e só executa um pull request para um branch diferente de `main` depois que um mantenedor revisa todo o candidato a merge (consulte CONTRIBUTING.md).
+
 ## Licença
 
 [MIT](LICENSE) © Brandon Wie

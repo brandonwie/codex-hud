@@ -332,6 +332,8 @@ codex-hud/
 
 ยินดีต้อนรับ issue และ pull request ดู [CONTRIBUTING.md](CONTRIBUTING.md) สำหรับขั้นตอนการร่วมพัฒนาและข้อมูลอ้างอิงสคริปต์สำหรับผู้ดูแลฉบับเต็ม
 
+สำหรับผู้ดูแล: การ checkout, commit หรือติดตั้งโค้ดของผู้อื่นจะรัน Git hook และสคริปต์ npm ของ repository นี้ภายใต้บัญชีของคุณ ตรวจทานการเปลี่ยนแปลงที่นำเข้ามาจาก diff (`gh pr diff <pr>`) ก่อน checkout และอย่าข้าม hook CI รันบน Linux เท่านั้น ส่วนการตรวจสอบ macOS รันบน Mac ของผู้ดูแลผ่าน `scripts/ci-mac-gate.sh` ซึ่งไม่รันโค้ดจาก fork เด็ดขาด และจะรัน pull request ที่ส่งเข้า branch อื่นที่ไม่ใช่ `main` ก็ต่อเมื่อผู้ดูแลตรวจทาน merge candidate ทั้งหมดแล้วเท่านั้น (ดู CONTRIBUTING.md)
+
 ## สัญญาอนุญาต
 
 [MIT](LICENSE) © Brandon Wie
