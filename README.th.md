@@ -332,7 +332,7 @@ codex-hud/
 
 ยินดีต้อนรับ issue และ pull request ดู [CONTRIBUTING.md](CONTRIBUTING.md) สำหรับขั้นตอนการร่วมพัฒนาและข้อมูลอ้างอิงสคริปต์สำหรับผู้ดูแลฉบับเต็ม
 
-สำหรับผู้ดูแล: การ checkout, commit หรือติดตั้งโค้ดของผู้อื่นจะรัน Git hook และสคริปต์ npm ของ repository นี้ภายใต้บัญชีของคุณ ตรวจทานการเปลี่ยนแปลงที่นำเข้ามาจาก diff (`gh pr diff <pr>`) ก่อน checkout และอย่าข้าม hook CI รันบน Linux เท่านั้น ส่วนการตรวจสอบ macOS รันบน Mac ของผู้ดูแลผ่าน `scripts/ci-mac-gate.sh` ซึ่งไม่รันโค้ดจาก fork เด็ดขาด และจะรัน pull request ที่ส่งเข้า branch อื่นที่ไม่ใช่ `main` ก็ต่อเมื่อผู้ดูแลตรวจทาน merge candidate ทั้งหมดแล้วเท่านั้น (ดู CONTRIBUTING.md)
+สำหรับผู้ดูแล: การ checkout, คอมมิต หรือติดตั้งโค้ดของผู้อื่นอาจทำให้โค้ดรันภายใต้บัญชีของคุณผ่าน Git hook หรือสคริปต์ npm ของ repo นี้ ก่อน checkout ให้ตรวจทานการเปลี่ยนแปลงที่จะนำเข้าโดยดู diff (`gh pr diff <pr>`) และอย่าข้าม hook CI รันบน Linux เท่านั้น ส่วนการตรวจสอบ macOS รันบน Mac ของผู้ดูแลผ่าน `scripts/ci-mac-gate.sh` สคริปต์นี้ปฏิเสธ pull request ที่มาจาก fork สำหรับ pull request จาก branch ของ repo นี้ สคริปต์จะรันคอมมิตที่ไม่มีลายเซ็นที่ยืนยันแล้วของผู้ดูแลที่ลงทะเบียนไว้ (เช่น คอมมิตจาก fork ที่คัดลอกมาไว้ใน branch) ก็ต่อเมื่อผู้ดูแลตรวจทาน diff และระบุว่าเชื่อถือ head นั้นแล้วเท่านั้น (`--trust-head`) และจะรัน pull request ที่ส่งเข้า branch อื่นที่ไม่ใช่ `main` ก็ต่อเมื่อผู้ดูแลตรวจทาน merge candidate ทั้งหมดแล้วเท่านั้น (`--trust-candidate`) ดู CONTRIBUTING.md
 
 ## สัญญาอนุญาต
 

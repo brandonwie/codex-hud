@@ -368,7 +368,7 @@ codex-hud/
 
 Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and the full maintainer-scripts reference.
 
-Maintainers: checking out, committing or installing code from someone else runs this repository's Git hooks and npm scripts under your account. Review an imported change by its diff (`gh pr diff <pr>`) before you check it out, and do not skip the hooks. CI runs on Linux only; the macOS checks run on a maintainer's Mac through `scripts/ci-mac-gate.sh`, which never runs fork code and runs a pull request into a branch other than `main` only after a maintainer reviews the whole merge candidate (see CONTRIBUTING.md).
+Maintainers: checking out, committing or installing someone else's code can run code under your account through this repository's Git hooks or npm scripts. Review an imported change by its diff (`gh pr diff <pr>`) before you check it out, and do not skip the hooks. CI runs on Linux only; the macOS checks run on a maintainer's Mac through `scripts/ci-mac-gate.sh`. The gate refuses pull requests from forks. For a pull request from a branch of this repository, it runs commits without a verified signature from a listed maintainer (such as fork commits copied onto the branch) only after a maintainer reviews the diff and trusts that exact head (`--trust-head`), and a pull request into a branch other than `main` only after a maintainer reviews the whole merge candidate (`--trust-candidate`). See CONTRIBUTING.md.
 
 ## License
 
