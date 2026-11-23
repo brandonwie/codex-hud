@@ -1,0 +1,5 @@
+# GitHub logins whose signed, verified commits scripts/ci-mac-gate.sh runs on
+# the Mac without --trust-head. One login per line; "#" starts a comment.
+# Adding a login lets that person's commits run with the maintainer's account
+# access, so add only people with push access to this repository.
+brandonwie

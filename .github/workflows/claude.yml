@@ -11,7 +11,10 @@ on:
 
 jobs:
   claude-review:
-    uses: brandonwie/claude-review/.github/workflows/claude-review.yml@main
+    # Pinned from refs/heads/main on 2026-11-22 (both jobs ubuntu-latest), so
+    # a change upstream cannot bring a new runner here unreviewed (#55). To
+    # update: check the new revision's runs-on values, then bump the SHA.
+    uses: brandonwie/claude-review/.github/workflows/claude-review.yml@e3250d2a49a0fec82edc76d74418a0f02001d85e
     permissions:
       contents: read
       pull-requests: write

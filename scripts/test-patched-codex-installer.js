@@ -70,18 +70,145 @@ const {
   checkRendererSessionCapability,
 } = require("./install-patched-codex");
 
-const localGitEnvResult = spawnSync("git", ["rev-parse", "--local-env-vars"], { encoding: "utf8" });
-assert.strictEqual(localGitEnvResult.status, 0, `git local-env discovery failed: ${localGitEnvResult.stderr}`);
-const localGitEnvNames = localGitEnvResult.stdout.trim().split(/\s+/).filter(Boolean);
-const cleanGitEnv = { ...process.env };
-for (const name of localGitEnvNames) {
-  delete cleanGitEnv[name];
+// Fixture git, and the installer runs that test it, get an empty global Git
+// config and no system config, like the hosted runner: the maintainer's user or
+// XDG Git config can neither change the fixtures nor print a key (a URL with a
+// token) in a git error. Git failures report the command and exit code only.
+const isolatedGitDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-gitconfig-"));
+const isolatedGitConfig = path.join(isolatedGitDir, "gitconfig");
+// The config names an empty attributes file, so no user or XDG gitattributes
+// file applies.
+const isolatedGitAttributes = path.join(isolatedGitDir, "attributes");
+fs.writeFileSync(isolatedGitAttributes, "");
+fs.writeFileSync(isolatedGitConfig, `[core]\n\tattributesFile = ${JSON.stringify(isolatedGitAttributes)}\n`);
+process.on("exit", () => fs.rmSync(isolatedGitDir, { recursive: true, force: true }));
+// An empty template too: an inherited GIT_TEMPLATE_DIR can copy config into a
+// fixture repository's local config. No system attributes either.
+const emptyGitTemplate = path.join(isolatedGitDir, "template");
+fs.mkdirSync(emptyGitTemplate);
+const gitIsolation = { GIT_CONFIG_GLOBAL: isolatedGitConfig, GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1", GIT_TEMPLATE_DIR: emptyGitTemplate };
+// Every inherited GIT_* variable goes, as in the Mac gate's run-isolated.sh:
+// GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE point git at another repository,
+// and GIT_ATTR_SOURCE or GIT_DEFAULT_HASH (not in git rev-parse
+// --local-env-vars) change what it reads or creates.
+function withoutGitEnv(base) {
+  return Object.fromEntries(Object.entries(base).filter(([key]) => !key.startsWith("GIT_")));
+}
+function gitFixtureEnv(base) {
+  return { ...withoutGitEnv(base), ...gitIsolation };
+}
+const cleanGitEnv = gitFixtureEnv(process.env);
+
+// The Git probes below start from a caller whose own Git overrides point at a
+// disposable repository with an untracked file.txt (and GIT_ATTR_SOURCE at its
+// missing HEAD); afterwards that file must still be untracked.
+const callerGitRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-git-caller-"));
+process.on("exit", () => fs.rmSync(callerGitRoot, { recursive: true, force: true }));
+assert.strictEqual(spawnSync("git", ["init", "-q", callerGitRoot], { encoding: "utf8", env: cleanGitEnv }).status, 0, "caller git init failed");
+fs.writeFileSync(path.join(callerGitRoot, "file.txt"), "caller\n");
+const callerGitOverrides = {
+  GIT_DIR: path.join(callerGitRoot, ".git"),
+  GIT_WORK_TREE: callerGitRoot,
+  GIT_INDEX_FILE: path.join(callerGitRoot, ".git", "index"),
+  GIT_ATTR_SOURCE: "HEAD",
+};
+
+// Regression: an inherited XDG Git config stays out of the fixture git. The
+// control shows plain git reading it and printing its marker.
+{
+  const marker = "SYNTHETIC-INSTALLER-GIT-CONFIG-4d91";
+  const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-git-isolation-"));
+  try {
+    const xdg = path.join(probeRoot, "xdg");
+    const repo = path.join(probeRoot, "repo");
+    fs.mkdirSync(path.join(xdg, "git"), { recursive: true });
+    fs.mkdirSync(repo);
+    fs.writeFileSync(path.join(xdg, "git", "config"), `[core]\n\tbigFileThreshold = ${marker}\n`);
+    fs.writeFileSync(path.join(repo, "file.txt"), "x\n");
+    // The control reads the XDG files but still no system config or attributes:
+    // GIT_CONFIG_SYSTEM names a broken file it must not read.
+    const brokenSystem = path.join(probeRoot, "broken-system.gitconfig");
+    fs.writeFileSync(brokenSystem, "[core\n");
+    // It also gets an empty HOME: a ~/.gitconfig that sets core.attributesFile
+    // would replace the XDG attributes file. The caller here has one, so the
+    // control would pass git add if it kept the caller's HOME.
+    const callerHome = path.join(probeRoot, "caller-home");
+    const controlHome = path.join(probeRoot, "control-home");
+    fs.mkdirSync(callerHome);
+    fs.mkdirSync(controlHome);
+    fs.writeFileSync(path.join(callerHome, "empty-attributes"), "");
+    fs.writeFileSync(path.join(callerHome, ".gitconfig"), `[core]\n\tattributesFile = ${JSON.stringify(path.join(callerHome, "empty-attributes"))}\n`);
+    const callerEnv = { ...process.env, ...callerGitOverrides, HOME: callerHome };
+    const plainEnv = {
+      ...withoutGitEnv(callerEnv),
+      HOME: controlHome,
+      XDG_CONFIG_HOME: xdg,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_ATTR_NOSYSTEM: "1",
+      GIT_CONFIG_SYSTEM: brokenSystem,
+    };
+    const isolatedEnv = { ...gitFixtureEnv(callerEnv), XDG_CONFIG_HOME: xdg };
+    assert.strictEqual(spawnSync("git", ["init", "-q"], { cwd: repo, encoding: "utf8", env: isolatedEnv }).status, 0, "fixture git init failed");
+    const control = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: plainEnv });
+    assert.ok(control.status !== 0 && control.stderr.includes(marker), "control: git ignored the XDG config");
+    const isolated = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: isolatedEnv });
+    assert.strictEqual(isolated.status, 0, `isolated git add failed (exit ${isolated.status})`);
+    assert.ok(!(isolated.stdout + isolated.stderr).includes(marker), "the XDG config reached the fixture git");
+    // XDG attributes marking .txt as UTF-16 break a plain git add of the UTF-8
+    // file (control) but not the fixture git.
+    fs.rmSync(path.join(xdg, "git", "config"));
+    assert.strictEqual(spawnSync("git", ["reset", "-q"], { cwd: repo, encoding: "utf8", env: isolatedEnv }).status, 0, "fixture git reset failed");
+    fs.writeFileSync(path.join(xdg, "git", "attributes"), "*.txt working-tree-encoding=UTF-16\n");
+    const attrControl = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: plainEnv });
+    assert.notStrictEqual(attrControl.status, 0, "control: git ignored the XDG attributes");
+    const attrIsolated = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: isolatedEnv });
+    assert.strictEqual(attrIsolated.status, 0, `isolated git add with XDG attributes failed (exit ${attrIsolated.status})`);
+  } finally {
+    fs.rmSync(probeRoot, { recursive: true, force: true });
+  }
+}
+
+// Regression: an inherited GIT_TEMPLATE_DIR stays out of the fixture git. The
+// control shows plain git copying the template's config and printing its marker.
+{
+  const marker = "SYNTHETIC-INSTALLER-GIT-TEMPLATE-7e20";
+  const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-git-template-"));
+  try {
+    const template = path.join(probeRoot, "template");
+    fs.mkdirSync(template);
+    fs.writeFileSync(path.join(template, "config"), `[core]\n\tbigFileThreshold = ${marker}\n`);
+    const inherited = { ...process.env, ...callerGitOverrides, GIT_TEMPLATE_DIR: template };
+    const attempt = (name, env) => {
+      const repo = path.join(probeRoot, name);
+      fs.mkdirSync(repo);
+      fs.writeFileSync(path.join(repo, "file.txt"), "x\n");
+      const init = spawnSync("git", ["init", "-q"], { cwd: repo, encoding: "utf8", env });
+      assert.strictEqual(init.status, 0, `${name} git init failed (exit ${init.status})`);
+      return spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env });
+    };
+    // The control drops the caller's Git overrides too and sets only the template.
+    const controlEnv = { ...gitFixtureEnv(inherited), GIT_TEMPLATE_DIR: template };
+    const control = attempt("control", controlEnv);
+    assert.ok(control.status !== 0 && control.stderr.includes(marker), "control: git ignored GIT_TEMPLATE_DIR");
+    const isolated = attempt("isolated", gitFixtureEnv(inherited));
+    assert.strictEqual(isolated.status, 0, `isolated git add failed (exit ${isolated.status})`);
+    assert.ok(!(isolated.stdout + isolated.stderr).includes(marker), "GIT_TEMPLATE_DIR reached the fixture git");
+  } finally {
+    fs.rmSync(probeRoot, { recursive: true, force: true });
+  }
+}
+
+// No probe's git reached the caller's repository.
+{
+  const status = spawnSync("git", ["-C", callerGitRoot, "status", "--porcelain"], { encoding: "utf8", env: cleanGitEnv });
+  assert.strictEqual(status.status, 0, `caller git status failed (exit ${status.status})`);
+  assert.strictEqual(status.stdout, "?? file.txt\n", "a probe's git changed the caller's repository");
 }
 
 function gitRepositorySnapshot(cwd) {
   const read = (args) => {
     const result = spawnSync("git", args, { cwd, encoding: "utf8", env: cleanGitEnv });
-    assert.strictEqual(result.status, 0, `git ${args.join(" ")} failed: ${result.stderr}`);
+    assert.strictEqual(result.status, 0, `git ${args.join(" ")} failed (exit ${result.status})`);
     return result.stdout;
   };
   return {
@@ -1199,7 +1326,7 @@ try {
     ["tag", "rust-v0.144.1"],
   ]) {
     const gitRun = spawnSync("git", gitArgs, { cwd: capabilityUpstream, encoding: "utf8", env: cleanGitEnv });
-    assert.strictEqual(gitRun.status, 0, `fixture git ${gitArgs[0]} failed: ${gitRun.stderr}`);
+    assert.strictEqual(gitRun.status, 0, `fixture git ${gitArgs[0]} failed (exit ${gitRun.status})`);
   }
   const patchedDryRun = spawnSync(
     process.execPath,

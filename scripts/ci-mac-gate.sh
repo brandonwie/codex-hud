@@ -1,0 +1,628 @@
+#!/bin/sh
+# macOS gate for a pull request. GitHub CI runs the Linux leg; this script runs
+# the same checks on a Mac and records the result on the pull request.
+#
+#   sh -p scripts/ci-mac-gate.sh <pr>      check the PR on this Mac, post the status
+#   sh -p scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>
+#                                          same, for a PR whose commits fail the
+#                                          provenance check, after you reviewed
+#                                          its diff at exactly <head-sha>
+#   sh -p scripts/ci-mac-gate.sh --trust-candidate <head-sha> <base-sha> <pr>
+#                                          same, for a PR that targets another
+#                                          branch than the default one, after you
+#                                          reviewed the whole merge candidate:
+#                                          the target at <base-sha> and the PR
+#                                          at <head-sha>
+#   sh -p scripts/ci-mac-gate.sh verify <pr>
+#                                          exit 0 only when the PR's current merge
+#                                          candidate has a green macOS result
+#
+# Start it with sh -p. macOS /bin/sh is bash, and without -p bash reads
+# SHELLOPTS, BASH_ENV and exported functions from the environment before the
+# first line runs: an inherited SHELLOPTS=xtrace traces that line with PS4
+# expanded, and PS4 can name any variable. Under bash the gate refuses to start
+# without -p. dash reads none of these; macOS dash rejects -p, Ubuntu dash
+# accepts it, and the worker keeps -p when the gate was started with it.
+#
+# This gate is the only macOS check: no workflow uses a GitHub-hosted macOS
+# runner (Brandon, 2026-11-22).
+#
+# Trust boundary: the run mode executes the PR's code (npm lifecycle scripts and
+# tests) with this account's access: files, credentials, Keychain, SSH agent and
+# the token that posts the status. The trusted repository is fixed below
+# (trusted_host, trusted_repo): every GitHub call names it, GH_REPO, GH_HOST and
+# the clone's defaults are ignored, and the merge ref is fetched from its URL.
+# Before any fetch it requires:
+#   0. The PR's base and head repositories and this clone's origin are the
+#      trusted repository.
+#   1. The PR branch lives in the base repository. Fork PRs are always refused:
+#      their macOS leg stays unchecked (verify fails) until a maintainer
+#      recreates the change on a branch of this repository.
+#   2. Provenance: every PR commit has a verified signature, and its committer is
+#      listed in scripts/ci-mac-gate-maintainers.txt (or is GitHub's web-flow
+#      with a listed author). Code copied from a fork onto a branch keeps the
+#      fork's commits and fails this check. --trust-head <sha> overrides it for
+#      that exact head only, after a maintainer reviewed the diff.
+#   3. A trusted target: the merge commit holds the target branch's contents
+#      too, and the gate trusts only the repository's default branch. For any
+#      other target it needs --trust-candidate <head> <base-tip>, naming the
+#      exact merge candidate a maintainer reviewed (the target against the
+#      default branch, and the PR's diff). That flag also covers provenance.
+#
+# The run mode checks GitHub's merge commit for the PR (refs/pull/<pr>/merge,
+# the commit the old hosted job checked out) in a clean temporary checkout. It
+# matches the old hosted job: the Node major set in ci.yml, the current Rust
+# stable with rustfmt and clippy, `npm ci`, then scripts/ci-local.sh, at nice 10.
+# The whole run, from the first GitHub read to the final status, has the old
+# hosted job's deadline (GitHub's default 360 minutes): the public command
+# always restarts itself as an internal worker under that deadline. A timeout
+# after the trust checks posts failure on the PR head; a timeout before them
+# (while the gate still reads GitHub) posts nothing, as the gate has not yet
+# chosen a head to post on. It posts pending while it runs, then success or failure
+# with a record of the candidate. If the candidate changed during the run (new
+# head, retarget, base moved), it posts error or nothing, so the run must
+# repeat. verify compares the record with the PR's current one.
+set +xv
+set -u
+# Bash is the shell with the BASH_VERSINFO array: dash cannot parse an array
+# reference, and an inherited BASH_VERSION or BASH_VERSINFO is plain text there.
+is_bash=no
+if (eval '[ -n "${BASH_VERSINFO[0]:-}" ]') 2>/dev/null; then
+  is_bash=yes
+fi
+case $- in
+  *p*) ;;
+  *)
+    if [ "$is_bash" = yes ] && [ "${1:-}" != __worker ]; then
+      echo "ci-mac-gate: start the gate with sh -p (sh -p scripts/ci-mac-gate.sh ...): without -p, bash reads SHELLOPTS, BASH_ENV and exported functions from the environment" >&2
+      exit 1
+    fi
+    ;;
+esac
+# env_names <sed pattern>: the names of the environment variables that match the
+# pattern. env -0 ends each variable with a NUL, so a value that holds a newline
+# cannot pose as one. tr and sed read bytes in the C locale: under a UTF-8
+# locale macOS tr and sed stop at a byte that is not UTF-8 (any value can hold
+# one), and the names after it would escape the scan. env -0 can print some
+# records and then fail, and the pipeline returns only tr's status, so an end
+# record (no "=", so it names no variable) follows only a successful env -0, and
+# the scan requires it last. It fails if env, tr or sed fails; the caller then
+# stops the gate.
+env_end="ci-mac-gate: end of the environment"
+env_newline='
+'
+env_names() {
+  env_records=$( { env -0 && printf '%s' "$env_end"; } | LC_ALL=C tr '\n\000' '\r\n') || return 1
+  [ "${env_records##*"$env_newline"}" = "$env_end" ] || return 1
+  printf '%s\n' "$env_records" | LC_ALL=C sed -n "s/^\\($1\\)=.*/\\1/p"
+}
+env_scan_failed() {
+  echo "ci-mac-gate: cannot read the environment" >&2
+  exit 1
+}
+# Exported bash functions (BASH_FUNC_<name>%%=() {...}): bash -p does not import
+# them but passes them on, and a bash child such as asdf's node shim runs them;
+# a function named exec runs in place of the builtin and can export NODE_DEBUG
+# again. The gate restarts itself once without them; if any is left after the
+# restart (CI_MAC_GATE_RESTARTED set), it stops, so the variable cannot skip the
+# cleanup.
+functions=$(env_names 'BASH_FUNC_[^=]*') || env_scan_failed
+if [ -n "$functions" ]; then
+  if [ -n "${CI_MAC_GATE_RESTARTED:-}" ]; then
+    echo "ci-mac-gate: cannot remove the exported shell functions from the environment" >&2
+    exit 1
+  fi
+  # env -u <name>... CI_MAC_GATE_RESTARTED=1 <shell> [-p] <this script> <arguments>
+  set -- "$0" "$@"
+  case $- in
+    *p*) set -- -p "$@" ;;
+  esac
+  if [ "$is_bash" = yes ]; then
+    set -- "$BASH" "$@"
+  else
+    set -- sh "$@"
+  fi
+  set -- CI_MAC_GATE_RESTARTED=1 "$@"
+  while read -r name; do
+    set -- -u "$name" "$@"
+  done <<EOF
+$functions
+EOF
+  exec env "$@"
+fi
+unset CI_MAC_GATE_RESTARTED
+# Shell startup settings for the shells this gate starts (the worker, version
+# manager shims such as asdf's, which are bash scripts): BASH_ENV and ENV name a
+# file the shell runs first (it can export NODE_DEBUG again), and PS4 is
+# expanded on every traced line.
+unset BASH_ENV ENV PS4
+# SHELLOPTS and BASHOPTS: bash children read them at startup. Bash keeps them
+# read-only; under -p it ignores the inherited values but still exports its own
+# options (set -u, -p) to its children, so it stops exporting them. Another
+# shell keeps them as plain variables.
+if [ "$is_bash" = yes ]; then
+  # shellcheck disable=SC3045 # bash only
+  export -n SHELLOPTS BASHOPTS
+else
+  unset SHELLOPTS BASHOPTS
+fi
+# Credential safety. Git config and the origin can hold a user name and token
+# (an origin URL, a rewritten fetch URL, a url.<base>.insteadOf key), so no
+# output path may carry them:
+#   - shell tracing and verbose mode are off (set +xv above);
+#   - inherited Git trace variables are dropped, and trace2 targets set in Git
+#     config are disabled (the environment overrides them);
+#   - gh and curl debug output is off (GH_DEBUG, DEBUG; curl -q skips .curlrc),
+#     and every NODE_* variable is unset before node runs (node prints a bad
+#     NODE_OPTIONS --require path in its error, and NODE_DEBUG=child_process
+#     prints each child's environment, GH_TOKEN included);
+#   - the gate uses no proxy. A proxy URL can hold a password, and curl, git,
+#     gh, npm and cargo print a malformed proxy URL in their errors, so proxy
+#     settings are removed, not inspected: every environment variable whose
+#     name contains "proxy" in any case (http_proxy, HTTPS_PROXY, ALL_PROXY,
+#     NO_PROXY, CARGO_HTTP_PROXY, npm_config_https_proxy, GIT_PROXY_COMMAND,
+#     ...) is unset before any tool runs; the fetch sets Git's http.proxy for
+#     the trusted URL to empty (no proxy), which outranks every Git config file
+#     and environment override, and Git's effective value must be empty; and the
+#     checks read no Cargo, npm or Git proxy config (run-isolated.sh below).
+#     Without a direct network connection the merge-ref fetch and the Rust
+#     channel download fail with a fixed message; npm ci and Cargo print their
+#     own error for a registry they cannot reach (it holds no proxy setting and
+#     nothing from the maintainer's Cargo, npm, Git, rustfmt or Clippy config
+#     or environment, since none reaches them; a network that needs an extra CA
+#     certificate is not supported, as NODE_EXTRA_CA_CERTS is removed);
+#   - the Rust channel download prints no curl error at all;
+#   - the toolchain probes and the PR's checks (npm ci, ci-local.sh) run through
+#     scripts/run-isolated.sh, like the hosted runner: a new environment that
+#     holds only PATH, an empty HOME and CARGO_HOME, empty npm and global Git
+#     config files, no system Git config, CARGO_BUILD_JOBS, TMPDIR, the locale,
+#     TERM, USER and LOGNAME. A key in the maintainer's Cargo, npm, Git,
+#     rustfmt or Clippy config, or any other inherited variable, cannot reach
+#     their output. The probes also discard their stderr;
+#   - every git and gh call sends its stderr to /dev/null: Git prints a
+#     malformed or valueless config key, URL included, in its own errors. Each
+#     failure prints a fixed message naming the step and the trusted URL only;
+#   - the script's own messages never print a rejected URL or config key.
+names=$(env_names 'GIT_TRACE[A-Za-z0-9_]*') || env_scan_failed
+for var in $names; do
+  unset "$var"
+done
+unset GIT_CURL_VERBOSE GH_DEBUG DEBUG
+names=$(env_names 'NODE_[A-Za-z0-9_]*') || env_scan_failed
+for var in $names; do
+  unset "$var"
+done
+GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
+export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
+# The names are matched with a shell pattern, not a filter program: a filter
+# that failed would print nothing and leave every proxy variable set.
+names=$(env_names '[A-Za-z_][A-Za-z0-9_]*') || env_scan_failed
+for var in $names; do
+  case $var in
+    *[Pp][Rr][Oo][Xx][Yy]*) unset "$var" ;;
+  esac
+done
+
+context="ci-local / macOS"
+trusted_host=github.com
+trusted_repo=brandonwie/codex-hud
+trusted_url="https://$trusted_host/$trusted_repo.git"
+deadline_seconds=21600
+status_post_seconds=120
+maintainers_file=scripts/ci-mac-gate-maintainers.txt
+rust_channel_url="https://static.rust-lang.org/dist/channel-rust-stable.toml"
+
+die() {
+  echo "ci-mac-gate: $*" >&2
+  exit 1
+}
+
+short() {
+  printf '%.12s' "$1"
+}
+
+full_sha() {
+  case $1 in
+    *[!0-9a-f]*) return 1 ;;
+  esac
+  [ ${#1} -eq 40 ]
+}
+
+# Git variables set by a calling hook would point git at another repository.
+# GH_REPO and GH_HOST would point gh at another repository; every call below
+# names the trusted one explicitly anyway.
+unset GH_REPO GH_HOST
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX GIT_NAMESPACE
+# CDPATH would let a relative cd below (sh -p scripts/ci-mac-gate.sh) enter another
+# checkout that has a scripts/ directory.
+unset CDPATH
+
+cd "$(dirname "$0")/.." || exit 1
+self="$(pwd)/scripts/ci-mac-gate.sh"
+isolated="$(pwd)/scripts/run-isolated.sh"
+
+usage="usage: sh -p scripts/ci-mac-gate.sh [verify | --trust-head <head-sha> | --trust-candidate <head-sha> <base-sha>] <pr-number>"
+mode=run
+trust_head=
+trust_base=
+run_dir=
+case ${1:-} in
+  verify)
+    mode=verify
+    shift
+    ;;
+  --trust-head)
+    [ $# -ge 3 ] || die "$usage"
+    trust_head=$2
+    shift 2
+    full_sha "$trust_head" || die "--trust-head needs the full 40-character head SHA"
+    ;;
+  --trust-candidate)
+    [ $# -ge 4 ] || die "$usage"
+    trust_head=$2
+    trust_base=$3
+    shift 3
+    if ! full_sha "$trust_head" || ! full_sha "$trust_base"; then
+      die "--trust-candidate needs the full 40-character head and base SHAs"
+    fi
+    ;;
+  __worker)
+    # Internal: only the public run below starts this, under the deadline.
+    [ $# -ge 5 ] || die "$usage"
+    mode=worker
+    run_dir=$2
+    trust_head=$3
+    trust_base=$4
+    shift 4
+    ;;
+esac
+pr=${1:-}
+case $pr in
+  '' | *[!0-9]*) die "$usage" ;;
+esac
+command -v gh >/dev/null 2>&1 || die "gh is required"
+
+# Public run: restart as the worker under one deadline for the whole run. On a
+# timeout, post failure on the head the worker recorded, with a short limit.
+if [ "$mode" = run ]; then
+  [ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
+  run_dir=$(mktemp -d) || die "mktemp failed"
+  echo "ci-mac-gate: running PR $pr under a $((deadline_seconds / 60))-minute deadline"
+  # The worker's shell gets -p too, so it reads no exported functions.
+  set --
+  case $- in
+    *p*) set -- -p ;;
+  esac
+  node scripts/run-with-deadline.js "$deadline_seconds" sh "$@" "$self" __worker "$run_dir" "$trust_head" "$trust_base" "$pr"
+  rc=$?
+  if [ "$rc" -eq 124 ] && [ -s "$run_dir/head" ]; then
+    timed_head=$(cat "$run_dir/head")
+    node scripts/run-with-deadline.js "$status_post_seconds" \
+      gh api --hostname "$trusted_host" -X POST "repos/$trusted_repo/statuses/$timed_head" -f state=failure -f context="$context" 2>/dev/null \
+      -f description="timeout: the gate passed its $((deadline_seconds / 60))-minute deadline; rerun" >/dev/null ||
+      echo "ci-mac-gate: timed out, and posting the failure status failed" >&2
+    echo "ci-mac-gate: timed out after $((deadline_seconds / 60)) minutes" >&2
+  fi
+  rm -rf "$run_dir"
+  exit "$rc"
+fi
+
+# Every GitHub call goes to the trusted host and names the trusted repository.
+ghapi() {
+  gh api --hostname "$trusted_host" "$@" 2>/dev/null
+}
+
+post() {
+  ghapi -X POST "repos/$trusted_repo/statuses/$head" \
+    -f state="$1" -f context="$context" -f description="$2" >/dev/null
+}
+
+# Percent-encodes a branch name for an API path. It keeps / and the unreserved
+# characters (A-Z a-z 0-9 - . _ ~); a # or ? would otherwise end the path, and
+# GitHub would answer for another branch (main#x reads main).
+url_path() {
+  printf '%s' "$1" | od -An -v -tx1 | awk '
+    BEGIN { hex = "0123456789abcdef" }
+    {
+      for (i = 1; i <= NF; i++) {
+        h = $i
+        if (h ~ /^(2[def]|3[0-9]|4[1-9a-f]|5[0-9af]|6[1-9a-f]|7[0-9ae])$/)
+          printf "%c", (index(hex, substr(h, 1, 1)) - 1) * 16 + index(hex, substr(h, 2, 1)) - 1
+        else
+          printf "%%%s", toupper(h)
+      }
+    }'
+}
+
+# Sets head, base_name, head_repo, base_repo, merge (GitHub's current merge
+# commit for the PR), commit_count, default_branch (the repository's) and base
+# (the current tip of the PR's current base branch).
+read_candidate() {
+  pr_line=$(ghapi "repos/$trusted_repo/pulls/$pr" \
+    --jq '"\(.head.sha) \(.base.ref) \(.head.repo.full_name) \(.base.repo.full_name) \(.merge_commit_sha) \(.commits) \(.base.repo.default_branch)"') ||
+    return 1
+  read -r head base_name head_repo base_repo merge commit_count default_branch <<EOF
+$pr_line
+EOF
+  base_line=$(ghapi "repos/$trusted_repo/git/ref/heads/$(url_path "$base_name")" --jq '"\(.ref) \(.object.sha)"') ||
+    return 1
+  read -r base_ref base <<EOF
+$base_line
+EOF
+  [ "$base_ref" = "refs/heads/$base_name" ]
+}
+
+# The candidate record: full merge and base SHAs, and the base branch. A branch
+# name that would push the record past GitHub's 140-character description limit
+# is stored as "refid" + the first 24 hex digits of its Git blob hash instead.
+candidate_record() {
+  record="merge $merge base $base ref $base_name"
+  if [ ${#record} -gt 140 ]; then
+    ref_id=$(printf '%s' "$base_name" | git hash-object --stdin 2>/dev/null) || return 1
+    record="merge $merge base $base refid $(printf '%.24s' "$ref_id")"
+  fi
+}
+
+is_maintainer() {
+  sed -e 's/#.*//' -e 's/[[:space:]]//g' -e '/^$/d' "$maintainers_file" | grep -Fqx -- "$1"
+}
+
+# Prints each PR commit that fails the provenance rule; returns 1 when the
+# commit list cannot be read or does not match the PR.
+untrusted_commits() {
+  [ -s "$maintainers_file" ] || {
+    echo "no maintainer list in $maintainers_file" >&2
+    return 1
+  }
+  case $commit_count in
+    '' | *[!0-9]*)
+      echo "cannot read the PR's commit count" >&2
+      return 1
+      ;;
+  esac
+  [ "$commit_count" -le 250 ] || {
+    echo "the PR has $commit_count commits; GitHub lists at most 250" >&2
+    return 1
+  }
+  commits=$(ghapi --paginate "repos/$trusted_repo/pulls/$pr/commits?per_page=100" \
+    --jq '.[] | "\(.sha) \(.commit.verification.verified) \(.committer.login) \(.author.login)"') || return 1
+  # Counted in the shell: a counting program that failed could still print the
+  # expected number.
+  listed=0
+  last=
+  while read -r sha _; do
+    [ -n "$sha" ] || continue
+    listed=$((listed + 1))
+    last=$sha
+  done <<EOF
+$commits
+EOF
+  [ "$listed" = "$commit_count" ] && [ "$last" = "$head" ] || {
+    echo "the PR's commit list ($listed commits, last $last) does not match the PR ($commit_count commits, head $head)" >&2
+    return 1
+  }
+  printf '%s\n' "$commits" | while read -r sha verified committer author; do
+    if [ "$verified" = true ]; then
+      is_maintainer "$committer" && continue
+      [ "$committer" = web-flow ] && is_maintainer "$author" && continue
+    fi
+    echo "$sha (verified: $verified, committer: $committer, author: $author)"
+  done
+}
+
+read_candidate || die "cannot read PR $pr from $trusted_repo on $trusted_host; check gh auth status and the PR number"
+[ "$base_repo" = "$trusted_repo" ] ||
+  die "PR $pr belongs to $base_repo, not $trusted_repo; the gate checks only $trusted_repo"
+case $merge in
+  '' | null) die "PR $pr has no merge commit; resolve its merge conflict first" ;;
+esac
+candidate_record || die "cannot build the candidate record"
+fork_note="PR $pr comes from $head_repo, not $base_repo. The gate never runs fork code on the Mac, so macOS stays unchecked: recreate the change on a branch of $base_repo and run the gate on that PR"
+
+if [ "$mode" = verify ]; then
+  [ "$head_repo" = "$base_repo" ] || die "$fork_note"
+  latest=$(ghapi "repos/$trusted_repo/commits/$head/statuses" \
+    --jq "[.[] | select(.context == \"$context\")][0] | \"\(.state) \(.description)\"") ||
+    die "cannot read statuses for $head"
+  case $latest in
+    "success $record" | "success $record "*)
+      echo "ci-mac-gate: PR $pr is green on macOS for merge $(short "$merge") ($base_name $(short "$base"))"
+      exit 0
+      ;;
+    success*) die "PR $pr: the macOS status is for another merge candidate; run: sh -p scripts/ci-mac-gate.sh $pr" ;;
+    '' | null*) die "PR $pr head $(short "$head") has no macOS status; run: sh -p scripts/ci-mac-gate.sh $pr" ;;
+    *) die "PR $pr head $(short "$head") macOS status: $latest" ;;
+  esac
+fi
+
+# Worker: trust checks first, before any state write, fetch or install.
+origin_url=$(git remote get-url origin 2>/dev/null) ||
+  die "cannot read this clone's origin (remote.origin.url); check that it is a clone of $trusted_url and that git config --list works"
+case $origin_url in
+  "git@$trusted_host:$trusted_repo" | "git@$trusted_host:$trusted_repo.git" | \
+    "ssh://git@$trusted_host/$trusted_repo" | "ssh://git@$trusted_host/$trusted_repo.git" | \
+    "https://$trusted_host/$trusted_repo" | "$trusted_url") ;;
+  # Never print the rejected URL: it can hold a user name and token.
+  *) die "this clone's origin (remote.origin.url) is not $trusted_repo on $trusted_host; run the gate from a clone of $trusted_url" ;;
+esac
+[ "$head_repo" = "$base_repo" ] || die "$fork_note"
+if [ -n "$trust_head" ] && [ "$trust_head" != "$head" ]; then
+  die "PR $pr head is $head, not the trusted $trust_head; review the new commits first"
+fi
+if [ -n "$trust_base" ] && [ "$trust_base" != "$base" ]; then
+  die "PR $pr target $base_name is at $base, not the trusted $trust_base; review the target's new commits first"
+fi
+case $default_branch in
+  '' | null) die "cannot read the default branch of $base_repo" ;;
+esac
+if [ "$base_name" != "$default_branch" ]; then
+  [ -n "$trust_base" ] ||
+    die "PR $pr targets $base_name, not the default branch $default_branch. The merge commit holds the target's contents, and the gate trusts only $default_branch.
+Review the whole merge candidate without checking it out: the target against $default_branch (gh api repos/$trusted_repo/compare/$default_branch...$base) and the PR's diff (gh pr diff $pr --repo $trusted_repo). Then rerun with: sh -p scripts/ci-mac-gate.sh --trust-candidate $head $base $pr"
+  echo "ci-mac-gate: --trust-candidate given; running target $base_name at $base, not the default branch"
+fi
+untrusted=$(untrusted_commits) || die "cannot check the provenance of PR $pr"
+if [ -n "$untrusted" ]; then
+  [ "$trust_head" = "$head" ] ||
+    die "PR $pr has commits outside the maintainer provenance rule (signed and verified, committer in $maintainers_file):
+$untrusted
+Review the PR's diff without checking it out (gh pr diff $pr --repo $trusted_repo), then rerun with: sh -p scripts/ci-mac-gate.sh --trust-head $head $pr"
+  echo "ci-mac-gate: --trust-head $head given; running commits outside the provenance rule:"
+  echo "$untrusted"
+fi
+[ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
+printf '%s\n' "$head" >"$run_dir/head" || die "cannot write the run state"
+candidate="$head $base_name $base $merge"
+
+tmp=$(mktemp -d) || die "mktemp failed"
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 130' INT TERM
+src="$tmp/src"
+
+# Fetch from the trusted URL, then check the fetched commit and both parents
+# before anything is checked out. Git config (url.<base>.insteadOf) can rewrite
+# the URL, so resolve it in the same repository and config the fetch uses and
+# refuse a rewrite before connecting. Redirects stay limited to the first
+# request: the limit is set for the exact URL (a generic http.followRedirects
+# loses to a URL-specific setting), and Git's effective value for that URL must
+# be "initial". Refusals never print a rewritten URL or a config key that holds
+# one: either can carry a user name and token.
+redirect_limit="http.$trusted_url.followRedirects=initial"
+# The maintainer's Git setup must not add files to the checkout: a template
+# (init.templateDir) can bring hooks and config into the new repository, and a
+# hook (core.hooksPath) or fsmonitor command can write files, such as a Cargo
+# config with a proxy URL in an ignored .cargo directory, that the checks would
+# read. Even git init runs a hook (reference-transaction, for HEAD). So the
+# repository starts from an empty template, every git call into it runs no hook
+# and no fsmonitor (src_git; the command-line -c outranks every config file and
+# GIT_CONFIG_COUNT/GIT_CONFIG_PARAMETERS), and after checkout Git must report no
+# untracked or ignored file.
+no_hooks="core.hooksPath=/dev/null"
+src_git() {
+  git -C "$src" -c "$no_hooks" -c core.fsmonitor=false "$@"
+}
+# Creating the repository, reading the fetched commit and checking it out also
+# read no maintainer Git config or inherited GIT_* variable,
+# like the hosted runner's checkout: settings such as core.autocrlf, attributes
+# (core.attributesFile, $XDG_CONFIG_HOME/git/attributes, system attributes) or
+# a working-tree-encoding change the checked-out bytes while status stays
+# clean. Only the URL checks and the fetch below read the maintainer's
+# effective config, so a rewrite or redirect setting there is still refused.
+# clean_git_env runs only inside a subshell.
+clean_git_env() {
+  # Every inherited GIT_* variable goes (GIT_CONFIG_COUNT/KEY_n/VALUE_n,
+  # GIT_CONFIG_PARAMETERS, GIT_TEMPLATE_DIR, GIT_ATTR_SOURCE, GIT_DEFAULT_HASH,
+  # ...); then only the isolation and the trace2 disables are set.
+  names=$(env_names 'GIT_[A-Za-z0-9_]*') || env_scan_failed
+  for var in $names; do
+    unset "$var"
+  done
+  GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
+  GIT_CONFIG_GLOBAL=$tmp/git-empty-config
+  GIT_CONFIG_NOSYSTEM=1
+  GIT_ATTR_NOSYSTEM=1
+  XDG_CONFIG_HOME=$tmp/git-empty-xdg
+  export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_ATTR_NOSYSTEM XDG_CONFIG_HOME
+}
+if ! mkdir "$tmp/git-template" "$tmp/git-empty-xdg" || ! : >"$tmp/git-empty-config"; then
+  die "cannot create the empty Git template and config"
+fi
+(clean_git_env && git -c "$no_hooks" -c core.fsmonitor=false init -q --template="$tmp/git-template" "$src") >/dev/null 2>&1 ||
+  die "cannot create the temporary fetch repository"
+fetch_url=$(src_git ls-remote --get-url "$trusted_url" 2>/dev/null) ||
+  die "Git cannot resolve the fetch URL $trusted_url; check that git config --list works and has no url.<base>.insteadOf rule without a value"
+# Only the literal URL: the redirect limit below is keyed to it, so a rewrite
+# even to the bare form of the same repository is refused.
+case $fetch_url in
+  "$trusted_url") ;;
+  *)
+    rewrite_sources=$(src_git config --show-origin --get-regexp '^url\..*\.insteadof$' 2>/dev/null |
+      cut -f1 | sort -u | tr '\n' ' ')
+    die "Git rewrites $trusted_url with a url.<base>.insteadOf rule (defined in: ${rewrite_sources:-your Git config}); the gate fetches only from $trusted_url. Remove the rule and rerun"
+    ;;
+esac
+redirects=$(src_git -c "$redirect_limit" config --get-urlmatch http.followRedirects "$trusted_url" 2>/dev/null)
+[ "$redirects" = initial ] ||
+  die "Git's effective http.followRedirects for $trusted_url is not 'initial'; the gate allows redirects on the first request only. Remove the overriding http.<url>.followRedirects setting and rerun"
+# No proxy for the fetch: an empty http.proxy disables it, and this exact-URL
+# command-line setting outranks every Git config file and environment override.
+no_proxy_setting="http.$trusted_url.proxy="
+if ! git_proxy=$(src_git -c "$no_proxy_setting" config --get-urlmatch http.proxy "$trusted_url" 2>/dev/null) ||
+  [ -n "$git_proxy" ]; then
+  die "Git's effective http.proxy for $trusted_url is not empty; the gate fetches without a proxy. Check that git config --list works and rerun"
+fi
+# Up to three attempts, 10 and 20 seconds apart, like actions/checkout.
+attempt=1
+until src_git -c "$redirect_limit" -c "$no_proxy_setting" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" >/dev/null 2>&1; do
+  [ "$attempt" -lt 3 ] ||
+    die "cannot fetch refs/pull/$pr/merge from $trusted_url (3 attempts); the gate uses no proxy, so check the direct network connection and that the PR has no merge conflict, then rerun"
+  sleep $((attempt * 10))
+  attempt=$((attempt + 1))
+done
+fetched=$(clean_git_env && src_git rev-parse --verify -q 'FETCH_HEAD^{commit}' 2>/dev/null) || die "cannot resolve the fetched merge commit"
+parents=$( (clean_git_env && src_git cat-file -p "$fetched") 2>/dev/null | sed -n 's/^parent //p' | tr '\n' ' ')
+[ "$fetched" = "$merge" ] && [ "$parents" = "$base $head " ] ||
+  die "GitHub's merge commit is not $base_name + PR head yet (fetched $fetched, parents: $parents); retry in a minute"
+(clean_git_env && src_git checkout -q --detach "$fetched") >/dev/null 2>&1 || die "checkout failed"
+if ! extra=$(clean_git_env && src_git status --porcelain --ignored --untracked-files=all 2>/dev/null) ||
+  [ -n "$extra" ]; then
+  die "the checkout holds files that are not in the merge commit, or Git cannot list them; check your Git hooks and templates and rerun"
+fi
+
+want_node=$(sed -n 's/^ *node-version: *["'\'']\{0,1\}\([0-9][0-9]*\).*/\1/p' "$src/.github/workflows/ci.yml" | head -n 1)
+[ -n "$want_node" ] || die "no node-version in .github/workflows/ci.yml"
+# The probes and checks run with the hosted runner's clean configuration (see
+# scripts/run-isolated.sh). Its setup messages are fixed, so this first call
+# keeps them; the probes then discard stderr: Cargo prints a malformed Cargo
+# config line, a proxy URL included, in its errors.
+iso="$tmp/iso"
+sh "$isolated" "$iso" "$src" true || die "cannot set up the isolated check environment"
+node_version=$(sh "$isolated" "$iso" "$src" node -p process.versions.node 2>/dev/null) || die "node not found"
+[ "${node_version%%.*}" = "$want_node" ] ||
+  die "CI uses Node $want_node, this shell has Node $node_version; select Node $want_node (asdf: ASDF_NODEJS_VERSION=<$want_node.x.y>) and rerun"
+
+# No -S and no stderr: curl's own errors are not needed for this one download.
+if ! curl -q -fsL -o "$tmp/channel.toml" "$rust_channel_url" 2>/dev/null; then
+  die "cannot read the current Rust stable version from $rust_channel_url; the gate uses no proxy, so check the direct network connection and rerun"
+fi
+stable=$(sed -n '/^\[pkg\.rustc\]$/,/^\[/s/^version = "\([0-9.]*\) .*/\1/p' "$tmp/channel.toml")
+[ -n "$stable" ] || die "no rustc version in $rust_channel_url"
+rustc_line=$(sh "$isolated" "$iso" "$src" rustc -V 2>/dev/null) || die "rustc not found"
+rustc_version=${rustc_line#rustc }
+rustc_version=${rustc_version%% *}
+[ "$rustc_version" = "$stable" ] ||
+  die "CI uses Rust stable $stable, this shell has rustc $rustc_version; select Rust $stable and rerun"
+sh "$isolated" "$iso" "$src" cargo fmt --version >/dev/null 2>&1 || die "rustfmt is missing for Rust $rustc_version"
+sh "$isolated" "$iso" "$src" cargo clippy --version >/dev/null 2>&1 || die "clippy is missing for Rust $rustc_version"
+
+echo "ci-mac-gate: PR $pr merge $merge = $base_name $base + head $head"
+echo "ci-mac-gate: Node $node_version, Rust $rustc_version (stable), $(uname -sm)"
+post pending "running on merge $(short "$merge") base $(short "$base")" || die "cannot post the pending status"
+
+start=$(date +%s)
+state=success
+nice -n 10 sh "$isolated" "$iso" "$src" npm ci || state=failure
+if [ "$state" = success ]; then
+  nice -n 10 sh "$isolated" "$iso" "$src" sh "$src/scripts/ci-local.sh" || state=failure
+fi
+elapsed=$(($(date +%s) - start))
+echo "ci-mac-gate: checks $state in ${elapsed}s"
+
+tested_head=$head
+read_candidate || die "cannot read PR $pr after the run; status left pending"
+[ "$head" = "$tested_head" ] || die "PR $pr head moved during the run; rerun for the new head"
+if [ "$head $base_name $base $merge" != "$candidate" ]; then
+  post error "stale: base, target or merge commit changed during the run; rerun the gate" || true
+  die "PR $pr candidate changed during the run (was: $candidate; now: $head $base_name $base $merge); posted error, rerun"
+fi
+
+# The record comes first and stays whole; extras are added only while the
+# description fits GitHub's 140 characters.
+description=$record
+for extra in "node $node_version" "rustc $rustc_version" "${elapsed}s"; do
+  [ $((${#description} + 1 + ${#extra})) -le 140 ] && description="$description $extra"
+done
+post "$state" "$description" || die "checks finished ($state) but posting the status failed"
+echo "ci-mac-gate: posted \"$context\" = $state on $(short "$head"): $description"
+[ "$state" = success ]

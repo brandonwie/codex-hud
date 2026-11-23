@@ -18,9 +18,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+        # Linux only. No GitHub-hosted macOS runner on any path (Brandon,
+        # 2026-11-22): the macOS leg runs on the Mac through
+        # scripts/ci-mac-gate.sh, which posts the "ci-local / macOS" status (#55).
+        os: [ubuntu-latest]
     steps:
       - name: Checkout
         # Pinned from refs/tags/v7.0.1 on 2026-09-26.
@@ -46,14 +47,5 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      - name: Format (Rust)
-        run: cargo fmt --manifest-path rust/Cargo.toml -- --check
-
-      - name: Lint (Rust)
-        run: cargo clippy --manifest-path rust/Cargo.toml -- -D warnings
-
-      - name: Test
-        run: npm test
-
-      - name: Test (Rust)
-        run: npm run test:rust
+      - name: Checks
+        run: sh scripts/ci-local.sh

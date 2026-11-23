@@ -137,11 +137,25 @@ merge semantics are product changes; review them across both surfaces.
 
 ## Verification
 
-CI (`.github/workflows/ci.yml`, every pull request, Ubuntu and macOS) runs
+`scripts/ci-local.sh` runs
 `cargo fmt --manifest-path rust/Cargo.toml -- --check`,
 `cargo clippy --manifest-path rust/Cargo.toml -- -D warnings`, `npm test` and
-`npm run test:rust`; `release.yml` repeats them before a release, and the Husky
-pre-commit hook runs `npm test`. Name the gates the change needs:
+`npm run test:rust`. CI (`.github/workflows/ci.yml`) runs it on Ubuntu for every
+pull request, fork pull requests included, and for a manual run. No workflow
+uses a GitHub-hosted macOS runner. The macOS leg runs only on a Mac:
+`sh -p scripts/ci-mac-gate.sh <pr>` checks the PR's merge commit and posts the
+`ci-local / macOS` commit status. It is bound to `brandonwie/codex-hud` on
+github.com and checks the fetched merge commit before checkout. It never runs fork code, so a fork PR's
+macOS leg stays unchecked until a maintainer recreates the change on a branch
+of this repository. On a branch it runs only commits signed by a listed
+maintainer (`scripts/ci-mac-gate-maintainers.txt`), unless a maintainer passes
+`--trust-head <head-sha>` after reviewing the diff. No workflow runs it: a
+maintainer starts it on a Mac. A pull request into the default branch needs no
+flag; for any other target the maintainer reviews the target and the diff,
+then passes `--trust-candidate <head-sha> <base-sha>`.
+`sh -p scripts/ci-mac-gate.sh verify <pr>` must pass before a merge. A green Linux
+check alone does not cover macOS. `release.yml` repeats the checks before a
+release, and the Husky pre-commit hook runs `npm test`. Name the gates the change needs:
 
 | Area changed                                  | Gate                                                                                                                                                   |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
