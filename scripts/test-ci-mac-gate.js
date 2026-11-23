@@ -499,6 +499,18 @@ const cases = [
     const wrongLast = commitLines([head, "true", "brandonwie", "brandonwie"], [firstCommit, "true", "brandonwie", "brandonwie"]);
     refusedBeforeCheckout(runWorker("", { FAKE_COMMITS: wrongLast }), /does not match the PR/);
     refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 251 main` }), /at most 250/);
+    // The count and the last SHA come from the shell: a grep -c or tail that
+    // prints the expected value and then fails cannot make the lists match.
+    const lying = path.join(root, "lying-count");
+    fs.mkdirSync(lying, { recursive: true });
+    const realGrep = spawnSync("sh", ["-c", "command -v grep"], { encoding: "utf8" }).stdout.trim();
+    fs.writeFileSync(path.join(lying, "grep"), `#!/bin/sh\ncase "$1" in -c) echo 3; exit 2 ;; esac\nexec "${realGrep}" "$@"\n`, { mode: 0o755 });
+    fs.writeFileSync(path.join(lying, "tail"), `#!/bin/sh\necho "${head} true brandonwie brandonwie"\nexit 2\n`, { mode: 0o755 });
+    const options = { pathPrefix: `${lying}${path.delimiter}` };
+    refusedBeforeCheckout(runWorker("", { FAKE_PR: `${head} main ${repo} ${repo} ${merge} 3 main` }, missingRunDir, "", options), /does not match the PR/);
+    refusedBeforeCheckout(runWorker("", { FAKE_COMMITS: wrongLast }, missingRunDir, "", options), /does not match the PR/);
+    // Control: with the same programs the matching list still passes.
+    passedTrust(runWorker("", {}, missingRunDir, "", options));
   }],
   ["a signed PR head over an untrusted target branch is refused without --trust-candidate", () => {
     // Every PR commit passes provenance, but the target branch is not the

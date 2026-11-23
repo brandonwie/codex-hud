@@ -39,12 +39,15 @@ const TEST_CONTEXT_WINDOW = 1000;
 // and report a bogus porcelain state (clean fixture reads as dirty).
 // Then give git an empty global config and no system config, like the hosted
 // runner: the maintainer's user or XDG Git config can neither change the
-// fixture nor print a key (a URL with a token) in a git error, and no system
-// attributes, so a system gitattributes file cannot change how the fixture's
-// files are added. The binary's git gets the same settings.
+// fixture nor print a key (a URL with a token) in a git error, and no system or
+// user attributes (the empty config names an empty core.attributesFile), so a
+// gitattributes file cannot change how the fixture's files are added. The
+// binary's git gets the same settings.
 const ISOLATED_GIT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "cph-gitconfig-"));
 const ISOLATED_GIT_CONFIG = path.join(ISOLATED_GIT_DIR, "gitconfig");
-fs.writeFileSync(ISOLATED_GIT_CONFIG, "");
+const ISOLATED_GIT_ATTRIBUTES = path.join(ISOLATED_GIT_DIR, "attributes");
+fs.writeFileSync(ISOLATED_GIT_ATTRIBUTES, "");
+fs.writeFileSync(ISOLATED_GIT_CONFIG, `[core]\n\tattributesFile = ${JSON.stringify(ISOLATED_GIT_ATTRIBUTES)}\n`);
 process.on("exit", () => fs.rmSync(ISOLATED_GIT_DIR, { recursive: true, force: true }));
 const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: ISOLATED_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1" };
 const GIT_CLEAN_ENV = {
@@ -103,7 +106,16 @@ function checkGitIsolation() {
     fs.mkdirSync(home);
     fs.mkdirSync(repo);
     const badConfig = "[core]\n\tbigFileThreshold = " + marker + "\n";
-    const plain = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
+    // The controls read user and XDG files but still no system config or
+    // attributes: GIT_CONFIG_SYSTEM names a broken file they must not read.
+    const brokenSystem = path.join(dir, "broken-system.gitconfig");
+    fs.writeFileSync(brokenSystem, "[core\n");
+    const plain = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_ATTR_NOSYSTEM: "1",
+      GIT_CONFIG_SYSTEM: brokenSystem,
+    };
     git(repo, ["init", "-q"]);
     fs.writeFileSync(path.join(repo, "file.txt"), "x\n");
     for (const [name, file, env] of [
@@ -118,6 +130,17 @@ function checkGitIsolation() {
       git(repo, ["reset", "-q"], { ...GIT_CLEAN_ENV, ...env });
       fs.rmSync(file);
     }
+    // User attributes: XDG git/attributes marking .txt as UTF-16 breaks a plain
+    // git add of the UTF-8 file (control); the fixture git reads the empty
+    // attributes file instead.
+    const attributes = path.join(xdg, "git", "attributes");
+    fs.writeFileSync(attributes, "*.txt working-tree-encoding=UTF-16\n");
+    const attrEnv = { HOME: home, XDG_CONFIG_HOME: xdg };
+    const attrControl = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: { ...plain, ...attrEnv } });
+    assert.notStrictEqual(attrControl.status, 0, "control: git ignored the XDG attributes");
+    git(repo, ["add", "file.txt"], { ...GIT_CLEAN_ENV, ...attrEnv });
+    git(repo, ["reset", "-q"], { ...GIT_CLEAN_ENV, ...attrEnv });
+    fs.rmSync(attributes);
     assert.throws(
       () => git(repo, ["no-such-command-" + marker]),
       (err) => err.message === "git no-such-command-" + marker + " failed (exit 1)"

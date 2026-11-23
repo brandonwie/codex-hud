@@ -21,7 +21,8 @@
 # SHELLOPTS, BASH_ENV and exported functions from the environment before the
 # first line runs: an inherited SHELLOPTS=xtrace traces that line with PS4
 # expanded, and PS4 can name any variable. Under bash the gate refuses to start
-# without -p (dash has no -p and reads none of these).
+# without -p. dash reads none of these; macOS dash rejects -p, Ubuntu dash
+# accepts it, and the worker keeps -p when the gate was started with it.
 #
 # This gate is the only macOS check: no workflow uses a GitHub-hosted macOS
 # runner (Brandon, 2026-11-22).
@@ -386,8 +387,17 @@ untrusted_commits() {
   }
   commits=$(ghapi --paginate "repos/$trusted_repo/pulls/$pr/commits?per_page=100" \
     --jq '.[] | "\(.sha) \(.commit.verification.verified) \(.committer.login) \(.author.login)"') || return 1
-  listed=$(printf '%s\n' "$commits" | grep -c .)
-  last=$(printf '%s\n' "$commits" | tail -n 1 | cut -d' ' -f1)
+  # Counted in the shell: a counting program that failed could still print the
+  # expected number.
+  listed=0
+  last=
+  while read -r sha _; do
+    [ -n "$sha" ] || continue
+    listed=$((listed + 1))
+    last=$sha
+  done <<EOF
+$commits
+EOF
   [ "$listed" = "$commit_count" ] && [ "$last" = "$head" ] || {
     echo "the PR's commit list ($listed commits, last $last) does not match the PR ($commit_count commits, head $head)" >&2
     return 1

@@ -76,7 +76,11 @@ const {
 // token) in a git error. Git failures report the command and exit code only.
 const isolatedGitDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-gitconfig-"));
 const isolatedGitConfig = path.join(isolatedGitDir, "gitconfig");
-fs.writeFileSync(isolatedGitConfig, "");
+// The config names an empty attributes file, so no user or XDG gitattributes
+// file applies.
+const isolatedGitAttributes = path.join(isolatedGitDir, "attributes");
+fs.writeFileSync(isolatedGitAttributes, "");
+fs.writeFileSync(isolatedGitConfig, `[core]\n\tattributesFile = ${JSON.stringify(isolatedGitAttributes)}\n`);
 process.on("exit", () => fs.rmSync(isolatedGitDir, { recursive: true, force: true }));
 // An empty template too: an inherited GIT_TEMPLATE_DIR can copy config into a
 // fixture repository's local config. No system attributes either.
@@ -110,8 +114,13 @@ const cleanGitEnv = gitFixtureEnv(process.env);
     fs.mkdirSync(repo);
     fs.writeFileSync(path.join(xdg, "git", "config"), `[core]\n\tbigFileThreshold = ${marker}\n`);
     fs.writeFileSync(path.join(repo, "file.txt"), "x\n");
+    // The control reads the XDG files but still no system config or attributes:
+    // GIT_CONFIG_SYSTEM names a broken file it must not read.
+    const brokenSystem = path.join(probeRoot, "broken-system.gitconfig");
+    fs.writeFileSync(brokenSystem, "[core\n");
     const plainEnv = { ...process.env, XDG_CONFIG_HOME: xdg };
-    for (const name of [...localGitEnvNames, "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"]) delete plainEnv[name];
+    for (const name of [...localGitEnvNames, "GIT_CONFIG_GLOBAL"]) delete plainEnv[name];
+    Object.assign(plainEnv, { GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1", GIT_CONFIG_SYSTEM: brokenSystem });
     const isolatedEnv = { ...cleanGitEnv, XDG_CONFIG_HOME: xdg };
     assert.strictEqual(spawnSync("git", ["init", "-q"], { cwd: repo, encoding: "utf8", env: isolatedEnv }).status, 0, "fixture git init failed");
     const control = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: plainEnv });
@@ -119,6 +128,15 @@ const cleanGitEnv = gitFixtureEnv(process.env);
     const isolated = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: isolatedEnv });
     assert.strictEqual(isolated.status, 0, `isolated git add failed (exit ${isolated.status})`);
     assert.ok(!(isolated.stdout + isolated.stderr).includes(marker), "the XDG config reached the fixture git");
+    // XDG attributes marking .txt as UTF-16 break a plain git add of the UTF-8
+    // file (control) but not the fixture git.
+    fs.rmSync(path.join(xdg, "git", "config"));
+    assert.strictEqual(spawnSync("git", ["reset", "-q"], { cwd: repo, encoding: "utf8", env: isolatedEnv }).status, 0, "fixture git reset failed");
+    fs.writeFileSync(path.join(xdg, "git", "attributes"), "*.txt working-tree-encoding=UTF-16\n");
+    const attrControl = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: plainEnv });
+    assert.notStrictEqual(attrControl.status, 0, "control: git ignored the XDG attributes");
+    const attrIsolated = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: isolatedEnv });
+    assert.strictEqual(attrIsolated.status, 0, `isolated git add with XDG attributes failed (exit ${attrIsolated.status})`);
   } finally {
     fs.rmSync(probeRoot, { recursive: true, force: true });
   }
