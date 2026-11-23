@@ -106,9 +106,9 @@ const status = (state, m = merge, b = base, ref = "main") => `${state} merge ${m
 const commitLines = (...rows) => rows.map((row) => row.join(" ")).join("\n");
 const trustedCommits = commitLines([firstCommit, "true", "brandonwie", "brandonwie"], [head, "true", "brandonwie", "brandonwie"]);
 
-function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [], cwd, privileged = true } = {}) {
+function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [], cwd, privileged = true, shell = "sh" } = {}) {
   fs.rmSync(calls, { force: true });
-  const result = spawnSync("sh", [...(privileged ? shellP : []), ...shellArgs, gatePath, ...args], {
+  const result = spawnSync(shell, [...(privileged && shell === "sh" ? shellP : []), ...shellArgs, gatePath, ...args], {
     cwd,
     env: {
       ...baseEnv(),
@@ -1292,6 +1292,47 @@ const cases = [
     const verify = runGate(["verify", "56"], { ...traced, FAKE_STATUS: status("success") }, options);
     assert.strictEqual(verify.status, 0, "verify failed with SHELLOPTS set");
     assert.ok(!output(verify).includes(marker), "a traced line reached the verify output");
+  }],
+  ["an exported bash function cannot turn Node tracing back on through a version-manager shim", () => {
+    // bash -p does not import exported functions but passes them on; in the
+    // bash node shim a function named exec runs in place of the builtin.
+    const marker = "SYNTHETIC-BASH-FUNC-6d0b";
+    const shims = path.join(root, "func-shims");
+    fs.mkdirSync(shims, { recursive: true });
+    fs.writeFileSync(path.join(shims, "node"), `#!/usr/bin/env bash\nexec "${process.execPath}" "$@"\n`, { mode: 0o755 });
+    const fn = { "BASH_FUNC_exec%%": '() { export NODE_DEBUG=child_process; builtin exec "$@"; }' };
+    const spawnTrue = ["-e", 'require("child_process").spawnSync("true")'];
+    const control = spawnSync(path.join(shims, "node"), spawnTrue, { encoding: "utf8", env: { PATH: process.env.PATH, ...fn, GH_TOKEN: marker } });
+    assert.ok(/CHILD_PROCESS/.test(control.stderr) && control.stderr.includes(marker), "control: the shim did not run the exported function");
+    const options = { pathPrefix: `${shims}${path.delimiter}${fetchHarness().prefix}` };
+    const output = (r) => r.stdout + r.stderr;
+    const result = runGate(["56"], { ...fn, GH_TOKEN: marker, FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2` }, options);
+    fails(result, /comes from someone\/fork/);
+    assert.match(result.stdout, /under a 360-minute deadline/);
+    assert.doesNotMatch(output(result), /CHILD_PROCESS/);
+    assert.ok(!output(result).includes(marker), "an exported function printed the gate's environment");
+    // verify restarts the same way and keeps its arguments.
+    const verify = runGate(["verify", "56"], { ...fn, FAKE_STATUS: status("success") }, options);
+    assert.strictEqual(verify.status, 0, verify.stderr);
+    // A value holding a newline does not pose as a function, and the restart
+    // marker cannot skip the cleanup.
+    const fake = runGate(["verify", "56"], { SYNTHETIC_VALUE: "x\nBASH_FUNC_exec%%=() { :; }", FAKE_STATUS: status("success") });
+    assert.strictEqual(fake.status, 0, fake.stderr);
+    // dash drops variables whose names are not identifiers, so only a shell
+    // that passes them on (bash) needs the restart.
+    const passesFunctions = spawnSync("sh", ["-c", "env"], { encoding: "utf8", env: { PATH: process.env.PATH, ...fn } }).stdout.includes("BASH_FUNC_exec%%=");
+    if (passesFunctions) {
+      fails(runGate(["verify", "56"], { ...fn, CI_MAC_GATE_RESTARTED: "1", FAKE_STATUS: status("success") }), /^ci-mac-gate: cannot remove the exported shell functions from the environment$/m);
+    }
+  }],
+  ["an inherited BASH_VERSION does not make dash take the bash path", () => {
+    // dash keeps an inherited BASH_VERSION or BASH_VERSINFO as plain text; the
+    // gate tells bash by its BASH_VERSINFO array instead.
+    if (!fs.existsSync("/bin/dash")) return;
+    const inherited = { BASH_VERSION: "5.2.0(1)-release", BASH_VERSINFO: "5", FAKE_STATUS: status("success") };
+    const verify = runGate(["verify", "56"], inherited, { shell: "/bin/dash" });
+    assert.strictEqual(verify.status, 0, verify.stderr);
+    assert.doesNotMatch(verify.stderr, /sh -p/);
   }],
   ["a base branch name is percent-encoded, and the ref GitHub returns must match", () => {
     // A # would end the API path: GitHub would answer for main, not main#x.

@@ -63,15 +63,53 @@
 # repeat. verify compares the record with the PR's current one.
 set +xv
 set -u
+# Bash is the shell with the BASH_VERSINFO array: dash cannot parse an array
+# reference, and an inherited BASH_VERSION or BASH_VERSINFO is plain text there.
+is_bash=no
+if (eval '[ -n "${BASH_VERSINFO[0]:-}" ]') 2>/dev/null; then
+  is_bash=yes
+fi
 case $- in
   *p*) ;;
   *)
-    if [ -n "${BASH_VERSION:-}" ] && [ "${1:-}" != __worker ]; then
+    if [ "$is_bash" = yes ] && [ "${1:-}" != __worker ]; then
       echo "ci-mac-gate: start the gate with sh -p (sh -p scripts/ci-mac-gate.sh ...): without -p, bash reads SHELLOPTS, BASH_ENV and exported functions from the environment" >&2
       exit 1
     fi
     ;;
 esac
+# Exported bash functions (BASH_FUNC_<name>%%=() {...}): bash -p does not import
+# them but passes them on, and a bash child such as asdf's node shim runs them;
+# a function named exec runs in place of the builtin and can export NODE_DEBUG
+# again. The gate restarts itself once without them; if any is left after the
+# restart (CI_MAC_GATE_RESTARTED set), it stops, so the variable cannot skip the
+# cleanup. env -0 ends each variable with a NUL, so a value that holds a newline
+# cannot pose as one.
+functions=$(env -0 | tr '\n\000' '\r\n' | sed -n 's/^\(BASH_FUNC_[^=]*\)=.*/\1/p')
+if [ -n "$functions" ]; then
+  if [ -n "${CI_MAC_GATE_RESTARTED:-}" ]; then
+    echo "ci-mac-gate: cannot remove the exported shell functions from the environment" >&2
+    exit 1
+  fi
+  # env -u <name>... CI_MAC_GATE_RESTARTED=1 <shell> [-p] <this script> <arguments>
+  set -- "$0" "$@"
+  case $- in
+    *p*) set -- -p "$@" ;;
+  esac
+  if [ "$is_bash" = yes ]; then
+    set -- "$BASH" "$@"
+  else
+    set -- sh "$@"
+  fi
+  set -- CI_MAC_GATE_RESTARTED=1 "$@"
+  while read -r name; do
+    set -- -u "$name" "$@"
+  done <<EOF
+$functions
+EOF
+  exec env "$@"
+fi
+unset CI_MAC_GATE_RESTARTED
 # Shell startup settings for the shells this gate starts (the worker, version
 # manager shims such as asdf's, which are bash scripts): BASH_ENV and ENV name a
 # file the shell runs first (it can export NODE_DEBUG again), and PS4 is
@@ -81,7 +119,7 @@ unset BASH_ENV ENV PS4
 # read-only; under -p it ignores the inherited values but still exports its own
 # options (set -u, -p) to its children, so it stops exporting them. Another
 # shell keeps them as plain variables.
-if [ -n "${BASH_VERSION:-}" ]; then
+if [ "$is_bash" = yes ]; then
   # shellcheck disable=SC3045 # bash only
   export -n SHELLOPTS BASHOPTS
 else

@@ -45,9 +45,12 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     `SHELLOPTS`, `BASH_ENV` and exported functions from the environment
     before the gate's first line, so an inherited `SHELLOPTS=xtrace` would
     trace that line with `PS4` expanded. Under bash the gate refuses to start
-    without `-p`, starts its worker with `-p`, and unsets `BASH_ENV`, `ENV`
-    and `PS4` before it starts any other program (version-manager shims such
-    as asdf's are bash scripts).
+    without `-p` and starts its worker with `-p`. Before it starts any other
+    program it unsets `BASH_ENV`, `ENV` and `PS4`, stops exporting
+    `SHELLOPTS` and `BASHOPTS`, and restarts itself once without exported
+    bash functions (version-manager shims such as asdf's are bash scripts,
+    and a function named `exec` would run in place of the builtin). dash
+    reads none of these and drops exported functions itself.
   - Trust: the gate runs the PR's code with your account's access (files,
     credentials, Keychain, SSH agent, the status token). It works only on
     `brandonwie/codex-hud` on github.com: every GitHub call names that
