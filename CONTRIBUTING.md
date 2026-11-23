@@ -28,15 +28,6 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
   and for a manual run (`.github/workflows/ci.yml`), and again on each push to
   `main` before a release (`.github/workflows/release.yml`). No workflow uses a
   GitHub-hosted macOS runner.
-- Both workflows cache Cargo's downloaded crates and `rust/target`. The key is
-  the runner OS, the rustc version and `rust/Cargo.lock`. The cache saves build
-  time only: every check still runs, and after the restore each job removes
-  the codex-hud crate's own dev and release artifacts (`cargo clean -p
-  codex-hud`, with and without `--release`), so only dependency builds are
-  reused. A restored build of the crate could come from another revision and
-  look newer than the checkout. A run saves the cache only when it succeeds and
-  the key is new. A pull request reads its own cache, then its base branch's,
-  then the default branch's; a manual run saves to the branch it runs on.
 - The macOS leg runs only on a Mac:
   - Merge gate: after the push, `sh -p scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout

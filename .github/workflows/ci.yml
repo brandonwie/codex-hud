@@ -41,41 +41,11 @@ jobs:
         run: npm ci
 
       - name: Setup Rust
-        id: rust
         # Pinned from refs/heads/stable on 2026-09-26.
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
           toolchain: stable
           components: rustfmt, clippy
-
-      # Build time only: every check still runs, and the next step removes the
-      # codex-hud crate's own artifacts, so only dependency builds (fixed by
-      # rust/Cargo.lock) are reused. The cache is saved only when the job
-      # succeeds and the key is new. A pull request reads its own cache, then
-      # its base branch's, then the default branch's (Release saves main's).
-      # Keep these two steps equal in ci.yml and release.yml.
-      - name: Cache Rust build
-        # Pinned from refs/tags/v6.1.0 on 2026-11-23.
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            rust/target/
-          key: rust-${{ runner.os }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('rust/Cargo.lock') }}
-          restore-keys: |
-            rust-${{ runner.os }}-${{ steps.rust.outputs.cachekey }}-
-
-      # A restored cache can come from another revision, with fingerprints newer
-      # than this checkout's sources; Cargo would then treat the crate as fresh
-      # and Clippy, the tests and the release binary would use old code.
-      # Removing the crate's dev and release artifacts makes every check build
-      # this checkout. A cold rust/target has nothing to remove.
-      - name: Remove cached codex-hud artifacts
-        run: |
-          cargo clean --manifest-path rust/Cargo.toml -p codex-hud
-          cargo clean --manifest-path rust/Cargo.toml -p codex-hud --release
 
       - name: Checks
         run: sh scripts/ci-local.sh
