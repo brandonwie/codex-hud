@@ -124,11 +124,13 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     unchecked: `verify` fails for them. To check macOS, a maintainer recreates
     the change on a branch of this repository and runs the gate on that pull
     request.
-- Imported code and local hooks: checking out or committing code from someone
-  else runs the Husky hooks under your account (`pre-commit` runs `npm test`),
-  and so does `npm install`. Review an
-  imported change by its diff (`gh pr diff <pr>`) before you check it out or
-  commit it. Do not skip or weaken the hooks to get around this.
+- Imported code and local hooks: the Husky hooks run the hook files of the
+  checked-out tree under your account, so a change can add a hook that runs
+  when you check it out (`post-checkout`) or commit it. Today only `pre-commit`
+  exists (it runs `npm test`). `npm install` and `npm ci` run the change's npm
+  lifecycle scripts (today only `prepare`). Review an imported change by its
+  diff (`gh pr diff <pr>`) before you check it out or commit it. Do not skip or
+  weaken the hooks to get around this.
 - Before a merge, `sh -p scripts/ci-mac-gate.sh verify <pr>` must exit 0. It needs
   a green `ci-local / macOS` status whose record matches the PR's current merge
   commit, base tip and base branch.

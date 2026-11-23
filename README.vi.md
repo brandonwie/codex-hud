@@ -332,7 +332,7 @@ codex-hud/
 
 Hoan nghênh các issue và pull request. Xem [CONTRIBUTING.md](CONTRIBUTING.md) để biết quy trình đóng góp và tài liệu tham khảo đầy đủ về các script bảo trì.
 
-Dành cho người bảo trì: checkout, commit hoặc cài đặt mã của người khác có thể chạy mã dưới tài khoản của bạn thông qua các Git hook hoặc script npm của repo này. Hãy xem xét thay đổi được nhập vào qua diff của nó (`gh pr diff <pr>`) trước khi checkout, và đừng bỏ qua các hook. CI chỉ chạy trên Linux; các bước kiểm tra macOS chạy trên máy Mac của người bảo trì thông qua `scripts/ci-mac-gate.sh`. Script này từ chối các pull request đến từ fork. Với một pull request từ một nhánh của repo này, script chỉ chạy các commit không có chữ ký đã xác minh của một người bảo trì đã đăng ký (ví dụ commit từ fork được sao chép sang nhánh) sau khi người bảo trì đã xem xét diff và tin cậy đúng head đó (`--trust-head`), và chỉ chạy một pull request nhắm vào nhánh khác `main` sau khi người bảo trì đã xem xét toàn bộ ứng viên merge (`--trust-candidate`). Xem CONTRIBUTING.md.
+Dành cho người bảo trì: checkout, commit hoặc cài đặt mã của người khác có thể chạy mã dưới tài khoản của bạn thông qua các Git hook hoặc script npm của repo này. Hãy xem xét thay đổi được nhập vào qua diff của nó (`gh pr diff <pr>`) trước khi checkout, và đừng bỏ qua các hook. CI chỉ chạy trên Linux; các bước kiểm tra macOS chạy trên máy Mac của người bảo trì thông qua `scripts/ci-mac-gate.sh`. Script này từ chối các pull request đến từ fork. Một pull request có commit không qua được bước kiểm tra nguồn gốc, hoặc nhắm vào nhánh khác `main`, chỉ được chạy sau khi người bảo trì đã xem xét nó và truyền một cờ tin cậy chỉ đúng các commit đó. Quy tắc nằm trong CONTRIBUTING.md.
 
 ## Giấy phép
 
