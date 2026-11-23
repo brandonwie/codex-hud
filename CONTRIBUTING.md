@@ -108,8 +108,9 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     verified signature from a committer listed in
     `scripts/ci-mac-gate-maintainers.txt` (or GitHub's `web-flow` with a listed
     author). Fork commits pushed onto a branch unchanged keep their author,
-    committer and signature, so this same check applies to them. After
-    reviewing such a PR's diff, run
+    committer and signature, so this same check applies to them. When the gate
+    refuses a PR into `main` and lists commits outside this rule, review the
+    PR's diff without checking it out (`gh pr diff <pr>`), then run
     `sh -p scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>`; the flag covers
     that exact head only.
   - Target branch: the merge commit also holds the target branch's contents,
