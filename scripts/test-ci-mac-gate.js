@@ -1198,42 +1198,41 @@ const cases = [
   }],
   ["an inherited NODE_OPTIONS cannot reach the deadline runner's output", () => {
     // node prints a bad --require path in its error; the gate unsets
-    // NODE_OPTIONS before it starts run-with-deadline.js (macOS only).
+    // NODE_OPTIONS before it starts run-with-deadline.js. The fake uname
+    // reports macOS, so the launcher runs on every platform.
     const marker = "SYNTHETIC-NODE-OPTIONS-0f3a";
     const control = spawnSync(process.execPath, ["-p", "1"], { encoding: "utf8", env: { ...process.env, NODE_OPTIONS: `--require /nonexistent/${marker}` } });
     assert.ok(control.status !== 0 && control.stderr.includes(marker), "control: node ignored NODE_OPTIONS");
     const result = runGate(["56"], {
       NODE_OPTIONS: `--require /nonexistent/${marker}`,
       FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2`,
-    });
-    fails(result);
-    if (process.platform === "darwin") {
-      assert.match(result.stdout, /under a 360-minute deadline/);
-      assert.match(result.stderr, /comes from someone\/fork/);
-    }
+    }, { pathPrefix: fetchHarness().prefix });
+    fails(result, /comes from someone\/fork/);
+    assert.match(result.stdout, /under a 360-minute deadline/);
     assert.ok(!(result.stdout + result.stderr).includes(marker), "NODE_OPTIONS reached the gate output");
   }],
   ["an inherited NODE_DEBUG cannot print the gate's environment", () => {
     // NODE_DEBUG=child_process makes node print each child's environment; the
     // gate unsets every NODE_* variable before it starts run-with-deadline.js.
+    // node cuts the dump after about 100 variables, so the control runs with
+    // only PATH and the markers. The gate run is checked for any dump line, and
+    // the fake uname reports macOS, so the launcher runs on every platform.
     const tokenMarker = "SYNTHETIC-GH-TOKEN-4d7e";
     const configMarker = "SYNTHETIC-GIT-CONFIG-4d7e";
     const secrets = { GH_TOKEN: tokenMarker, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "user.name", GIT_CONFIG_VALUE_0: configMarker };
     const leaks = (r) => [tokenMarker, configMarker].filter((m) => (r.stdout + r.stderr).includes(m));
     const deadline = path.join(repoRoot, "scripts", "run-with-deadline.js");
-    const control = spawnSync(process.execPath, [deadline, "60", "true"], { encoding: "utf8", env: { ...baseEnv(), ...secrets, NODE_DEBUG: "child_process" } });
+    const control = spawnSync(process.execPath, [deadline, "60", "true"], { encoding: "utf8", env: { PATH: process.env.PATH, ...secrets, NODE_DEBUG: "child_process" } });
+    assert.match(control.stderr, /CHILD_PROCESS/, "control: NODE_DEBUG printed nothing");
     assert.deepStrictEqual(leaks(control), [tokenMarker, configMarker], "control: NODE_DEBUG did not print the environment");
     const result = runGate(["56"], {
       ...secrets,
       NODE_DEBUG: "child_process",
       NODE_DEBUG_NATIVE: "child_process",
       FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2`,
-    });
-    fails(result);
-    if (process.platform === "darwin") {
-      assert.match(result.stdout, /under a 360-minute deadline/);
-      assert.match(result.stderr, /comes from someone\/fork/);
-    }
+    }, { pathPrefix: fetchHarness().prefix });
+    fails(result, /comes from someone\/fork/);
+    assert.match(result.stdout, /under a 360-minute deadline/);
     assert.deepStrictEqual(leaks(result), [], "NODE_DEBUG printed the gate's environment");
     assert.doesNotMatch(result.stdout + result.stderr, /CHILD_PROCESS/);
   }],
