@@ -28,17 +28,26 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
   and for a manual run (`.github/workflows/ci.yml`). No workflow uses a
   GitHub-hosted macOS runner.
 - The macOS leg runs only on a Mac:
-  - Merge gate: after the push, `sh scripts/ci-mac-gate.sh <pr>` checks
+  - Merge gate: after the push, `sh -p scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
     (`npm ci`, then the script). It requires the Node major that `ci.yml` uses
     and the current Rust stable with rustfmt and clippy. The whole run, from
     the first GitHub read to the final status, gets the old hosted job's
-    deadline, 360 minutes; a timeout posts failure. It posts the commit status
+    deadline, 360 minutes. A timeout after the trust checks (below) posts
+    failure; a timeout before them, while the gate still reads GitHub, posts
+    nothing, and the gate needs a rerun. It posts the commit status
     `ci-local / macOS` on the PR head: pending while it runs, then success or
     failure with the record `merge <sha> base <sha> ref <base-branch>` (a base
     branch name too long for GitHub's 140-character description is stored as a
     fixed-length `refid`), or error when the base, the target branch or the
     merge commit changed during the run.
+  - Start it with `sh -p`: macOS `/bin/sh` is bash, which without `-p` reads
+    `SHELLOPTS`, `BASH_ENV` and exported functions from the environment
+    before the gate's first line, so an inherited `SHELLOPTS=xtrace` would
+    trace that line with `PS4` expanded. Under bash the gate refuses to start
+    without `-p`, starts its worker with `-p`, and unsets `BASH_ENV`, `ENV`
+    and `PS4` before it starts any other program (version-manager shims such
+    as asdf's are bash scripts).
   - Trust: the gate runs the PR's code with your account's access (files,
     credentials, Keychain, SSH agent, the status token). It works only on
     `brandonwie/codex-hud` on github.com: every GitHub call names that
@@ -94,7 +103,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     `scripts/ci-mac-gate-maintainers.txt` (or GitHub's `web-flow` with a listed
     author). Fork code copied onto a branch keeps its commits and is refused
     too. After reviewing such a PR's diff, run
-    `sh scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>`; the flag covers
+    `sh -p scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>`; the flag covers
     that exact head only.
   - Target branch: the merge commit also holds the target branch's contents,
     and the gate trusts only the repository's default branch (`main`). For a
@@ -102,7 +111,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     whole merge candidate without checking it out: the target against `main`
     (`gh api repos/{owner}/{repo}/compare/main...<base-sha>`) and the pull
     request's diff (`gh pr diff <pr>`). Then run
-    `sh scripts/ci-mac-gate.sh --trust-candidate <head-sha> <base-sha> <pr>`;
+    `sh -p scripts/ci-mac-gate.sh --trust-candidate <head-sha> <base-sha> <pr>`;
     the flag covers that exact head and target tip only, and also covers
     provenance.
   - Fork pull requests get the Linux CI job only, and their macOS leg stays
@@ -114,7 +123,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
   and so does `npm install`. Review an
   imported change by its diff (`gh pr diff <pr>`) before you check it out or
   commit it. Do not skip or weaken the hooks to get around this.
-- Before a merge, `sh scripts/ci-mac-gate.sh verify <pr>` must exit 0. It needs
+- Before a merge, `sh -p scripts/ci-mac-gate.sh verify <pr>` must exit 0. It needs
   a green `ci-local / macOS` status whose record matches the PR's current merge
   commit, base tip and base branch.
 
@@ -125,7 +134,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 | `npm test` | Build `codex-hud` and run config, installer, version, Mac gate, golden, README, and site checks. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
 | `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
-| `sh scripts/ci-mac-gate.sh [verify \| --trust-head <sha> \| --trust-candidate <head> <base>] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |
+| `sh -p scripts/ci-mac-gate.sh [verify \| --trust-head <sha> \| --trust-candidate <head> <base>] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |
 | `npm run check:i18n` | Check localized README heading and code-block skeletons against `README.md`. |
 | `npm run hud` | Run the built Rust HUD renderer directly. |
 | `npm run build:rust` | Build the release Rust renderer. |

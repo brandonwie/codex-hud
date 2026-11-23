@@ -28,6 +28,7 @@ fs.writeFileSync(
   path.join(bin, "gh"),
   `#!/bin/sh
 echo "$*" >> "$FAKE_GH_CALLS"
+all="$*"
 env | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "$FAKE_GH_CALLS"
 if [ -n "\${GH_REPO:-}\${GH_HOST:-}" ]; then echo "fake gh: GH_REPO or GH_HOST reached gh" >&2; exit 1; fi
 case "$*" in
@@ -37,8 +38,13 @@ esac
 case "$*" in
   *"/statuses"*) printf '%s\\n' "$FAKE_STATUS" ;;
   *"/pulls/"*"/commits"*) printf '%s\\n' "$FAKE_COMMITS" ;;
-  *"/git/ref/heads/main "*) printf '%s\\n' "$FAKE_BASE" ;;
-  *"/git/ref/heads/"*) printf '%s\\n' "$FAKE_OTHER_BASE" ;;
+  *"/git/ref/heads/"*)
+    # Like a URL: the path ends at # or ?, then %XX is decoded. It prints the
+    # ref and its SHA (FAKE_REF_NAME answers with another ref).
+    ref=\${all#*/git/ref/heads/}; ref=\${ref%% *}; ref=\${ref%%#*}; ref=\${ref%%\\?*}
+    case $ref in *%*) ref=$(node -e 'process.stdout.write(decodeURIComponent(process.argv[1]))' "$ref") ;; esac
+    if [ "$ref" = main ]; then sha=$FAKE_BASE; else sha=$FAKE_OTHER_BASE; fi
+    printf 'refs/heads/%s %s\\n' "\${FAKE_REF_NAME:-$ref}" "$sha" ;;
   *"/pulls/"*) printf '%s\\n' "$FAKE_PR" ;;
   *) echo "fake gh: unexpected call: $*" >&2; exit 1 ;;
 esac
@@ -60,6 +66,8 @@ const trustedUrl = "https://github.com/brandonwie/codex-hud.git";
 // a URL rewrite holding a token) can neither change the tests nor reach their
 // output. Fixture git failures report the command and exit code, never stderr.
 const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+// The gate needs -p under bash (macOS /bin/sh); dash has no -p.
+const shellP = spawnSync("sh", ["-p", "-c", ":"]).status === 0 ? ["-p"] : [];
 const isolatedGitConfig = path.join(root, "isolated.gitconfig");
 fs.writeFileSync(isolatedGitConfig, "");
 // Attributes too: an empty XDG_CONFIG_HOME (no default git/attributes) and no
@@ -96,9 +104,9 @@ const status = (state, m = merge, b = base, ref = "main") => `${state} merge ${m
 const commitLines = (...rows) => rows.map((row) => row.join(" ")).join("\n");
 const trustedCommits = commitLines([firstCommit, "true", "brandonwie", "brandonwie"], [head, "true", "brandonwie", "brandonwie"]);
 
-function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [], cwd } = {}) {
+function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [], cwd, privileged = true } = {}) {
   fs.rmSync(calls, { force: true });
-  const result = spawnSync("sh", [...shellArgs, gatePath, ...args], {
+  const result = spawnSync("sh", [...(privileged ? shellP : []), ...shellArgs, gatePath, ...args], {
     cwd,
     env: {
       ...baseEnv(),
@@ -1236,6 +1244,67 @@ const cases = [
     assert.deepStrictEqual(leaks(result), [], "NODE_DEBUG printed the gate's environment");
     assert.doesNotMatch(result.stdout + result.stderr, /CHILD_PROCESS/);
   }],
+  ["an inherited BASH_ENV cannot turn Node tracing back on through a version-manager shim", () => {
+    // asdf's node is a bash script, and bash runs the BASH_ENV file first: it
+    // can export NODE_DEBUG again after the gate cleared it.
+    const marker = "SYNTHETIC-BASH-ENV-2a9f";
+    const shims = path.join(root, "bash-shims");
+    fs.mkdirSync(shims, { recursive: true });
+    fs.writeFileSync(path.join(shims, "node"), `#!/usr/bin/env bash\nexec "${process.execPath}" "$@"\n`, { mode: 0o755 });
+    const startup = path.join(root, "bash-env.sh");
+    fs.writeFileSync(startup, "export NODE_DEBUG=child_process\n");
+    const spawnTrue = ["-e", 'require("child_process").spawnSync("true")'];
+    const control = spawnSync(path.join(shims, "node"), spawnTrue, { encoding: "utf8", env: { PATH: process.env.PATH, BASH_ENV: startup, GH_TOKEN: marker } });
+    assert.ok(/CHILD_PROCESS/.test(control.stderr) && control.stderr.includes(marker), "control: the shim ignored BASH_ENV");
+    const result = runGate(["56"], {
+      BASH_ENV: startup,
+      GH_TOKEN: marker,
+      FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2`,
+    }, { pathPrefix: `${shims}${path.delimiter}${fetchHarness().prefix}` });
+    fails(result, /comes from someone\/fork/);
+    assert.match(result.stdout, /under a 360-minute deadline/);
+    assert.doesNotMatch(result.stdout + result.stderr, /CHILD_PROCESS/);
+    assert.ok(!(result.stdout + result.stderr).includes(marker), "BASH_ENV printed the gate's environment");
+  }],
+  ["an inherited SHELLOPTS cannot trace the gate's first lines", () => {
+    // bash without -p turns on xtrace from SHELLOPTS before the first line runs
+    // and prints PS4, expanded, on every traced line; under bash the gate needs
+    // -p. dash has no SHELLOPTS.
+    const marker = "SYNTHETIC-PS4-7c1e";
+    const traced = { SHELLOPTS: "xtrace", PS4: "+${PS4_MARKER} ", PS4_MARKER: marker };
+    const fork = { ...traced, FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2` };
+    const options = { pathPrefix: fetchHarness().prefix };
+    const output = (r) => r.stdout + r.stderr;
+    if (shellP.length) {
+      // Control: without -p the first line is traced, and the gate refuses.
+      const control = runGate(["56"], fork, { ...options, privileged: false });
+      assert.ok(output(control).includes(marker), "control: bash ignored SHELLOPTS");
+      fails(control, /^ci-mac-gate: start the gate with sh -p /m);
+      assert.doesNotMatch(control.stdout, /deadline/);
+      fails(runGate(["verify", "56"], { FAKE_STATUS: status("success") }, { privileged: false }), /start the gate with sh -p/);
+    }
+    const result = runGate(["56"], fork, options);
+    fails(result, /comes from someone\/fork/);
+    assert.match(result.stdout, /under a 360-minute deadline/);
+    assert.ok(!output(result).includes(marker), "a traced line reached the gate output");
+    const verify = runGate(["verify", "56"], { ...traced, FAKE_STATUS: status("success") }, options);
+    assert.strictEqual(verify.status, 0, "verify failed with SHELLOPTS set");
+    assert.ok(!output(verify).includes(marker), "a traced line reached the verify output");
+  }],
+  ["a base branch name is percent-encoded, and the ref GitHub returns must match", () => {
+    // A # would end the API path: GitHub would answer for main, not main#x.
+    const pr = (ref) => ({ FAKE_PR: `${head} ${ref} ${repo} ${repo} ${merge} 2 main`, FAKE_STATUS: status("success", merge, otherBase, ref) });
+    const hash = runGate(["verify", "56"], pr("main#x"));
+    assert.strictEqual(hash.status, 0, hash.stderr);
+    assert.match(hash.ghCalls, /\/git\/ref\/heads\/main%23x /);
+    // Slashes stay path separators; other bytes outside A-Z a-z 0-9 - . _ ~ are encoded.
+    const odd = runGate(["verify", "56"], pr("release/a%b-\u00fc"));
+    assert.strictEqual(odd.status, 0, odd.stderr);
+    assert.match(odd.ghCalls, /\/git\/ref\/heads\/release\/a%25b-%C3%BC /);
+    // An answer for another ref is refused.
+    fails(runGate(["verify", "56"], { ...pr("main#x"), FAKE_REF_NAME: "main" }), /cannot read PR 56/);
+    fails(runGate(["verify", "56"], { FAKE_STATUS: status("success"), FAKE_REF_NAME: "main2" }), /cannot read PR 56/);
+  }],
   ["verify matches a long base branch by its fixed-length ID", () => {
     const longRef = `release/${"x".repeat(60)}`;
     const otherLongRef = `release/${"y".repeat(60)}`;
@@ -1323,8 +1392,10 @@ const cases = [
     // One deadline around the whole run: the gate restarts itself under it
     // before its first GitHub read.
     const wrap = script.indexOf(
-      'node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" __worker "$run_dir" "$trust_head" "$trust_base" "$pr"',
+      'node scripts/run-with-deadline.js "$deadline_seconds" sh "$@" "$self" __worker "$run_dir" "$trust_head" "$trust_base" "$pr"',
     );
+    // "$@" is -p when the public shell has it, and nothing else.
+    assert.match(script, /\n {2}set --\n {2}case \$- in\n {4}\*p\*\) set -- -p ;;\n {2}esac\n {2}node scripts\/run-with-deadline\.js "\$deadline_seconds" sh "\$@" /);
     assert.ok(wrap > 0, "the run is not wrapped in the deadline");
     assert.ok(wrap < script.indexOf("read_candidate || die"), "the deadline starts after the first GitHub read");
     const init = script.indexOf("init -q --template=");

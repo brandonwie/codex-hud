@@ -2,19 +2,26 @@
 # macOS gate for a pull request. GitHub CI runs the Linux leg; this script runs
 # the same checks on a Mac and records the result on the pull request.
 #
-#   sh scripts/ci-mac-gate.sh <pr>         check the PR on this Mac, post the status
-#   sh scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>
+#   sh -p scripts/ci-mac-gate.sh <pr>      check the PR on this Mac, post the status
+#   sh -p scripts/ci-mac-gate.sh --trust-head <head-sha> <pr>
 #                                          same, for a PR whose commits fail the
 #                                          provenance check, after you reviewed
 #                                          its diff at exactly <head-sha>
-#   sh scripts/ci-mac-gate.sh --trust-candidate <head-sha> <base-sha> <pr>
+#   sh -p scripts/ci-mac-gate.sh --trust-candidate <head-sha> <base-sha> <pr>
 #                                          same, for a PR that targets another
 #                                          branch than the default one, after you
 #                                          reviewed the whole merge candidate:
 #                                          the target at <base-sha> and the PR
 #                                          at <head-sha>
-#   sh scripts/ci-mac-gate.sh verify <pr>  exit 0 only when the PR's current merge
+#   sh -p scripts/ci-mac-gate.sh verify <pr>
+#                                          exit 0 only when the PR's current merge
 #                                          candidate has a green macOS result
+#
+# Start it with sh -p. macOS /bin/sh is bash, and without -p bash reads
+# SHELLOPTS, BASH_ENV and exported functions from the environment before the
+# first line runs: an inherited SHELLOPTS=xtrace traces that line with PS4
+# expanded, and PS4 can name any variable. Under bash the gate refuses to start
+# without -p (dash has no -p and reads none of these).
 #
 # This gate is the only macOS check: no workflow uses a GitHub-hosted macOS
 # runner (Brandon, 2026-11-22).
@@ -47,13 +54,39 @@
 # stable with rustfmt and clippy, `npm ci`, then scripts/ci-local.sh, at nice 10.
 # The whole run, from the first GitHub read to the final status, has the old
 # hosted job's deadline (GitHub's default 360 minutes): the public command
-# always restarts itself as an internal worker under that deadline, and a
-# timeout posts failure. It posts pending while it runs, then success or failure
+# always restarts itself as an internal worker under that deadline. A timeout
+# after the trust checks posts failure on the PR head; a timeout before them
+# (while the gate still reads GitHub) posts nothing, as the gate has not yet
+# chosen a head to post on. It posts pending while it runs, then success or failure
 # with a record of the candidate. If the candidate changed during the run (new
 # head, retarget, base moved), it posts error or nothing, so the run must
 # repeat. verify compares the record with the PR's current one.
 set +xv
 set -u
+case $- in
+  *p*) ;;
+  *)
+    if [ -n "${BASH_VERSION:-}" ] && [ "${1:-}" != __worker ]; then
+      echo "ci-mac-gate: start the gate with sh -p (sh -p scripts/ci-mac-gate.sh ...): without -p, bash reads SHELLOPTS, BASH_ENV and exported functions from the environment" >&2
+      exit 1
+    fi
+    ;;
+esac
+# Shell startup settings for the shells this gate starts (the worker, version
+# manager shims such as asdf's, which are bash scripts): BASH_ENV and ENV name a
+# file the shell runs first (it can export NODE_DEBUG again), and PS4 is
+# expanded on every traced line.
+unset BASH_ENV ENV PS4
+# SHELLOPTS and BASHOPTS: bash children read them at startup. Bash keeps them
+# read-only; under -p it ignores the inherited values but still exports its own
+# options (set -u, -p) to its children, so it stops exporting them. Another
+# shell keeps them as plain variables.
+if [ -n "${BASH_VERSION:-}" ]; then
+  # shellcheck disable=SC3045 # bash only
+  export -n SHELLOPTS BASHOPTS
+else
+  unset SHELLOPTS BASHOPTS
+fi
 # Credential safety. Git config and the origin can hold a user name and token
 # (an origin URL, a rewritten fetch URL, a url.<base>.insteadOf key), so no
 # output path may carry them:
@@ -135,7 +168,7 @@ full_sha() {
 unset GH_REPO GH_HOST
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
   GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX GIT_NAMESPACE
-# CDPATH would let a relative cd below (sh scripts/ci-mac-gate.sh) enter another
+# CDPATH would let a relative cd below (sh -p scripts/ci-mac-gate.sh) enter another
 # checkout that has a scripts/ directory.
 unset CDPATH
 
@@ -143,7 +176,7 @@ cd "$(dirname "$0")/.." || exit 1
 self="$(pwd)/scripts/ci-mac-gate.sh"
 isolated="$(pwd)/scripts/run-isolated.sh"
 
-usage="usage: sh scripts/ci-mac-gate.sh [verify | --trust-head <head-sha> | --trust-candidate <head-sha> <base-sha>] <pr-number>"
+usage="usage: sh -p scripts/ci-mac-gate.sh [verify | --trust-head <head-sha> | --trust-candidate <head-sha> <base-sha>] <pr-number>"
 mode=run
 trust_head=
 trust_base=
@@ -190,7 +223,12 @@ if [ "$mode" = run ]; then
   [ "$(uname -s)" = Darwin ] || die "run this on macOS; GitHub CI runs the Linux leg"
   run_dir=$(mktemp -d) || die "mktemp failed"
   echo "ci-mac-gate: running PR $pr under a $((deadline_seconds / 60))-minute deadline"
-  node scripts/run-with-deadline.js "$deadline_seconds" sh "$self" __worker "$run_dir" "$trust_head" "$trust_base" "$pr"
+  # The worker's shell gets -p too, so it reads no exported functions.
+  set --
+  case $- in
+    *p*) set -- -p ;;
+  esac
+  node scripts/run-with-deadline.js "$deadline_seconds" sh "$@" "$self" __worker "$run_dir" "$trust_head" "$trust_base" "$pr"
   rc=$?
   if [ "$rc" -eq 124 ] && [ -s "$run_dir/head" ]; then
     timed_head=$(cat "$run_dir/head")
@@ -214,6 +252,23 @@ post() {
     -f state="$1" -f context="$context" -f description="$2" >/dev/null
 }
 
+# Percent-encodes a branch name for an API path. It keeps / and the unreserved
+# characters (A-Z a-z 0-9 - . _ ~); a # or ? would otherwise end the path, and
+# GitHub would answer for another branch (main#x reads main).
+url_path() {
+  printf '%s' "$1" | od -An -v -tx1 | awk '
+    BEGIN { hex = "0123456789abcdef" }
+    {
+      for (i = 1; i <= NF; i++) {
+        h = $i
+        if (h ~ /^(2[def]|3[0-9]|4[1-9a-f]|5[0-9af]|6[1-9a-f]|7[0-9ae])$/)
+          printf "%c", (index(hex, substr(h, 1, 1)) - 1) * 16 + index(hex, substr(h, 2, 1)) - 1
+        else
+          printf "%%%s", toupper(h)
+      }
+    }'
+}
+
 # Sets head, base_name, head_repo, base_repo, merge (GitHub's current merge
 # commit for the PR), commit_count, default_branch (the repository's) and base
 # (the current tip of the PR's current base branch).
@@ -224,7 +279,12 @@ read_candidate() {
   read -r head base_name head_repo base_repo merge commit_count default_branch <<EOF
 $pr_line
 EOF
-  base=$(ghapi "repos/$trusted_repo/git/ref/heads/$base_name" --jq .object.sha)
+  base_line=$(ghapi "repos/$trusted_repo/git/ref/heads/$(url_path "$base_name")" --jq '"\(.ref) \(.object.sha)"') ||
+    return 1
+  read -r base_ref base <<EOF
+$base_line
+EOF
+  [ "$base_ref" = "refs/heads/$base_name" ]
 }
 
 # The candidate record: full merge and base SHAs, and the base branch. A branch
@@ -295,8 +355,8 @@ if [ "$mode" = verify ]; then
       echo "ci-mac-gate: PR $pr is green on macOS for merge $(short "$merge") ($base_name $(short "$base"))"
       exit 0
       ;;
-    success*) die "PR $pr: the macOS status is for another merge candidate; run: sh scripts/ci-mac-gate.sh $pr" ;;
-    '' | null*) die "PR $pr head $(short "$head") has no macOS status; run: sh scripts/ci-mac-gate.sh $pr" ;;
+    success*) die "PR $pr: the macOS status is for another merge candidate; run: sh -p scripts/ci-mac-gate.sh $pr" ;;
+    '' | null*) die "PR $pr head $(short "$head") has no macOS status; run: sh -p scripts/ci-mac-gate.sh $pr" ;;
     *) die "PR $pr head $(short "$head") macOS status: $latest" ;;
   esac
 fi
@@ -324,7 +384,7 @@ esac
 if [ "$base_name" != "$default_branch" ]; then
   [ -n "$trust_base" ] ||
     die "PR $pr targets $base_name, not the default branch $default_branch. The merge commit holds the target's contents, and the gate trusts only $default_branch.
-Review the whole merge candidate without checking it out: the target against $default_branch (gh api repos/$trusted_repo/compare/$default_branch...$base) and the PR's diff (gh pr diff $pr --repo $trusted_repo). Then rerun with: sh scripts/ci-mac-gate.sh --trust-candidate $head $base $pr"
+Review the whole merge candidate without checking it out: the target against $default_branch (gh api repos/$trusted_repo/compare/$default_branch...$base) and the PR's diff (gh pr diff $pr --repo $trusted_repo). Then rerun with: sh -p scripts/ci-mac-gate.sh --trust-candidate $head $base $pr"
   echo "ci-mac-gate: --trust-candidate given; running target $base_name at $base, not the default branch"
 fi
 untrusted=$(untrusted_commits) || die "cannot check the provenance of PR $pr"
@@ -332,7 +392,7 @@ if [ -n "$untrusted" ]; then
   [ "$trust_head" = "$head" ] ||
     die "PR $pr has commits outside the maintainer provenance rule (signed and verified, committer in $maintainers_file):
 $untrusted
-Review the PR's diff without checking it out (gh pr diff $pr --repo $trusted_repo), then rerun with: sh scripts/ci-mac-gate.sh --trust-head $head $pr"
+Review the PR's diff without checking it out (gh pr diff $pr --repo $trusted_repo), then rerun with: sh -p scripts/ci-mac-gate.sh --trust-head $head $pr"
   echo "ci-mac-gate: --trust-head $head given; running commits outside the provenance rule:"
   echo "$untrusted"
 fi

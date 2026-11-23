@@ -72,7 +72,7 @@ npm_cache=$HOME/.npm
 jobs=${CARGO_BUILD_JOBS:-}
 # The discovery below runs rustc and node from the inherited PATH; clear the
 # settings that change what they run or print first.
-unset NODE_OPTIONS NODE_DEBUG XDG_CONFIG_HOME RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER RUSTFLAGS RUSTDOCFLAGS RUSTUP_TOOLCHAIN
+unset BASH_ENV ENV NODE_OPTIONS NODE_DEBUG XDG_CONFIG_HOME RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER RUSTFLAGS RUSTDOCFLAGS RUSTUP_TOOLCHAIN
 for var in $(env | sed -n 's/^\(CARGO_[A-Za-z0-9_]*\)=.*/\1/p; s/^\([Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset "$var"
 done
