@@ -4,6 +4,11 @@ Issues and pull requests are welcome.
 
 ## Development workflow
 
+Run `npm ci` in each new clone or Git worktree before the first commit there.
+It installs the Husky hooks: `core.hooksPath` is `.husky/_`, a path inside each
+checkout, and in a checkout without it Git runs no pre-commit hook and gives no
+warning.
+
 After changing HUD output, run `npm test` and the Codex plugin validator. After
 changing the manifest version or cutting a release, refresh the local plugin
 cache for manual testing with `codex plugin add brandonwie@codex-hud`, then start
@@ -37,7 +42,12 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     the first GitHub read to the final status, gets the old hosted job's
     deadline, 360 minutes. A timeout after the trust checks (below) posts
     failure; a timeout before them, while the gate still reads GitHub, posts
-    nothing, and the gate needs a rerun. It posts the commit status
+    nothing, and the gate needs a rerun. The gate's own state and the checkout
+    sit in one temporary directory. The gate removes it when the run ends, also
+    after the deadline stops the worker; if the gate command itself is
+    interrupted or killed, the directory can stay behind. Temporary files that
+    the checks make elsewhere (under `TMPDIR`) are theirs to clean. It posts
+    the commit status
     `ci-local / macOS` on the PR head: pending while it runs, then success or
     failure with the record `merge <sha> base <sha> ref <base-branch>` (a base
     branch name too long for GitHub's 140-character description is stored as a
@@ -47,12 +57,14 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     `SHELLOPTS`, `BASH_ENV` and exported functions from the environment
     before the gate's first line, so an inherited `SHELLOPTS=xtrace` would
     trace that line with `PS4` expanded. Under bash the gate refuses to start
-    without `-p` and starts its worker with `-p`. Before it starts any other
-    program it unsets `BASH_ENV`, `ENV` and `PS4`, stops exporting
-    `SHELLOPTS` and `BASHOPTS`, and restarts itself once without exported
-    bash functions (version-manager shims such as asdf's are bash scripts,
-    and a function named `exec` would run in place of the builtin). dash
-    reads none of these and drops exported functions itself.
+    without `-p` and starts its worker with `-p`. It first reads the
+    environment with `env`, `tr` and `sed` in the C locale and, if it finds
+    exported bash functions, restarts itself once through `env` without them
+    (version-manager shims such as asdf's are bash scripts, and a function
+    named `exec` would run in place of the builtin). Then, before it starts
+    any other program, it unsets `BASH_ENV`, `ENV` and `PS4` and stops
+    exporting `SHELLOPTS` and `BASHOPTS`. dash reads none of these and drops
+    exported functions itself.
   - Trust: the gate runs the PR's code with your account's access (files,
     credentials, Keychain, SSH agent, the status token). It works only on
     `brandonwie/codex-hud` on github.com: every GitHub call names that
@@ -139,7 +151,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 
 | Command | Purpose |
 | ------- | ------- |
-| `npm test` | Build `codex-hud` and run config, installer, version, Mac gate, golden, README, and site checks. |
+| `npm test` | Build `codex-hud` and run config, installer, version, Mac gate, golden, README, and site checks. Needs Rust with rustfmt and Clippy: some Mac gate cases run them offline on a one-file crate. |
 | `npm run test:rust` | Build `codex-hud` and run Rust golden, parsing, and CLI tests. |
 | `sh scripts/ci-local.sh` | Run every CI check (Rust format, clippy, `npm test`, `npm run test:rust`) and list each failure. |
 | `sh -p scripts/ci-mac-gate.sh [verify \| --trust-head <sha> \| --trust-candidate <head> <base>] <pr>` | Check a pull request's merge commit on macOS and post the `ci-local / macOS` status, or verify that status before a merge. |

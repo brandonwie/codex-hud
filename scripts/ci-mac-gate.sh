@@ -356,10 +356,13 @@ EOF
 # The candidate record: full merge and base SHAs, and the base branch. A branch
 # name that would push the record past GitHub's 140-character description limit
 # is stored as "refid" + the first 24 hex digits of its Git blob hash instead.
+# The hash reads no Git config, repository or GIT_* variable of the caller.
 candidate_record() {
   record="merge $merge base $base ref $base_name"
   if [ ${#record} -gt 140 ]; then
-    ref_id=$(printf '%s' "$base_name" | git hash-object --stdin 2>/dev/null) || return 1
+    ref_id=$(printf '%s' "$base_name" |
+      env -i PATH="$PATH" HOME=/nonexistent XDG_CONFIG_HOME=/nonexistent GIT_CONFIG_NOSYSTEM=1 \
+        GIT_CONFIG_GLOBAL=/dev/null GIT_DIR=/nonexistent git hash-object --stdin 2>/dev/null) || return 1
     record="merge $merge base $base refid $(printf '%.24s' "$ref_id")"
   fi
 }
@@ -475,7 +478,9 @@ fi
 printf '%s\n' "$head" >"$run_dir/head" || die "cannot write the run state"
 candidate="$head $base_name $base $merge"
 
-tmp=$(mktemp -d) || die "mktemp failed"
+# Inside the launcher's run directory: a worker killed with SIGKILL at the
+# deadline runs no trap, and the launcher's cleanup still removes the checkout.
+tmp=$(mktemp -d "$run_dir/work.XXXXXX") || die "mktemp failed"
 trap 'rm -rf "$tmp"' EXIT
 trap 'exit 130' INT TERM
 src="$tmp/src"

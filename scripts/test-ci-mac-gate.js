@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 
 // Runs scripts/ci-mac-gate.sh with a fake `gh` on PATH, so the verify mode and
-// the fork rules are checked without GitHub and without running any checks. The
-// gate runs from fixture clones whose origin each test controls.
+// the fork rules are checked without GitHub. The gate runs from fixture clones
+// whose origin each test controls and never reaches the pull request's checks.
+// The scripts/run-isolated.sh cases need a Rust toolchain with rustfmt and
+// Clippy: they run the real cargo, rustfmt and Clippy offline, on a one-file
+// crate with no dependencies, with Cargo capped at 2 build jobs.
 
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -67,6 +71,7 @@ const trustedUrl = "https://github.com/brandonwie/codex-hud.git";
 // a URL rewrite holding a token) can neither change the tests nor reach their
 // output. Fixture git failures report the command and exit code, never stderr.
 const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+const realMktemp = spawnSync("sh", ["-c", "command -v mktemp"], { encoding: "utf8" }).stdout.trim();
 // The gate needs -p under bash (macOS /bin/sh). Some dash builds take -p too
 // (Ubuntu's), others refuse it (macOS's); dash reads no SHELLOPTS either way.
 const shellP = spawnSync("sh", ["-p", "-c", ":"]).status === 0 ? ["-p"] : [];
@@ -298,17 +303,29 @@ function refusedBeforeCheckout(result, pattern) {
 function fetchHarness() {
   const fake = path.join(root, "fetch-bin");
   const gitCalls = path.join(root, "git-calls");
-  const runDir = path.join(root, "fetch-run");
+  // The checkout sits inside runDir, so its name must not hold "fetch" or
+  // "checkout": several cases check the git call log for those words.
+  const runDir = path.join(root, "gate-run");
   fs.rmSync(gitCalls, { force: true });
   fs.mkdirSync(runDir, { recursive: true });
   if (!fs.existsSync(fake)) {
     fs.mkdirSync(fake);
     fs.writeFileSync(path.join(fake, "uname"), `#!/bin/sh\n[ "$1" = -s ] && { echo Darwin; exit 0; }\nexec /usr/bin/uname "$@"\n`, { mode: 0o755 });
     // No network: the fake curl records the proxy variable names it sees and
-    // fails as if the host were unreachable (curl exit 7).
+    // fails as if the host were unreachable (curl exit 7). With
+    // FAKE_CURL_KILL_PARENT it first sends SIGKILL to the gate worker that
+    // started it, as the deadline runner's last step does.
     fs.writeFileSync(
       path.join(fake, "curl"),
-      `#!/bin/sh\necho "curl $*" >> "\${FAKE_CURL_CALLS:-/dev/null}"\nenv | LC_ALL=C sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "\${FAKE_CURL_CALLS:-/dev/null}"\nexit 7\n`,
+      `#!/bin/sh\necho "curl $*" >> "\${FAKE_CURL_CALLS:-/dev/null}"\nenv | LC_ALL=C sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "\${FAKE_CURL_CALLS:-/dev/null}"\n[ -z "\${FAKE_CURL_KILL_PARENT:-}" ] || kill -KILL "$PPID"\nexit 7\n`,
+      { mode: 0o755 },
+    );
+    // macOS mktemp -d without a template ignores TMPDIR. With
+    // FAKE_MKTEMP_PARENT, the fake mktemp makes such a directory there instead;
+    // it passes every other call to the real mktemp.
+    fs.writeFileSync(
+      path.join(fake, "mktemp"),
+      `#!/bin/sh\nif [ -n "\${FAKE_MKTEMP_PARENT:-}" ] && [ "$*" = -d ]; then exec "${realMktemp}" -d "$FAKE_MKTEMP_PARENT/tmp.XXXXXX"; fi\nexec "${realMktemp}" "$@"\n`,
       { mode: 0o755 },
     );
     // The fake sleep records its argument and returns at once.
@@ -861,10 +878,11 @@ const cases = [
     const run = runWorker("", envKey);
     refusedBeforeCheckout(run, /cannot read this clone's origin \(remote\.origin\.url\)/);
     noOutput(run, "run, invalid key");
-    // verify reaches git only for a long base branch (its refid).
+    // verify reaches git only for a long base branch (its refid), and that hash
+    // reads no inherited Git config: the invalid key cannot stop it.
     const longRef = `release/${"x".repeat(60)}`;
     const verify = runGate(["verify", "56"], { ...envKey, FAKE_PR: `${head} ${longRef} ${repo} ${repo} ${merge}`, FAKE_OTHER_BASE: base });
-    fails(verify, /cannot build the candidate record/);
+    fails(verify, /has no macOS status/);
     noOutput(verify, "verify, invalid key");
     // 2. A valueless insteadOf key in the global config.
     const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
@@ -1232,6 +1250,39 @@ const cases = [
     fails(runGate(["__worker", runDir, "56"], {}), /usage/);
     fails(runGate(["__worker", runDir, "", "56"], {}), /usage/);
   }],
+  ["a worker killed after checkout leaves no checkout on disk", () => {
+    // SIGKILL skips the worker's exit trap. The fake curl kills the worker at
+    // the Rust channel step, after the checkout; the launcher's cleanup of its
+    // run directory must still remove the checkout. The fake uname reports
+    // macOS, so the launcher runs on every platform. Every directory the gate
+    // makes with mktemp -d lands in a parent this case owns.
+    const { prefix, gitCalls, fixture, fetchConfig } = fetchHarness();
+    const parent = fs.mkdtempSync(path.join(root, "killed-tmp-"));
+    const curlCalls = path.join(root, "killed-curl-calls");
+    fs.rmSync(gitCalls, { force: true });
+    const result = runGate(["56"], {
+      FAKE_MKTEMP_PARENT: parent,
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      FAKE_ALLOW_CHECKOUT: "1",
+      FAKE_CURL_CALLS: curlCalls,
+      FAKE_CURL_KILL_PARENT: "1",
+      FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
+      FAKE_BASE: fixture.base,
+      FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
+      ...fetchConfig(),
+    }, { pathPrefix: prefix });
+    try {
+      assert.strictEqual(result.status, 137, result.stdout + result.stderr);
+      const checkouts = fs.readFileSync(gitCalls, "utf8").split("\n").filter((line) => /\bcheckout -q --detach /.test(line));
+      assert.strictEqual(checkouts.length, 1, "the worker did not check out once");
+      assert.ok(checkouts[0].startsWith(`-C ${parent}${path.sep}`), "the checkout is not in the owned parent");
+      assert.match(fs.readFileSync(curlCalls, "utf8"), /^curl /m, "the worker did not reach the Rust channel step");
+      assert.deepStrictEqual(fs.readdirSync(parent), [], "the killed worker left files behind");
+    } finally {
+      fs.rmSync(parent, { recursive: true, force: true });
+    }
+  }],
   ["an inherited NODE_OPTIONS cannot reach the deadline runner's output", () => {
     // node prints a bad --require path in its error; the gate unsets
     // NODE_OPTIONS before it starts run-with-deadline.js. The fake uname
@@ -1490,14 +1541,26 @@ const cases = [
   ["verify matches a long base branch by its fixed-length ID", () => {
     const longRef = `release/${"x".repeat(60)}`;
     const otherLongRef = `release/${"y".repeat(60)}`;
-    const refId = (name) =>
-      spawnSync(realGit, ["hash-object", "--stdin"], { input: name, encoding: "utf8", env: baseEnv() }).stdout.trim().slice(0, 24);
+    // The SHA-1 Git blob ID, computed here without git: sha1("blob <len>\0" + name).
+    const refId = (name) => {
+      const bytes = Buffer.from(name, "utf8");
+      return crypto.createHash("sha1").update(Buffer.concat([Buffer.from(`blob ${bytes.length}\0`), bytes])).digest("hex").slice(0, 24);
+    };
+    // Known value: `printf '%s' 'release/a-very-long-branch-ü' | git hash-object --stdin` in a SHA-1 repository.
+    assert.strictEqual(refId("release/a-very-long-branch-ü"), "6dbf22dd13abd1cace1ec4ff");
     const record = `success merge ${merge} base ${base} refid ${refId(longRef)}`;
     const pr = (ref) => ({ FAKE_PR: `${head} ${ref} ${repo} ${repo} ${merge}`, FAKE_OTHER_BASE: base });
     const green = runGate(["verify", "56"], { ...pr(longRef), FAKE_STATUS: record });
     assert.strictEqual(green.status, 0, green.stderr);
     fails(runGate(["verify", "56"], { ...pr(otherLongRef), FAKE_STATUS: record }), /another merge candidate/);
     assert.ok(record.length - "success ".length <= 140);
+    // A malformed global Git config stops plain git, but not the gate's hash.
+    const broken = path.join(root, "broken-gitconfig");
+    fs.writeFileSync(broken, "[core\n\tbroken\n");
+    const control = spawnSync(realGit, ["hash-object", "--stdin"], { input: longRef, encoding: "utf8", env: { ...baseEnv(), GIT_CONFIG_GLOBAL: broken } });
+    assert.notStrictEqual(control.status, 0, "control: git read past the malformed global config");
+    const poisoned = runGate(["verify", "56"], { ...pr(longRef), FAKE_STATUS: record, GIT_CONFIG_GLOBAL: broken });
+    assert.strictEqual(poisoned.status, 0, poisoned.stderr);
   }],
   ["a PR number that is not a number is a usage error", () => {
     const result = runGate(["verify", "abc"], {});
