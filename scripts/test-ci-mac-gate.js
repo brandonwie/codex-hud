@@ -10,20 +10,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-// A Git hook exports GIT_DIR, GIT_INDEX_FILE, GIT_CONFIG_PARAMETERS and more,
-// and the Husky pre-commit hook runs npm test. A case that inherited them would
-// act on the caller's repository: `git init` with GIT_DIR set marks it bare. So
-// the suite drops every inherited GIT_* variable before its first case; a case
-// that needs one sets it itself.
-for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
-}
-// The hook regression at the end starts this file with this variable set: it
-// prints the GIT_* variables left and stops.
-if (process.env.CI_MAC_GATE_TEST_GIT_ENV_ONLY === "1") {
-  console.log(Object.keys(process.env).filter((key) => key.startsWith("GIT_")).join(" "));
-  process.exit(0);
-}
+require("./drop-git-env")();
 
 const repoRoot = path.resolve(__dirname, "..");
 const gate = path.join(repoRoot, "scripts", "ci-mac-gate.sh");
@@ -1176,7 +1163,7 @@ const cases = [
     try {
       const gatePath = gateClone("clone-include", "git@github.com:brandonwie/codex-hud.git");
       // Control: plain git with that home fails in the clone and prints the token.
-      const plainEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1" };
+      const plainEnv = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))), GIT_CONFIG_NOSYSTEM: "1", XDG_CONFIG_HOME: isolatedXdg };
       const plain = spawnSync(realGit, ["remote", "get-url", "origin"], { cwd: path.dirname(path.dirname(gatePath)), encoding: "utf8", env: plainEnv });
       assert.notStrictEqual(plain.status, 0, "the include did not apply to the clone");
       assert.ok(plain.stderr.includes(marker), "the control did not show the token");
@@ -1634,6 +1621,8 @@ const cases = [
     }
   }],
   ["a Git hook's GIT_* variables cannot reach the caller's repository", () => {
+    // Set only for the probe child below, which must stop before its first case.
+    assert.ok(!process.env.CI_MAC_GATE_TEST_PROBE_CHILD, "the probe child ran the cases instead of stopping before the first one");
     // A disposable caller with a worktree, like the maintainer's checkout.
     const caller = path.join(root, "hook-caller");
     const worktree = path.join(root, "hook-caller-worktree");
@@ -1651,15 +1640,23 @@ const cases = [
     const control = spawnSync(realGit, ["init", "-q", "t"], { cwd: scratch, encoding: "utf8", env: { ...baseEnv(), ...hook } });
     assert.ok(control.status === 0 && bare() === "true", "control: git init with a hook's GIT_DIR left the caller as it was");
     fixtureGit(["-C", caller, "config", "core.bare", "false"]);
-    // This file, started with the hook's variables, drops them before its first case.
-    const child = spawnSync(process.execPath, [__filename], { encoding: "utf8", env: { ...process.env, ...hook, CI_MAC_GATE_TEST_GIT_ENV_ONLY: "1" } });
+    // This file, started with the hook's variables, runs its normal startup and
+    // reports what the first case would see (--git-env-probe).
+    const child = spawnSync(process.execPath, [__filename, "--git-env-probe"], { encoding: "utf8", env: { ...process.env, ...hook, CI_MAC_GATE_TEST_PROBE_CHILD: "1" } });
     assert.strictEqual(child.status, 0, `hook-environment start failed (exit ${child.status})`);
     assert.strictEqual(child.stdout.trim(), "", `GIT_* variables reached the cases: ${child.stdout.trim()}`);
     assert.strictEqual(bare(), "false");
   }],
 ];
 
+// --git-env-probe (only the hook regression passes it): print the GIT_*
+// variables the first case would see, and stop before running it.
+const gitEnvProbe = process.argv[2] === "--git-env-probe";
 for (const [name, fn] of cases) {
+  if (gitEnvProbe) {
+    console.log(Object.keys(process.env).filter((key) => key.startsWith("GIT_")).join(" "));
+    process.exit(0);
+  }
   fn();
   console.log(`ok - ${name}`);
 }
