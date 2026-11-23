@@ -118,7 +118,17 @@ const cleanGitEnv = gitFixtureEnv(process.env);
     // GIT_CONFIG_SYSTEM names a broken file it must not read.
     const brokenSystem = path.join(probeRoot, "broken-system.gitconfig");
     fs.writeFileSync(brokenSystem, "[core\n");
-    const plainEnv = { ...process.env, XDG_CONFIG_HOME: xdg };
+    // It also gets an empty HOME: a ~/.gitconfig that sets core.attributesFile
+    // would replace the XDG attributes file. The caller here has one, so the
+    // control would pass git add if it kept the caller's HOME.
+    const callerHome = path.join(probeRoot, "caller-home");
+    const controlHome = path.join(probeRoot, "control-home");
+    fs.mkdirSync(callerHome);
+    fs.mkdirSync(controlHome);
+    fs.writeFileSync(path.join(callerHome, "empty-attributes"), "");
+    fs.writeFileSync(path.join(callerHome, ".gitconfig"), `[core]\n\tattributesFile = ${JSON.stringify(path.join(callerHome, "empty-attributes"))}\n`);
+    const callerEnv = { ...process.env, HOME: callerHome };
+    const plainEnv = { ...callerEnv, HOME: controlHome, XDG_CONFIG_HOME: xdg };
     for (const name of [...localGitEnvNames, "GIT_CONFIG_GLOBAL"]) delete plainEnv[name];
     Object.assign(plainEnv, { GIT_CONFIG_NOSYSTEM: "1", GIT_ATTR_NOSYSTEM: "1", GIT_CONFIG_SYSTEM: brokenSystem });
     const isolatedEnv = { ...cleanGitEnv, XDG_CONFIG_HOME: xdg };
