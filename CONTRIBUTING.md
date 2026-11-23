@@ -30,8 +30,12 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 - The macOS leg runs only on a Mac, in two steps:
   - Early feedback: after `npm install` (run it in each clone or worktree, since
     it installs the hooks), `.husky/pre-push` runs the script at low priority
-    (`nice -n 10`). The hook stops the push when `git status` fails, the working
-    tree is dirty or the pushed ref is not `HEAD`.
+    (`nice -n 10`) through `scripts/run-isolated.sh`, like the merge gate: no
+    proxy variable and none of your Cargo, npm or Git config reach the checks,
+    so pushing needs a direct network connection. Its state directory sits in
+    the Git directory (`codex-hud-ci-local`) and keeps Cargo's downloaded
+    crates between pushes. The hook stops the push when `git status` fails, the
+    working tree is dirty or the pushed ref is not `HEAD`.
   - Merge gate: after the push, `sh scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
     (`npm ci`, then the script). It requires the Node major that `ci.yml` uses
@@ -61,8 +65,10 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     contains `proxy` (`http_proxy`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`,
     `CARGO_HTTP_PROXY`, `GIT_PROXY_COMMAND`, ...) before any tool runs and
     fetches with Git's `http.proxy` set to empty for the trusted URL, so it
-    needs a direct network connection; without one, a step fails with a fixed
-    message. It prints no curl error for the Rust channel download and unsets
+    needs a direct network connection. Without one, the merge-ref fetch and
+    the Rust channel download fail with a fixed message, and `npm ci` or Cargo
+    prints its own error for a package registry it cannot reach; no proxy or
+    config value reaches them, so none can appear in that error. It prints no curl error for the Rust channel download and unsets
     `NODE_OPTIONS`. Its toolchain checks and the pull request's checks run
     through `scripts/run-isolated.sh`, like the hosted runner: an empty
     `HOME`, `CARGO_HOME`, npm config and global Git config, no system Git

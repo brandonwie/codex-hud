@@ -75,6 +75,13 @@ sysroot=$(rustc --print sysroot 2>/dev/null) || fail "rustc --print sysroot fail
 node_bin=$(node -p 'require("path").dirname(process.execPath)' 2>/dev/null) || fail "node not found"
 [ -x "$node_bin/node" ] && [ -x "$node_bin/npm" ] || fail "the node in PATH has no npm next to it"
 
+# The pre-push hook reuses its state directory, so start each run from an empty
+# HOME and remove any Cargo config or credentials file from CARGO_HOME. Cargo's
+# downloaded crates stay.
+rm -rf "${state:?}/home" 2>/dev/null || fail "cannot clear the isolated home"
+rm -f "$state/cargo-home/config" "$state/cargo-home/config.toml" \
+  "$state/cargo-home/credentials" "$state/cargo-home/credentials.toml" 2>/dev/null ||
+  fail "cannot clear the isolated Cargo config"
 mkdir -p "$state/home" "$state/cargo-home" 2>/dev/null || fail "cannot create the isolated home"
 for file in gitconfig npmrc-user npmrc-global; do
   : >"$state/$file" || fail "cannot create the isolated config files"

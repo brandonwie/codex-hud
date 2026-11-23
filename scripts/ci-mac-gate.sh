@@ -71,7 +71,10 @@ set -u
 #     the trusted URL to empty (no proxy), which outranks every Git config file
 #     and environment override, and Git's effective value must be empty; and the
 #     checks read no Cargo, npm or Git proxy config (run-isolated.sh below).
-#     Without a direct network connection a step fails with a fixed message;
+#     Without a direct network connection the merge-ref fetch and the Rust
+#     channel download fail with a fixed message; npm ci and Cargo print their
+#     own error for a registry they cannot reach (no proxy or config value can
+#     appear in it, since none reaches them);
 #   - the Rust channel download prints no curl error at all;
 #   - the toolchain probes and the PR's checks (npm ci, ci-local.sh) run through
 #     scripts/run-isolated.sh: an empty HOME, CARGO_HOME, npm config and global

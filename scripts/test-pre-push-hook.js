@@ -2,6 +2,8 @@
 
 // Runs .husky/pre-push against a throwaway Git repository with a stub
 // scripts/ci-local.sh, so the hook's guards are checked without the real suite.
+// The fixture copies the real scripts/run-isolated.sh, which the hook runs the
+// checks through; the stub records the environment it sees.
 
 const assert = require("assert");
 const fs = require("fs");
@@ -18,6 +20,7 @@ process.on("exit", () => {
 
 const zero = "0".repeat(40);
 const marker = path.join(root, "checks-ran");
+const isolated = fs.readFileSync(path.join(repoRoot, "scripts", "run-isolated.sh"));
 
 // npm test runs inside the pre-commit hook, where Git exports GIT_INDEX_FILE and
 // other repository variables. Drop every GIT_* variable so the fixture's git
@@ -46,8 +49,17 @@ function makeRepo(name, stubExit = 0) {
   fs.mkdirSync(path.join(repo, "scripts"), { recursive: true });
   fs.writeFileSync(
     path.join(repo, "scripts", "ci-local.sh"),
-    `#!/bin/sh\necho ran > "$CHECKS_MARKER"\nexit ${stubExit}\n`,
+    [
+      "#!/bin/sh",
+      'env > "$CHECKS_MARKER.env"',
+      'ls -A "$HOME" > "$CHECKS_MARKER.home"',
+      'ls -A "$CARGO_HOME" > "$CHECKS_MARKER.cargo-home"',
+      'echo ran > "$CHECKS_MARKER"',
+      `exit ${stubExit}`,
+      "",
+    ].join("\n"),
   );
+  fs.writeFileSync(path.join(repo, "scripts", "run-isolated.sh"), isolated);
   git(repo, ["init", "-q"]);
   git(repo, ["add", "."]);
   git(repo, ["commit", "-q", "-m", "one"]);
@@ -57,15 +69,15 @@ function makeRepo(name, stubExit = 0) {
   return repo;
 }
 
-function runHook(repo, input) {
+function runHook(repo, input, extraEnv = {}) {
   fs.rmSync(marker, { force: true });
   const result = spawnSync("sh", [hook, "origin", "https://example.invalid/repo.git"], {
     cwd: repo,
-    env,
+    env: { ...env, ...extraEnv },
     input,
     encoding: "utf8",
   });
-  return { status: result.status, stderr: result.stderr, ran: fs.existsSync(marker) };
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr, ran: fs.existsSync(marker) };
 }
 
 function pushLine(repo, rev) {
@@ -122,6 +134,53 @@ test("a delete-only push skips the checks", () => {
   const result = runHook(repo, `(delete) ${zero} refs/heads/old ${git(repo, ["rev-parse", "HEAD"])}\n`);
   assert.strictEqual(result.status, 0, result.stderr);
   assert.ok(!result.ran, "checks ran for a delete-only push");
+});
+
+test("the checks see no proxy, Cargo, npm or command-level Git config", () => {
+  const repo = makeRepo("isolated");
+  const secret = "hookpw-R16-01-synthetic";
+  const proxy = `http://user:${secret}/x@proxy.invalid:8080`;
+  const cargoHome = path.join(root, "poison-cargo-home");
+  fs.mkdirSync(cargoHome, { recursive: true });
+  fs.writeFileSync(path.join(cargoHome, "config.toml"), `[http]\nproxy = "${proxy}"\n`);
+  // A Cargo config, a credentials file and a HOME file left in the reused state
+  // directory by an earlier run must not reach the next run.
+  const state = path.join(repo, ".git", "codex-hud-ci-local");
+  fs.mkdirSync(path.join(state, "cargo-home"), { recursive: true });
+  fs.mkdirSync(path.join(state, "home"), { recursive: true });
+  fs.writeFileSync(path.join(state, "cargo-home", "config.toml"), `[http]\nproxy = "${proxy}"\n`);
+  fs.writeFileSync(path.join(state, "cargo-home", "credentials.toml"), `token = "${secret}"\n`);
+  fs.writeFileSync(path.join(state, "home", ".gitconfig"), `[http]\n\tproxy = ${proxy}\n`);
+  fs.writeFileSync(path.join(state, "cargo-home", "kept-crate-cache"), "x\n");
+  const result = runHook(repo, pushLine(repo, "HEAD"), {
+    http_proxy: proxy,
+    HTTPS_PROXY: proxy,
+    ALL_PROXY: proxy,
+    no_proxy: "example.invalid",
+    CARGO_HTTP_PROXY: proxy,
+    CARGO_HOME: cargoHome,
+    npm_config_https_proxy: proxy,
+    NPM_CONFIG_PROXY: proxy,
+    NODE_OPTIONS: `--title=${secret}`,
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.proxy",
+    GIT_CONFIG_VALUE_0: proxy,
+    GIT_CONFIG_PARAMETERS: `'http.proxy'='${proxy}'`,
+  });
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.ok(result.ran, "checks did not run");
+  const seen = fs.readFileSync(`${marker}.env`, "utf8");
+  assert.ok(!seen.includes(secret), "a configured secret reached the checks' environment");
+  const names = seen.split("\n").map((line) => line.split("=")[0]);
+  const leaked = names.filter((name) => /proxy/i.test(name) || /^GIT_CONFIG_(COUNT|KEY_|VALUE_|PARAMETERS)/.test(name) || /^npm_config_.*proxy/i.test(name));
+  assert.deepStrictEqual(leaked, [], "proxy or command-level Git config variables reached the checks");
+  const realState = fs.realpathSync(state);
+  assert.ok(names.includes("HOME") && seen.includes(`\nHOME=${path.join(realState, "home")}\n`), "HOME is not the isolated home");
+  assert.ok(seen.includes(`\nCARGO_HOME=${path.join(realState, "cargo-home")}\n`), "CARGO_HOME is not the isolated Cargo home");
+  assert.ok(seen.includes(`\nGIT_CONFIG_NOSYSTEM=1\n`), "system Git config is not disabled");
+  assert.strictEqual(fs.readFileSync(`${marker}.home`, "utf8"), "", "the isolated HOME was not empty");
+  assert.strictEqual(fs.readFileSync(`${marker}.cargo-home`, "utf8"), "kept-crate-cache\n", "Cargo config or credentials stayed in the isolated Cargo home, or its cache was lost");
+  assert.ok(!(result.stdout + result.stderr).includes(secret), "a configured secret reached the hook output");
 });
 
 // Runs this file again, once, with Git variables that point at a sentinel

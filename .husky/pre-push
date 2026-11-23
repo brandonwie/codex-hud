@@ -24,4 +24,13 @@ if [ -n "$status" ]; then
   exit 1
 fi
 
-exec nice -n 10 sh scripts/ci-local.sh
+# The checks run through scripts/run-isolated.sh, as in the Mac gate: no proxy
+# variable and none of your Cargo, npm or Git config reach them, so a configured
+# value (such as a proxy URL with a password) cannot appear in their output.
+# The state directory sits in the Git directory and is reused, so Cargo keeps
+# its downloaded crates between pushes.
+if ! git_dir=$(git rev-parse --absolute-git-dir); then
+  echo "pre-push: git rev-parse failed, so the hook cannot find the Git directory for the check state. Fix the repository and push again." >&2
+  exit 1
+fi
+exec nice -n 10 sh scripts/run-isolated.sh "$git_dir/codex-hud-ci-local" . sh scripts/ci-local.sh
