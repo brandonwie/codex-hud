@@ -1400,19 +1400,30 @@ const cases = [
     assert.ok(!isolated.stdout.includes(marker), "a proxy value reached the isolated command");
   }],
   ["the gate and run-isolated.sh stop when the environment cannot be read", () => {
-    // A failed scan would leave every variable in place, so it stops the run.
-    const broken = path.join(root, "broken-env");
-    fs.mkdirSync(broken, { recursive: true });
-    fs.writeFileSync(path.join(broken, "env"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
-    for (const args of [["56"], ["verify", "56"]]) {
-      const result = runGate(args, { FAKE_STATUS: status("success") }, { pathPrefix: `${broken}${path.delimiter}` });
-      assert.strictEqual(result.status, 1, `${args[0]}: ${result.stderr}`);
-      assert.strictEqual(result.stderr, "ci-mac-gate: cannot read the environment\n");
-      assert.strictEqual(result.ghCalls, "");
+    // A failed scan would leave every variable in place, so it stops the run:
+    // an env that prints nothing, only PATH, or every variable, then fails.
+    const marker = "SYNTHETIC-PARTIAL-ENV-3f7a";
+    const readers = {
+      empty: "exit 1",
+      partial: 'printf "PATH=%s\\000" "$PATH"; exit 7',
+      complete: "/usr/bin/env -0; exit 7",
+    };
+    for (const [name, body] of Object.entries(readers)) {
+      const broken = path.join(root, `broken-env-${name}`);
+      fs.mkdirSync(broken, { recursive: true });
+      fs.writeFileSync(path.join(broken, "env"), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+      for (const args of [["56"], ["verify", "56"]]) {
+        const result = runGate(args, { FAKE_STATUS: status("success"), NODE_DEBUG: "child_process", GH_TOKEN: marker }, { pathPrefix: `${broken}${path.delimiter}` });
+        assert.strictEqual(result.status, 1, `${name} ${args[0]}: ${result.stderr}`);
+        assert.strictEqual(result.stderr, "ci-mac-gate: cannot read the environment\n", `${name} ${args[0]}`);
+        assert.strictEqual(result.stdout, "", `${name} ${args[0]}`);
+        assert.strictEqual(result.ghCalls, "", `${name} ${args[0]}`);
+      }
+      const isolated = spawnSync("sh", [path.join(repoRoot, "scripts", "run-isolated.sh"), path.join(root, `broken-env-state-${name}`), repoRoot, "true"], { encoding: "utf8", env: { ...process.env, NODE_DEBUG: "child_process", GH_TOKEN: marker, PATH: `${broken}${path.delimiter}${process.env.PATH}` } });
+      assert.strictEqual(isolated.status, 1, `${name}: ${isolated.stderr}`);
+      assert.strictEqual(isolated.stderr, "run-isolated: cannot read the environment\n", name);
+      assert.strictEqual(isolated.stdout, "", name);
     }
-    const isolated = spawnSync("sh", [path.join(repoRoot, "scripts", "run-isolated.sh"), path.join(root, "broken-env-state"), repoRoot, "true"], { encoding: "utf8", env: { ...process.env, PATH: `${broken}${path.delimiter}${process.env.PATH}` } });
-    assert.strictEqual(isolated.status, 1);
-    assert.strictEqual(isolated.stderr, "run-isolated: cannot read the environment\n");
   }],
   ["an inherited BASH_VERSION does not make dash take the bash path", () => {
     // dash keeps an inherited BASH_VERSION or BASH_VERSINFO as plain text; the

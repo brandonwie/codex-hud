@@ -75,8 +75,14 @@ jobs=${CARGO_BUILD_JOBS:-}
 unset BASH_ENV ENV NODE_OPTIONS NODE_DEBUG XDG_CONFIG_HOME RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER RUSTFLAGS RUSTDOCFLAGS RUSTUP_TOOLCHAIN
 # The names of the environment variables, read bytes in the C locale from
 # NUL-ended records (as in ci-mac-gate.sh): a value that holds a newline cannot
-# pose as a variable, and a value that is not UTF-8 cannot stop the scan.
-env_records=$(env -0 | LC_ALL=C tr '\n\000' '\r\n') && [ -n "$env_records" ] ||
+# pose as a variable, and a value that is not UTF-8 cannot stop the scan. An
+# end record follows only a successful env -0 and must come last, since env -0
+# can print some records and then fail.
+env_end="run-isolated: end of the environment"
+env_newline='
+'
+env_records=$( { env -0 && printf '%s' "$env_end"; } | LC_ALL=C tr '\n\000' '\r\n') &&
+  [ "${env_records##*"$env_newline"}" = "$env_end" ] ||
   fail "cannot read the environment"
 names=$(printf '%s\n' "$env_records" | LC_ALL=C sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p') ||
   fail "cannot read the environment"

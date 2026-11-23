@@ -79,7 +79,7 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     unsets every `NODE_*` variable before Node starts (`NODE_DEBUG` prints a
     child's environment, `GH_TOKEN` included). It reads the variable names
     byte by byte in the C locale, so a value that is not UTF-8 cannot hide a
-    variable from these removals, and it stops if it cannot read the
+    variable from these removals, and it stops if it cannot read the whole
     environment. Its toolchain checks and the
     pull request's checks run through `scripts/run-isolated.sh`, like the
     hosted runner, in a new environment that holds only `PATH`, an empty

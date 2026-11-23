@@ -82,11 +82,17 @@ esac
 # pattern. env -0 ends each variable with a NUL, so a value that holds a newline
 # cannot pose as one. tr and sed read bytes in the C locale: under a UTF-8
 # locale macOS tr and sed stop at a byte that is not UTF-8 (any value can hold
-# one), and the names after it would escape the scan. It fails if tr or sed
-# fails or the environment reads empty; the caller then stops the gate.
+# one), and the names after it would escape the scan. env -0 can print some
+# records and then fail, and the pipeline returns only tr's status, so an end
+# record (no "=", so it names no variable) follows only a successful env -0, and
+# the scan requires it last. It fails if env, tr or sed fails; the caller then
+# stops the gate.
+env_end="ci-mac-gate: end of the environment"
+env_newline='
+'
 env_names() {
-  env_records=$(env -0 | LC_ALL=C tr '\n\000' '\r\n') || return 1
-  [ -n "$env_records" ] || return 1
+  env_records=$( { env -0 && printf '%s' "$env_end"; } | LC_ALL=C tr '\n\000' '\r\n') || return 1
+  [ "${env_records##*"$env_newline"}" = "$env_end" ] || return 1
   printf '%s\n' "$env_records" | LC_ALL=C sed -n "s/^\\($1\\)=.*/\\1/p"
 }
 env_scan_failed() {
