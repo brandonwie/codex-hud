@@ -10,6 +10,21 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+// A Git hook exports GIT_DIR, GIT_INDEX_FILE, GIT_CONFIG_PARAMETERS and more,
+// and the Husky pre-commit hook runs npm test. A case that inherited them would
+// act on the caller's repository: `git init` with GIT_DIR set marks it bare. So
+// the suite drops every inherited GIT_* variable before its first case; a case
+// that needs one sets it itself.
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith("GIT_")) delete process.env[key];
+}
+// The hook regression at the end starts this file with this variable set: it
+// prints the GIT_* variables left and stops.
+if (process.env.CI_MAC_GATE_TEST_GIT_ENV_ONLY === "1") {
+  console.log(Object.keys(process.env).filter((key) => key.startsWith("GIT_")).join(" "));
+  process.exit(0);
+}
+
 const repoRoot = path.resolve(__dirname, "..");
 const gate = path.join(repoRoot, "scripts", "ci-mac-gate.sh");
 const deadlineRunner = path.join(repoRoot, "scripts", "run-with-deadline.js");
@@ -1617,6 +1632,30 @@ const cases = [
       const result = spawnSync(process.execPath, [deadlineRunner, ...args], { encoding: "utf8" });
       assert.strictEqual(result.status, 2, args.join(" "));
     }
+  }],
+  ["a Git hook's GIT_* variables cannot reach the caller's repository", () => {
+    // A disposable caller with a worktree, like the maintainer's checkout.
+    const caller = path.join(root, "hook-caller");
+    const worktree = path.join(root, "hook-caller-worktree");
+    fixtureGit(["init", "-q", caller]);
+    fixtureGit(["-C", caller, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "init"]);
+    fixtureGit(["-C", caller, "worktree", "add", "-q", "--detach", worktree]);
+    const gitDir = fixtureGit(["-C", worktree, "rev-parse", "--absolute-git-dir"]);
+    // What a pre-commit hook in that worktree exports; both paths are absolute.
+    const hook = { GIT_DIR: gitDir, GIT_INDEX_FILE: path.join(gitDir, "index"), GIT_PREFIX: "", GIT_CONFIG_PARAMETERS: "'core.hookspath'='/dev/null'" };
+    const bare = () => fixtureGit(["-C", caller, "config", "core.bare"]);
+    assert.strictEqual(bare(), "false");
+    // Control: the `git init` of a case, run with the hook's variables, marks the caller bare.
+    const scratch = path.join(root, "hook-scratch");
+    fs.mkdirSync(scratch);
+    const control = spawnSync(realGit, ["init", "-q", "t"], { cwd: scratch, encoding: "utf8", env: { ...baseEnv(), ...hook } });
+    assert.ok(control.status === 0 && bare() === "true", "control: git init with a hook's GIT_DIR left the caller as it was");
+    fixtureGit(["-C", caller, "config", "core.bare", "false"]);
+    // This file, started with the hook's variables, drops them before its first case.
+    const child = spawnSync(process.execPath, [__filename], { encoding: "utf8", env: { ...process.env, ...hook, CI_MAC_GATE_TEST_GIT_ENV_ONLY: "1" } });
+    assert.strictEqual(child.status, 0, `hook-environment start failed (exit ${child.status})`);
+    assert.strictEqual(child.stdout.trim(), "", `GIT_* variables reached the cases: ${child.stdout.trim()}`);
+    assert.strictEqual(bare(), "false");
   }],
 ];
 
