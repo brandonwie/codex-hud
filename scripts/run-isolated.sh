@@ -21,9 +21,10 @@
 #   - npm reads empty user and global config files (two files: npm refuses to
 #     load one file twice); every npm_config_* variable is unset, and the npm
 #     cache stays the maintainer's ~/.npm (packages only);
-#   - Git reads an empty global config and no system config, and no
-#     command-level config: GIT_CONFIG_COUNT, GIT_CONFIG_KEY_<n>,
-#     GIT_CONFIG_VALUE_<n> and GIT_CONFIG_PARAMETERS are unset;
+#   - Git reads an empty global config, no system config and no system
+#     attributes; every inherited GIT_* variable is unset first, among them the
+#     command-level config (GIT_CONFIG_COUNT, GIT_CONFIG_KEY_<n>,
+#     GIT_CONFIG_VALUE_<n>, GIT_CONFIG_PARAMETERS) and GIT_TEMPLATE_DIR;
 #   - every variable whose name contains "proxy" in any case (http_proxy,
 #     HTTPS_PROXY, ALL_PROXY, NO_PROXY, GIT_PROXY_COMMAND, ...) is unset, so no
 #     tool uses a proxy or prints a proxy URL;
@@ -67,7 +68,7 @@ for var in $(env | sed -n 's/^\(CARGO_[A-Za-z0-9_]*\)=.*/\1/p; s/^\([Nn][Pp][Mm]
   unset "$var"
 done
 for var in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' |
-  grep -i -e proxy -e '^GIT_CONFIG_COUNT$' -e '^GIT_CONFIG_KEY_' -e '^GIT_CONFIG_VALUE_' -e '^GIT_CONFIG_PARAMETERS$'); do
+  grep -i -e proxy -e '^GIT_'); do
   unset "$var"
 done
 
@@ -86,11 +87,12 @@ HOME=$state/home
 CARGO_HOME=$state/cargo-home
 GIT_CONFIG_GLOBAL=$state/gitconfig
 GIT_CONFIG_NOSYSTEM=1
+GIT_ATTR_NOSYSTEM=1
 npm_config_userconfig=$state/npmrc-user
 npm_config_globalconfig=$state/npmrc-global
 npm_config_cache=$npm_cache
 PATH=$sysroot/bin:$node_bin:$PATH
-export HOME CARGO_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM PATH
+export HOME CARGO_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_ATTR_NOSYSTEM PATH
 export npm_config_userconfig npm_config_globalconfig npm_config_cache
 if [ -n "$jobs" ]; then
   CARGO_BUILD_JOBS=$jobs

@@ -359,8 +359,28 @@ no_hooks="core.hooksPath=/dev/null"
 src_git() {
   git -C "$src" -c "$no_hooks" -c core.fsmonitor=false "$@"
 }
-mkdir "$tmp/git-template" || die "cannot create the empty Git template"
-git -c "$no_hooks" -c core.fsmonitor=false init -q --template="$tmp/git-template" "$src" >/dev/null 2>&1 ||
+# Creating and checking out the repository also reads no maintainer Git config,
+# like the hosted runner's checkout: settings such as core.autocrlf, attributes
+# (core.attributesFile, $XDG_CONFIG_HOME/git/attributes, system attributes) or
+# a working-tree-encoding change the checked-out bytes while status stays
+# clean. Only the URL checks and the fetch below read the maintainer's
+# effective config, so a rewrite or redirect setting there is still refused.
+# clean_git_env runs only inside a subshell.
+clean_git_env() {
+  unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS GIT_TEMPLATE_DIR GIT_ATTR_SOURCE
+  for var in $(env | sed -n 's/^\(GIT_CONFIG_KEY_[0-9]*\)=.*/\1/p; s/^\(GIT_CONFIG_VALUE_[0-9]*\)=.*/\1/p'); do
+    unset "$var"
+  done
+  GIT_CONFIG_GLOBAL=$tmp/git-empty-config
+  GIT_CONFIG_NOSYSTEM=1
+  GIT_ATTR_NOSYSTEM=1
+  XDG_CONFIG_HOME=$tmp/git-empty-xdg
+  export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_ATTR_NOSYSTEM XDG_CONFIG_HOME
+}
+if ! mkdir "$tmp/git-template" "$tmp/git-empty-xdg" || ! : >"$tmp/git-empty-config"; then
+  die "cannot create the empty Git template and config"
+fi
+(clean_git_env && git -c "$no_hooks" -c core.fsmonitor=false init -q --template="$tmp/git-template" "$src") >/dev/null 2>&1 ||
   die "cannot create the temporary fetch repository"
 fetch_url=$(src_git ls-remote --get-url "$trusted_url" 2>/dev/null) ||
   die "Git cannot resolve the fetch URL $trusted_url; check that git config --list works and has no url.<base>.insteadOf rule without a value"
@@ -384,14 +404,20 @@ if ! git_proxy=$(src_git -c "$no_proxy_setting" config --get-urlmatch http.proxy
   [ -n "$git_proxy" ]; then
   die "Git's effective http.proxy for $trusted_url is not empty; the gate fetches without a proxy. Check that git config --list works and rerun"
 fi
-src_git -c "$redirect_limit" -c "$no_proxy_setting" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" >/dev/null 2>&1 ||
-  die "cannot fetch refs/pull/$pr/merge from $trusted_url; the gate uses no proxy, so check the direct network connection and that the PR has no merge conflict, then rerun"
+# Up to three attempts, 10 and 20 seconds apart, like actions/checkout.
+attempt=1
+until src_git -c "$redirect_limit" -c "$no_proxy_setting" fetch -q --depth=1 "$trusted_url" "refs/pull/$pr/merge" >/dev/null 2>&1; do
+  [ "$attempt" -lt 3 ] ||
+    die "cannot fetch refs/pull/$pr/merge from $trusted_url (3 attempts); the gate uses no proxy, so check the direct network connection and that the PR has no merge conflict, then rerun"
+  sleep $((attempt * 10))
+  attempt=$((attempt + 1))
+done
 fetched=$(src_git rev-parse --verify -q 'FETCH_HEAD^{commit}' 2>/dev/null) || die "cannot resolve the fetched merge commit"
 parents=$(src_git cat-file -p "$fetched" 2>/dev/null | sed -n 's/^parent //p' | tr '\n' ' ')
 [ "$fetched" = "$merge" ] && [ "$parents" = "$base $head " ] ||
   die "GitHub's merge commit is not $base_name + PR head yet (fetched $fetched, parents: $parents); retry in a minute"
-src_git checkout -q --detach "$fetched" >/dev/null 2>&1 || die "checkout failed"
-if ! extra=$(src_git status --porcelain --ignored --untracked-files=all 2>/dev/null) ||
+(clean_git_env && src_git checkout -q --detach "$fetched") >/dev/null 2>&1 || die "checkout failed"
+if ! extra=$(clean_git_env && src_git status --porcelain --ignored --untracked-files=all 2>/dev/null) ||
   [ -n "$extra" ]; then
   die "the checkout holds files that are not in the merge commit, or Git cannot list them; check your Git hooks and templates and rerun"
 fi

@@ -280,6 +280,8 @@ function fetchHarness() {
       `#!/bin/sh\necho "curl $*" >> "\${FAKE_CURL_CALLS:-/dev/null}"\nenv | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "\${FAKE_CURL_CALLS:-/dev/null}"\nexit 7\n`,
       { mode: 0o755 },
     );
+    // The fake sleep records its argument and returns at once.
+    fs.writeFileSync(path.join(fake, "sleep"), `#!/bin/sh\necho "sleep $*" >> "\${FAKE_SLEEP_CALLS:-/dev/null}"\n`, { mode: 0o755 });
     fs.writeFileSync(
       path.join(fake, "git"),
       `#!/bin/sh
@@ -294,6 +296,13 @@ for word in "$@"; do
 done
 # A fetch keeps the gate's -C and -c options and fetches from the local fixture.
 if [ "$1" = -C ] && [ "$sub" = fetch ]; then
+  # FAKE_FETCH_FAILS: how many fetch attempts fail first (counted in FAKE_FETCH_COUNTER).
+  if [ -n "\${FAKE_FETCH_FAILS:-}" ]; then
+    n=$(cat "$FAKE_FETCH_COUNTER" 2>/dev/null || echo 0)
+    n=$((n + 1))
+    echo "$n" > "$FAKE_FETCH_COUNTER"
+    [ "$n" -gt "$FAKE_FETCH_FAILS" ] || exit 128
+  fi
   total=$#
   for word in "$@"; do [ "$word" = fetch ] && break; set -- "$@" "$word"; done
   shift "$total"
@@ -304,6 +313,12 @@ if [ "$1" = -C ] && [ "$sub" = checkout ]; then
   "${realGit}" "$@" || exit
   # FAKE_CHECKOUT_PLANT: a file the checkout leaves behind, as a hook could.
   if [ -n "\${FAKE_CHECKOUT_PLANT:-}" ]; then mkdir -p "$2/.cargo" && echo "$FAKE_CHECKOUT_PLANT" > "$2/.cargo/config.toml"; fi
+  # FAKE_RECORD_CHECKOUT: record the checked-out ci.yml bytes (od -c) and the
+  # Git settings the checkout saw.
+  if [ -n "\${FAKE_RECORD_CHECKOUT:-}" ]; then
+    printf 'bytes %s\n' "$(od -An -c "$2/.github/workflows/ci.yml" | tr -d ' \n')" >> "$FAKE_GIT_CALLS"
+    env | sed -n 's/^\\(GIT_[A-Z_0-9]*\\)=.*/checkout-env \\1/p; s/^\\(XDG_CONFIG_HOME\\)=.*/checkout-env \\1/p' >> "$FAKE_GIT_CALLS"
+  fi
   exit 0
 fi
 if [ "$1" = -C ] && [ "$sub" = config ] && [ -n "\${FAKE_REDIRECTS:-}" ]; then
@@ -598,6 +613,82 @@ const cases = [
     assert.ok(!(planted.stdout + planted.stderr).includes(marker), "the planted proxy value reached the gate output");
     assert.doesNotMatch(planted.stderr, /Rust stable/);
   }],
+  ["the maintainer's Git config, attributes and command-level settings cannot change the checked-out files", () => {
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const xdg = path.join(root, "crlf-xdg");
+    fs.mkdirSync(path.join(xdg, "git"), { recursive: true });
+    fs.writeFileSync(path.join(xdg, "git", "attributes"), "* text eol=crlf\n");
+    const autocrlf = path.join(root, "crlf-gitconfig");
+    fs.writeFileSync(autocrlf, "[core]\n\tautocrlf = true\n");
+    const plain = fetchConfig();
+    const settings = [
+      ["global core.autocrlf", { ...plain, GIT_CONFIG_GLOBAL: autocrlf }],
+      ["XDG attributes", { ...plain, XDG_CONFIG_HOME: xdg }],
+      ["GIT_CONFIG_PARAMETERS", { ...plain, GIT_CONFIG_PARAMETERS: "'core.autocrlf'='true'" }],
+      ["GIT_CONFIG_COUNT", { ...plain, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.autocrlf", GIT_CONFIG_VALUE_0: "true" }],
+    ];
+    settings.forEach(([name, setting], index) => {
+      // Control: plain git with the setting checks ci.yml out with CRLF.
+      const control = path.join(root, `crlf-control-${index}`);
+      fs.rmSync(control, { recursive: true, force: true });
+      const controlEnv = { ...baseEnv(), ...setting };
+      for (const args of [["init", "-q", control], ["-C", control, "fetch", "-q", fixture.dir, "HEAD"], ["-C", control, "checkout", "-q", "--detach", "FETCH_HEAD"]]) {
+        const r = spawnSync(realGit, args, { encoding: "utf8", env: controlEnv });
+        assert.strictEqual(r.status, 0, `control git ${args[0] === "-C" ? args[2] : args[0]} failed for ${name} (exit ${r.status})`);
+      }
+      assert.ok(fs.readFileSync(path.join(control, ".github", "workflows", "ci.yml"), "utf8").includes("\r\n"), `control: ${name} did not change the line endings`);
+      // Through the gate the checkout holds the merge commit's bytes (LF only).
+      fs.rmSync(gitCalls, { force: true });
+      const result = runWorker("", {
+        FAKE_GIT_CALLS: gitCalls,
+        FAKE_FETCH_REPO: fixture.dir,
+        FAKE_ALLOW_CHECKOUT: "1",
+        FAKE_RECORD_CHECKOUT: "1",
+        FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
+        FAKE_BASE: fixture.base,
+        FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
+        ...setting,
+      }, runDir, "", { pathPrefix: prefix });
+      fails(result, /cannot read the current Rust stable version/);
+      const calls = fs.readFileSync(gitCalls, "utf8");
+      const bytes = calls.match(/^bytes (.*)$/m);
+      assert.ok(bytes, `no checkout recorded for ${name}`);
+      assert.match(bytes[1], /\\n/, `no line ending recorded for ${name}`);
+      assert.doesNotMatch(bytes[1], /\\r/, `${name} changed the checked-out line endings`);
+      const seen = [...calls.matchAll(/^checkout-env (\S+)$/gm)].map((m) => m[1]).sort();
+      assert.deepStrictEqual(seen.filter((v) => /^GIT_CONFIG_(COUNT|KEY_|VALUE_|PARAMETERS)|^GIT_TEMPLATE_DIR$|^GIT_ATTR_SOURCE$/.test(v)), [], `${name}: command-level Git config reached the checkout`);
+      for (const want of ["GIT_ATTR_NOSYSTEM", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "XDG_CONFIG_HOME"]) assert.ok(seen.includes(want), `${name}: checkout ran without ${want}`);
+    });
+  }],
+  ["the merge-ref fetch makes up to three attempts, 10 and 20 seconds apart", () => {
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const counter = path.join(root, "fetch-counter");
+    const sleeps = path.join(root, "sleep-calls");
+    const candidate = {
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      FAKE_FETCH_COUNTER: counter,
+      FAKE_SLEEP_CALLS: sleeps,
+      FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
+      FAKE_BASE: fixture.base,
+      FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
+      ...fetchConfig(),
+    };
+    const fetches = () => fs.readFileSync(gitCalls, "utf8").split("\n").filter((line) => / fetch -q --depth=1 /.test(line)).length;
+    // Two failures, then the third attempt fetches and the run goes on to checkout.
+    for (const file of [counter, sleeps, gitCalls]) fs.rmSync(file, { force: true });
+    const recovered = runWorker("", { ...candidate, FAKE_FETCH_FAILS: "2" }, runDir, "", { pathPrefix: prefix });
+    fails(recovered, /checkout failed/);
+    assert.strictEqual(fetches(), 3);
+    assert.strictEqual(fs.readFileSync(sleeps, "utf8"), "sleep 10\nsleep 20\n");
+    // Three failures stop the run with the fixed message, after two waits.
+    for (const file of [counter, sleeps, gitCalls]) fs.rmSync(file, { force: true });
+    const failed = runWorker("", { ...candidate, FAKE_FETCH_FAILS: "3" }, runDir, "", { pathPrefix: prefix });
+    fails(failed, /^ci-mac-gate: cannot fetch refs\/pull\/56\/merge from https:\/\/github\.com\/brandonwie\/codex-hud\.git \(3 attempts\); the gate uses no proxy, so check the direct network connection and that the PR has no merge conflict, then rerun$/m);
+    assert.strictEqual(fetches(), 3);
+    assert.strictEqual(fs.readFileSync(sleeps, "utf8"), "sleep 10\nsleep 20\n");
+    assert.doesNotMatch(fs.readFileSync(gitCalls, "utf8"), /checkout/);
+  }],
   ["an inherited URL rewrite of the trusted fetch URL is refused before any fetch", () => {
     const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
     // The clone's origin is the approved SSH URL; the inherited global config
@@ -762,7 +853,7 @@ const cases = [
     assert.doesNotMatch(script, /\(cd "\$src" && (npm|cargo|rustc|node) /);
     const helper = fs.readFileSync(path.join(repoRoot, "scripts", "run-isolated.sh"), "utf8");
     assert.match(helper, /\nGIT_CONFIG_GLOBAL=\$state\/gitconfig\nGIT_CONFIG_NOSYSTEM=1\n/);
-    assert.match(helper, /\nexport HOME CARGO_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM PATH\n/);
+    assert.match(helper, /\nexport HOME CARGO_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_ATTR_NOSYSTEM PATH\n/);
   }],
   ["the maintainer's Cargo, npm, Node and Git config cannot reach the probes or the checks", () => {
     // Offline. Each control shows that the poisoned setting reaches the tool and
@@ -835,7 +926,24 @@ const cases = [
       HTTPS_PROXY: `http://u:pa/ss${marker}@proxy.example`,
       no_proxy: marker,
       GIT_PROXY_COMMAND: `/nonexistent/${marker}`,
+      GIT_TEMPLATE_DIR: path.join(poison, "template"),
     };
+    // Control: a Git template with a malformed key breaks a plain git init + add.
+    fs.mkdirSync(path.join(poison, "template"), { recursive: true });
+    fs.writeFileSync(path.join(poison, "template", "config"), `[core]\n\tbigFileThreshold = ${marker}\n`);
+    const templateScript = "git init -q t && cd t && echo x > f && git add f";
+    const templateRepo = (name) => {
+      const dir = path.join(root, name);
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.mkdirSync(dir);
+      return dir;
+    };
+    const templateControl = run(templateRepo("template-control"), "sh", ["-c", templateScript], { GIT_CONFIG_GLOBAL: "/dev/null", GIT_TEMPLATE_DIR: commandLevel.GIT_TEMPLATE_DIR });
+    assert.ok(templateControl.status !== 0 && leaked(templateControl), "control: git ignored GIT_TEMPLATE_DIR");
+    const templateDir = templateRepo("template-isolated");
+    const templateIsolated = run(templateDir, "sh", [helper, path.join(root, "tool-state-template"), templateDir, "sh", "-c", templateScript], commandLevel);
+    assert.strictEqual(templateIsolated.status, 0, `isolated git init + add with GIT_TEMPLATE_DIR failed (exit ${templateIsolated.status})`);
+    assert.ok(!leaked(templateIsolated), "GIT_TEMPLATE_DIR reached the isolated git");
     for (const [key, value] of [["GIT_CONFIG_COUNT", "1"], ["GIT_CONFIG_PARAMETERS", commandLevel.GIT_CONFIG_PARAMETERS]]) {
       const only = key === "GIT_CONFIG_COUNT"
         ? { GIT_CONFIG_COUNT: value, GIT_CONFIG_KEY_0: "core.bigFileThreshold", GIT_CONFIG_VALUE_0: marker }
@@ -850,6 +958,9 @@ const cases = [
     const childEnv = commandRun(["env"]);
     assert.strictEqual(childEnv.status, 0);
     assert.doesNotMatch(childEnv.stdout, /^(GIT_CONFIG_(COUNT|KEY_0|VALUE_0|PARAMETERS)=|[^=\n]*[Pp][Rr][Oo][Xx][Yy][^=\n]*=)/m);
+    // Of the Git variables only the helper's own three remain.
+    const gitVars = [...childEnv.stdout.matchAll(/^(GIT_[A-Za-z0-9_]*)=/gm)].map((m) => m[1]).sort();
+    assert.deepStrictEqual(gitVars, ["GIT_ATTR_NOSYSTEM", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"]);
     assert.ok(!leaked(childEnv), "a stripped value reached the child environment");
     // The home the checks see is empty and inside the state directory.
     const homes = isolated(proj, ["sh", "-c", 'printf "%s\\n%s\\n" "$HOME" "$CARGO_HOME"; ls -A "$HOME"']);

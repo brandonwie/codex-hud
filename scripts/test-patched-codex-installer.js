@@ -78,18 +78,25 @@ const isolatedGitDir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-gitconfi
 const isolatedGitConfig = path.join(isolatedGitDir, "gitconfig");
 fs.writeFileSync(isolatedGitConfig, "");
 process.on("exit", () => fs.rmSync(isolatedGitDir, { recursive: true, force: true }));
-const gitIsolation = { GIT_CONFIG_GLOBAL: isolatedGitConfig, GIT_CONFIG_NOSYSTEM: "1" };
+// An empty template too: an inherited GIT_TEMPLATE_DIR can copy config into a
+// fixture repository's local config.
+const emptyGitTemplate = path.join(isolatedGitDir, "template");
+fs.mkdirSync(emptyGitTemplate);
+const gitIsolation = { GIT_CONFIG_GLOBAL: isolatedGitConfig, GIT_CONFIG_NOSYSTEM: "1", GIT_TEMPLATE_DIR: emptyGitTemplate };
 const localGitEnvResult = spawnSync("git", ["rev-parse", "--local-env-vars"], {
   encoding: "utf8",
   env: { ...process.env, ...gitIsolation },
 });
 assert.strictEqual(localGitEnvResult.status, 0, `git local-env discovery failed (exit ${localGitEnvResult.status})`);
 const localGitEnvNames = localGitEnvResult.stdout.trim().split(/\s+/).filter(Boolean);
-const cleanGitEnv = { ...process.env };
-for (const name of localGitEnvNames) {
-  delete cleanGitEnv[name];
+function gitFixtureEnv(base) {
+  const env = { ...base };
+  for (const name of localGitEnvNames) {
+    delete env[name];
+  }
+  return Object.assign(env, gitIsolation);
 }
-Object.assign(cleanGitEnv, gitIsolation);
+const cleanGitEnv = gitFixtureEnv(process.env);
 
 // Regression: an inherited XDG Git config stays out of the fixture git. The
 // control shows plain git reading it and printing its marker.
@@ -112,6 +119,35 @@ Object.assign(cleanGitEnv, gitIsolation);
     const isolated = spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env: isolatedEnv });
     assert.strictEqual(isolated.status, 0, `isolated git add failed (exit ${isolated.status})`);
     assert.ok(!(isolated.stdout + isolated.stderr).includes(marker), "the XDG config reached the fixture git");
+  } finally {
+    fs.rmSync(probeRoot, { recursive: true, force: true });
+  }
+}
+
+// Regression: an inherited GIT_TEMPLATE_DIR stays out of the fixture git. The
+// control shows plain git copying the template's config and printing its marker.
+{
+  const marker = "SYNTHETIC-INSTALLER-GIT-TEMPLATE-7e20";
+  const probeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-hud-git-template-"));
+  try {
+    const template = path.join(probeRoot, "template");
+    fs.mkdirSync(template);
+    fs.writeFileSync(path.join(template, "config"), `[core]\n\tbigFileThreshold = ${marker}\n`);
+    const inherited = { ...process.env, GIT_TEMPLATE_DIR: template };
+    const attempt = (name, env) => {
+      const repo = path.join(probeRoot, name);
+      fs.mkdirSync(repo);
+      fs.writeFileSync(path.join(repo, "file.txt"), "x\n");
+      const init = spawnSync("git", ["init", "-q"], { cwd: repo, encoding: "utf8", env });
+      assert.strictEqual(init.status, 0, `${name} git init failed (exit ${init.status})`);
+      return spawnSync("git", ["add", "file.txt"], { cwd: repo, encoding: "utf8", env });
+    };
+    const controlEnv = { ...inherited, ...gitIsolation, GIT_TEMPLATE_DIR: template };
+    const control = attempt("control", controlEnv);
+    assert.ok(control.status !== 0 && control.stderr.includes(marker), "control: git ignored GIT_TEMPLATE_DIR");
+    const isolated = attempt("isolated", gitFixtureEnv(inherited));
+    assert.strictEqual(isolated.status, 0, `isolated git add failed (exit ${isolated.status})`);
+    assert.ok(!(isolated.stdout + isolated.stderr).includes(marker), "GIT_TEMPLATE_DIR reached the fixture git");
   } finally {
     fs.rmSync(probeRoot, { recursive: true, force: true });
   }

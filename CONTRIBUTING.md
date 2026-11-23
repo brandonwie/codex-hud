@@ -73,10 +73,16 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     config, or in one of those variables, cannot reach their output. Other
     inherited variables, such as `NODE_EXTRA_CA_CERTS`, still reach them. It
     stops when a Cargo config file sits above the temporary checkout. Your Git
-    setup cannot add files to the checkout: the temporary repository starts
-    from an empty template, every git call into it runs with hooks and
-    fsmonitor off (`core.hooksPath=/dev/null`, `core.fsmonitor=false`), and
-    after checkout `git status --ignored` must list no file. Any rewrite of the fetch
+    setup cannot add or change files in the checkout: the temporary repository
+    starts from an empty template, every git call into it runs with hooks and
+    fsmonitor off (`core.hooksPath=/dev/null`, `core.fsmonitor=false`), the
+    `git init`, checkout and status read no Git config or attributes of yours
+    (empty global config, no system config or attributes, an empty
+    `XDG_CONFIG_HOME`, no command-level config or `GIT_TEMPLATE_DIR`), so
+    settings such as `core.autocrlf` cannot change the checked-out bytes, and
+    after checkout `git status --ignored` must list no file. Only the URL
+    checks and the fetch read your Git config. The fetch makes up to three
+    attempts, 10 and 20 seconds apart, like `actions/checkout`. Any rewrite of the fetch
     URL is refused, even to the same repository's bare URL. Before any fetch it refuses a clone
     whose origin is another repository, a pull request of another repository,
     and a fork PR. It also refuses a branch PR unless every commit has a
