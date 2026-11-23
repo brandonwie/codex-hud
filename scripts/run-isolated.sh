@@ -44,6 +44,8 @@ fail() {
 state=$1
 project=$2
 shift 2
+# CDPATH would let a relative project path enter another directory.
+unset CDPATH
 
 mkdir -p "$state" 2>/dev/null || fail "cannot create the state directory"
 state=$(cd "$state" && pwd -P) || fail "cannot enter the state directory"

@@ -76,9 +76,10 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     setup cannot add or change files in the checkout: the temporary repository
     starts from an empty template, every git call into it runs with hooks and
     fsmonitor off (`core.hooksPath=/dev/null`, `core.fsmonitor=false`), the
-    `git init`, checkout and status read no Git config or attributes of yours
-    (empty global config, no system config or attributes, an empty
-    `XDG_CONFIG_HOME`, no command-level config or `GIT_TEMPLATE_DIR`), so
+    `git init`, the reads of the fetched commit, checkout and status read no
+    Git config or attributes of yours (empty global config, no system config
+    or attributes, an empty `XDG_CONFIG_HOME`, no inherited `GIT_*` variable
+    such as `GIT_CONFIG_COUNT`, `GIT_TEMPLATE_DIR` or `GIT_DEFAULT_HASH`), so
     settings such as `core.autocrlf` cannot change the checked-out bytes, and
     after checkout `git status --ignored` must list no file. Only the URL
     checks and the fetch read your Git config. The fetch makes up to three

@@ -1,6 +1,8 @@
 #!/bin/sh
 set -u
 
+# CDPATH would let the relative cd enter another checkout.
+unset CDPATH
 cd "$(dirname "$0")/.." || exit 1
 
 : "${CARGO_BUILD_JOBS:=4}"

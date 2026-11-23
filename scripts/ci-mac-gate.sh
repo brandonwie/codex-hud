@@ -130,6 +130,9 @@ full_sha() {
 unset GH_REPO GH_HOST
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
   GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX GIT_NAMESPACE
+# CDPATH would let a relative cd below (sh scripts/ci-mac-gate.sh) enter another
+# checkout that has a scripts/ directory.
+unset CDPATH
 
 cd "$(dirname "$0")/.." || exit 1
 self="$(pwd)/scripts/ci-mac-gate.sh"
@@ -359,7 +362,8 @@ no_hooks="core.hooksPath=/dev/null"
 src_git() {
   git -C "$src" -c "$no_hooks" -c core.fsmonitor=false "$@"
 }
-# Creating and checking out the repository also reads no maintainer Git config,
+# Creating the repository, reading the fetched commit and checking it out also
+# read no maintainer Git config or inherited GIT_* variable,
 # like the hosted runner's checkout: settings such as core.autocrlf, attributes
 # (core.attributesFile, $XDG_CONFIG_HOME/git/attributes, system attributes) or
 # a working-tree-encoding change the checked-out bytes while status stays
@@ -367,15 +371,18 @@ src_git() {
 # effective config, so a rewrite or redirect setting there is still refused.
 # clean_git_env runs only inside a subshell.
 clean_git_env() {
-  unset GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS GIT_TEMPLATE_DIR GIT_ATTR_SOURCE
-  for var in $(env | sed -n 's/^\(GIT_CONFIG_KEY_[0-9]*\)=.*/\1/p; s/^\(GIT_CONFIG_VALUE_[0-9]*\)=.*/\1/p'); do
+  # Every inherited GIT_* variable goes (GIT_CONFIG_COUNT/KEY_n/VALUE_n,
+  # GIT_CONFIG_PARAMETERS, GIT_TEMPLATE_DIR, GIT_ATTR_SOURCE, GIT_DEFAULT_HASH,
+  # ...); then only the isolation and the trace2 disables are set.
+  for var in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
     unset "$var"
   done
+  GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
   GIT_CONFIG_GLOBAL=$tmp/git-empty-config
   GIT_CONFIG_NOSYSTEM=1
   GIT_ATTR_NOSYSTEM=1
   XDG_CONFIG_HOME=$tmp/git-empty-xdg
-  export GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_ATTR_NOSYSTEM XDG_CONFIG_HOME
+  export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_ATTR_NOSYSTEM XDG_CONFIG_HOME
 }
 if ! mkdir "$tmp/git-template" "$tmp/git-empty-xdg" || ! : >"$tmp/git-empty-config"; then
   die "cannot create the empty Git template and config"
@@ -412,8 +419,8 @@ until src_git -c "$redirect_limit" -c "$no_proxy_setting" fetch -q --depth=1 "$t
   sleep $((attempt * 10))
   attempt=$((attempt + 1))
 done
-fetched=$(src_git rev-parse --verify -q 'FETCH_HEAD^{commit}' 2>/dev/null) || die "cannot resolve the fetched merge commit"
-parents=$(src_git cat-file -p "$fetched" 2>/dev/null | sed -n 's/^parent //p' | tr '\n' ' ')
+fetched=$(clean_git_env && src_git rev-parse --verify -q 'FETCH_HEAD^{commit}' 2>/dev/null) || die "cannot resolve the fetched merge commit"
+parents=$( (clean_git_env && src_git cat-file -p "$fetched") 2>/dev/null | sed -n 's/^parent //p' | tr '\n' ' ')
 [ "$fetched" = "$merge" ] && [ "$parents" = "$base $head " ] ||
   die "GitHub's merge commit is not $base_name + PR head yet (fetched $fetched, parents: $parents); retry in a minute"
 (clean_git_env && src_git checkout -q --detach "$fetched") >/dev/null 2>&1 || die "checkout failed"

@@ -62,10 +62,16 @@ const trustedUrl = "https://github.com/brandonwie/codex-hud.git";
 const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
 const isolatedGitConfig = path.join(root, "isolated.gitconfig");
 fs.writeFileSync(isolatedGitConfig, "");
+// Attributes too: an empty XDG_CONFIG_HOME (no default git/attributes) and no
+// system attributes. A case that tests XDG attributes sets its own.
+const isolatedXdg = path.join(root, "isolated-xdg");
+fs.mkdirSync(isolatedXdg);
 const baseEnv = () => ({
   ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
   GIT_CONFIG_GLOBAL: isolatedGitConfig,
   GIT_CONFIG_NOSYSTEM: "1",
+  GIT_ATTR_NOSYSTEM: "1",
+  XDG_CONFIG_HOME: isolatedXdg,
 });
 function fixtureGit(args, { cwd, input, env = {} } = {}) {
   const result = spawnSync(realGit, args, { cwd, input, encoding: "utf8", env: { ...baseEnv(), ...env } });
@@ -90,9 +96,10 @@ const status = (state, m = merge, b = base, ref = "main") => `${state} merge ${m
 const commitLines = (...rows) => rows.map((row) => row.join(" ")).join("\n");
 const trustedCommits = commitLines([firstCommit, "true", "brandonwie", "brandonwie"], [head, "true", "brandonwie", "brandonwie"]);
 
-function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [] } = {}) {
+function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [], cwd } = {}) {
   fs.rmSync(calls, { force: true });
   const result = spawnSync("sh", [...shellArgs, gatePath, ...args], {
+    cwd,
     env: {
       ...baseEnv(),
       // The gate must ignore these: the fake gh fails when it sees them.
@@ -659,6 +666,56 @@ const cases = [
       assert.deepStrictEqual(seen.filter((v) => /^GIT_CONFIG_(COUNT|KEY_|VALUE_|PARAMETERS)|^GIT_TEMPLATE_DIR$|^GIT_ATTR_SOURCE$/.test(v)), [], `${name}: command-level Git config reached the checkout`);
       for (const want of ["GIT_ATTR_NOSYSTEM", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "XDG_CONFIG_HOME"]) assert.ok(seen.includes(want), `${name}: checkout ran without ${want}`);
     });
+  }],
+  ["an inherited GIT_DEFAULT_HASH cannot change the gate's repository format", () => {
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const setting = { ...fetchConfig(), GIT_DEFAULT_HASH: "sha256" };
+    // Control: plain git creates a SHA-256 repository that cannot fetch the SHA-1 fixture.
+    const control = path.join(root, "sha256-control");
+    fs.rmSync(control, { recursive: true, force: true });
+    const controlEnv = { ...baseEnv(), ...setting };
+    assert.strictEqual(spawnSync(realGit, ["init", "-q", control], { env: controlEnv }).status, 0, "control git init failed");
+    assert.notStrictEqual(spawnSync(realGit, ["-C", control, "fetch", "-q", fixture.dir, "HEAD"], { env: controlEnv }).status, 0, "control: a SHA-256 repository fetched the SHA-1 fixture");
+    // Through the gate the fetch, the commit checks and the checkout succeed.
+    fs.rmSync(gitCalls, { force: true });
+    const result = runWorker("", {
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      FAKE_ALLOW_CHECKOUT: "1",
+      FAKE_RECORD_CHECKOUT: "1",
+      FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
+      FAKE_BASE: fixture.base,
+      FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
+      ...setting,
+    }, runDir, "", { pathPrefix: prefix });
+    fails(result, /cannot read the current Rust stable version/);
+    assert.doesNotMatch(fs.readFileSync(gitCalls, "utf8"), /^checkout-env GIT_DEFAULT_HASH$/m);
+  }],
+  ["CDPATH cannot send a relative invocation to another checkout", () => {
+    // Another directory with a scripts/ folder, first in CDPATH: if the gate's
+    // relative cd followed it, its scripts would run and leave the marker.
+    const { prefix } = fetchHarness();
+    const alt = path.join(root, "cdpath-alt");
+    const marker = path.join(root, "cdpath-marker");
+    fs.mkdirSync(path.join(alt, "scripts"), { recursive: true });
+    fs.writeFileSync(path.join(alt, "scripts", "run-with-deadline.js"), 'require("fs").writeFileSync(process.env.CDPATH_MARKER, "alt\\n");\n');
+    fs.writeFileSync(path.join(alt, "scripts", "ci-mac-gate.sh"), 'echo alt > "$CDPATH_MARKER"\n');
+    fs.rmSync(marker, { force: true });
+    const result = runGate(["56"], {
+      CDPATH: alt,
+      CDPATH_MARKER: marker,
+      FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2`,
+    }, { gatePath: "scripts/ci-mac-gate.sh", cwd: path.dirname(path.dirname(trustedGate)), pathPrefix: prefix });
+    fails(result, /comes from someone\/fork/);
+    assert.match(result.stdout, /under a 360-minute deadline/);
+    assert.ok(!fs.existsSync(marker), "the relative invocation ran another checkout's scripts");
+    // ci-local.sh and run-isolated.sh clear CDPATH before their first cd too.
+    for (const file of ["ci-local.sh", "run-isolated.sh", "ci-mac-gate.sh"]) {
+      const text = fs.readFileSync(path.join(repoRoot, "scripts", file), "utf8");
+      const unset = text.search(/^unset CDPATH$/m);
+      const firstCd = text.search(/^[^#\n]*\bcd /m);
+      assert.ok(unset > 0 && unset < firstCd, `${file} does not unset CDPATH before its first cd`);
+    }
   }],
   ["the merge-ref fetch makes up to three attempts, 10 and 20 seconds apart", () => {
     const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
