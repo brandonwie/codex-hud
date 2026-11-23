@@ -332,7 +332,7 @@ codex-hud/
 
 Issues e pull requests são bem-vindos. Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para o fluxo de contribuição e a referência completa de scripts de mantenedor.
 
-Mantenedores: fazer checkout, commit ou instalar código de outra pessoa pode executar código com a sua conta por meio dos hooks do Git ou dos scripts npm deste repositório. Revise uma alteração importada pelo diff (`gh pr diff <pr>`) antes de fazer checkout e não pule os hooks. A CI roda apenas no Linux; as verificações de macOS rodam no Mac de um mantenedor por meio de `scripts/ci-mac-gate.sh`. O script recusa pull requests vindos de forks. Um pull request cujos commits não passam na verificação de procedência, ou um para um branch diferente de `main`, só é executado depois que um mantenedor o revisa e passa uma opção de confiança que nomeia exatamente esses commits. As regras estão em CONTRIBUTING.md.
+Mantenedores: fazer checkout, commit ou instalar código de outra pessoa pode executar código com a sua conta por meio dos hooks do Git ou dos scripts npm deste repositório. Antes de fazer checkout, revise o diff da alteração que vai importar (`gh pr diff <pr>`) e não pule os hooks. A CI roda apenas no Linux; as verificações de macOS rodam no Mac de um mantenedor por meio de `scripts/ci-mac-gate.sh`. O script recusa pull requests vindos de forks. Um pull request cujos commits não passam na verificação de procedência, ou um para um branch diferente de `main`, só é executado depois que um mantenedor o revisa e passa uma opção de confiança que nomeia exatamente esses commits. As regras estão em CONTRIBUTING.md.
 
 ## Licença
 
