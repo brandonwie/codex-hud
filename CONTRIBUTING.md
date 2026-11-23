@@ -25,8 +25,10 @@ matching heading and code-block skeletons across every translation.
 failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
 
 - GitHub runs it on Linux for each pull request, fork pull requests included,
-  and for a manual run (`.github/workflows/ci.yml`). No workflow uses a
-  GitHub-hosted macOS runner.
+  and for a manual run (`.github/workflows/ci.yml`), and again before a release
+  (`.github/workflows/release.yml`, on pushes to `main`). A newer push to
+  `main` can replace a Release run that has not started yet; the newer run then
+  checks the newer commit. No workflow uses a GitHub-hosted macOS runner.
 - The macOS leg runs only on a Mac:
   - Merge gate: after the push, `sh -p scripts/ci-mac-gate.sh <pr>` checks
     GitHub's merge commit for the pull request in a clean temporary checkout
