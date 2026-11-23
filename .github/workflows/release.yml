@@ -42,8 +42,8 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      # Same cache as ci.yml; keep the key and paths equal in both files. A run
-      # on main saves the cache that pull requests read.
+      # Same cache and clean-up as ci.yml; keep these two steps equal in both
+      # files. A run on main saves the cache that pull requests read.
       - name: Cache Rust build
         # Pinned from refs/tags/v6.1.0 on 2026-11-23.
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -56,6 +56,12 @@ jobs:
           key: rust-${{ runner.os }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('rust/Cargo.lock') }}
           restore-keys: |
             rust-${{ runner.os }}-${{ steps.rust.outputs.cachekey }}-
+
+      # See ci.yml: a restored crate build could be newer than this checkout.
+      - name: Remove cached codex-hud artifacts
+        run: |
+          cargo clean --manifest-path rust/Cargo.toml -p codex-hud
+          cargo clean --manifest-path rust/Cargo.toml -p codex-hud --release
 
       # The same four checks as ci.yml, from the one list in ci-local.sh.
       - name: Checks
