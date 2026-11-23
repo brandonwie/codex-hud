@@ -77,7 +77,10 @@ failed. It caps Cargo at 4 build jobs unless `CARGO_BUILD_JOBS` is set.
     needs an extra CA certificate (`NODE_EXTRA_CA_CERTS`) is not supported
     either. The gate prints no curl error for the Rust channel download and
     unsets every `NODE_*` variable before Node starts (`NODE_DEBUG` prints a
-    child's environment, `GH_TOKEN` included). Its toolchain checks and the
+    child's environment, `GH_TOKEN` included). It reads the variable names
+    byte by byte in the C locale, so a value that is not UTF-8 cannot hide a
+    variable from these removals, and it stops if it cannot read the
+    environment. Its toolchain checks and the
     pull request's checks run through `scripts/run-isolated.sh`, like the
     hosted runner, in a new environment that holds only `PATH`, an empty
     `HOME` and `CARGO_HOME`, empty npm and global Git config files, no system

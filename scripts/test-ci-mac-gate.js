@@ -29,7 +29,7 @@ fs.writeFileSync(
   `#!/bin/sh
 echo "$*" >> "$FAKE_GH_CALLS"
 all="$*"
-env | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "$FAKE_GH_CALLS"
+env | LC_ALL=C sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "$FAKE_GH_CALLS"
 if [ -n "\${GH_REPO:-}\${GH_HOST:-}" ]; then echo "fake gh: GH_REPO or GH_HOST reached gh" >&2; exit 1; fi
 case "$*" in
   "api --hostname github.com "*"repos/brandonwie/codex-hud/"*) ;;
@@ -69,7 +69,9 @@ const realGit = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).
 // The gate needs -p under bash (macOS /bin/sh). Some dash builds take -p too
 // (Ubuntu's), others refuse it (macOS's); dash reads no SHELLOPTS either way.
 const shellP = spawnSync("sh", ["-p", "-c", ":"]).status === 0 ? ["-p"] : [];
-const shIsBash = spawnSync("sh", ["-c", 'printf %s "${BASH_VERSION:-}"'], { encoding: "utf8" }).stdout !== "";
+// Bash is the shell with the BASH_VERSINFO array; dash cannot parse an array
+// reference, and keeps an inherited BASH_VERSION as plain text.
+const shIsBash = spawnSync("sh", ["-c", `(eval '[ -n "\${BASH_VERSINFO[0]:-}" ]') 2>/dev/null`]).status === 0;
 const isolatedGitConfig = path.join(root, "isolated.gitconfig");
 fs.writeFileSync(isolatedGitConfig, "");
 // Attributes too: an empty XDG_CONFIG_HOME (no default git/attributes) and no
@@ -106,11 +108,18 @@ const status = (state, m = merge, b = base, ref = "main") => `${state} merge ${m
 const commitLines = (...rows) => rows.map((row) => row.join(" ")).join("\n");
 const trustedCommits = commitLines([firstCommit, "true", "brandonwie", "brandonwie"], [head, "true", "brandonwie", "brandonwie"]);
 
-function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [], cwd, privileged = true, shell = "sh" } = {}) {
+// The environment plus RAW_A..RAW_Z, whose values hold byte ff, which node
+// cannot pass: a wrapper shell adds them with env -i. A shell lists its
+// exported variables in hash order, so with 26 names one comes early.
+const rawFirst = (env, argv) => [
+  "/bin/sh", "-c", 'raw=$(printf "a\\377b"); for c in A B C D E F G H I J K L M N O P Q R S T U V W X Y Z; do set -- "RAW_$c=$raw" "$@"; done; exec env -i "$@"', "sh",
+  ...Object.entries(env).map(([key, value]) => `${key}=${value}`), ...argv,
+];
+
+function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArgs = [], cwd, privileged = true, shell = "sh", raw = false } = {}) {
   fs.rmSync(calls, { force: true });
-  const result = spawnSync(shell, [...(privileged && shell === "sh" ? shellP : []), ...shellArgs, gatePath, ...args], {
-    cwd,
-    env: {
+  const argv = [shell, ...(privileged && shell === "sh" ? shellP : []), ...shellArgs, gatePath, ...args];
+  const env = {
       ...baseEnv(),
       // The gate must ignore these: the fake gh fails when it sees them.
       GH_REPO: "someone/codex-hud",
@@ -123,7 +132,11 @@ function runGate(args, fake, { gatePath = trustedGate, pathPrefix = "", shellArg
       FAKE_OTHER_BASE: otherBase,
       FAKE_STATUS: "null null",
       ...fake,
-    },
+  };
+  const command = raw ? rawFirst(env, argv) : argv;
+  const result = spawnSync(command[0], command.slice(1), {
+    cwd,
+    env: raw ? { PATH: process.env.PATH } : env,
     encoding: "utf8",
   });
   const ghCalls = fs.existsSync(calls) ? fs.readFileSync(calls, "utf8") : "";
@@ -294,7 +307,7 @@ function fetchHarness() {
     // fails as if the host were unreachable (curl exit 7).
     fs.writeFileSync(
       path.join(fake, "curl"),
-      `#!/bin/sh\necho "curl $*" >> "\${FAKE_CURL_CALLS:-/dev/null}"\nenv | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "\${FAKE_CURL_CALLS:-/dev/null}"\nexit 7\n`,
+      `#!/bin/sh\necho "curl $*" >> "\${FAKE_CURL_CALLS:-/dev/null}"\nenv | LC_ALL=C sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "\${FAKE_CURL_CALLS:-/dev/null}"\nexit 7\n`,
       { mode: 0o755 },
     );
     // The fake sleep records its argument and returns at once.
@@ -303,8 +316,8 @@ function fetchHarness() {
       path.join(fake, "git"),
       `#!/bin/sh
 echo "$*" >> "$FAKE_GIT_CALLS"
-env | sed -n 's/^\\(GIT_TRACE[A-Za-z0-9_]*=.*\\)/trace-env \\1/p; s/^\\(GIT_CURL_VERBOSE=.*\\)/trace-env \\1/p' >> "$FAKE_GIT_CALLS"
-env | sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "$FAKE_GIT_CALLS"
+env | LC_ALL=C sed -n 's/^\\(GIT_TRACE[A-Za-z0-9_]*=.*\\)/trace-env \\1/p; s/^\\(GIT_CURL_VERBOSE=.*\\)/trace-env \\1/p' >> "$FAKE_GIT_CALLS"
+env | LC_ALL=C sed -n 's/^\\([A-Za-z_]*[Pp][Rr][Oo][Xx][Yy][A-Za-z0-9_]*\\)=.*/proxy-env \\1/p' >> "$FAKE_GIT_CALLS"
 # The subcommand is the first word that is not a -C or -c option or its value.
 sub=; skip=
 for word in "$@"; do
@@ -334,7 +347,7 @@ if [ "$1" = -C ] && [ "$sub" = checkout ]; then
   # Git settings the checkout saw.
   if [ -n "\${FAKE_RECORD_CHECKOUT:-}" ]; then
     printf 'bytes %s\n' "$(od -An -c "$2/.github/workflows/ci.yml" | tr -d ' \n')" >> "$FAKE_GIT_CALLS"
-    env | sed -n 's/^\\(GIT_[A-Z_0-9]*\\)=.*/checkout-env \\1/p; s/^\\(XDG_CONFIG_HOME\\)=.*/checkout-env \\1/p' >> "$FAKE_GIT_CALLS"
+    env | LC_ALL=C sed -n 's/^\\(GIT_[A-Z_0-9]*\\)=.*/checkout-env \\1/p; s/^\\(XDG_CONFIG_HOME\\)=.*/checkout-env \\1/p' >> "$FAKE_GIT_CALLS"
   fi
   exit 0
 fi
@@ -1324,6 +1337,82 @@ const cases = [
     if (passesFunctions) {
       fails(runGate(["verify", "56"], { ...fn, CI_MAC_GATE_RESTARTED: "1", FAKE_STATUS: status("success") }), /^ci-mac-gate: cannot remove the exported shell functions from the environment$/m);
     }
+  }],
+  ["a value that is not UTF-8 cannot hide variables from the gate's environment scans", () => {
+    // Under a UTF-8 locale macOS tr and sed stop at such a byte, and a scan
+    // that stops early misses the names after it. node cannot pass raw bytes,
+    // so a wrapper shell exports them.
+    const marker = "SYNTHETIC-RAW-BYTE-91c4";
+    const utf8 = process.platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8";
+    const scan = ["/bin/sh", "-c", 'env | sed -n "s/^\\(NODE_DEBUG\\)=.*/\\1/p"'];
+    const control = spawnSync("/bin/sh", rawFirst({ PATH: process.env.PATH, LC_ALL: utf8, NODE_DEBUG: "child_process" }, scan).slice(1), { encoding: "utf8", env: { PATH: process.env.PATH } });
+    if (process.platform === "darwin") assert.strictEqual(control.stdout, "", "control: sed read past the byte");
+    const shims = path.join(root, "raw-shims");
+    fs.mkdirSync(shims, { recursive: true });
+    fs.writeFileSync(path.join(shims, "node"), `#!/usr/bin/env bash\nexec "${process.execPath}" "$@"\n`, { mode: 0o755 });
+    const options = { raw: true, pathPrefix: `${shims}${path.delimiter}${fetchHarness().prefix}` };
+    const output = (r) => r.stdout + r.stderr;
+    const fork = { LC_ALL: utf8, GH_TOKEN: marker, FAKE_PR: `${head} main someone/fork ${repo} ${merge} 2` };
+    for (const extra of [
+      { NODE_DEBUG: "child_process" },
+      { "BASH_FUNC_exec%%": '() { export NODE_DEBUG=child_process; builtin exec "$@"; }' },
+    ]) {
+      const result = runGate(["56"], { ...fork, ...extra }, options);
+      fails(result, /comes from someone\/fork/);
+      assert.match(result.stdout, /under a 360-minute deadline/);
+      assert.doesNotMatch(output(result), /CHILD_PROCESS/, `${Object.keys(extra)[0]} survived the scan`);
+      assert.ok(!output(result).includes(marker), "the scan missed a variable and the token reached the log");
+    }
+    // The proxy scan and the checkout's GIT_* scan run in the worker: with the
+    // same values, no proxy variable reaches curl or git, and no command-level
+    // Git config reaches the checkout.
+    const { prefix, gitCalls, runDir, fixture, fetchConfig } = fetchHarness();
+    const curlCalls = path.join(root, "raw-curl-calls");
+    for (const file of [gitCalls, curlCalls]) fs.rmSync(file, { force: true });
+    const worker = runWorker("", {
+      LC_ALL: utf8,
+      FAKE_GIT_CALLS: gitCalls,
+      FAKE_CURL_CALLS: curlCalls,
+      FAKE_FETCH_REPO: fixture.dir,
+      FAKE_ALLOW_CHECKOUT: "1",
+      FAKE_RECORD_CHECKOUT: "1",
+      FAKE_PR: `${fixture.head} main ${repo} ${repo} ${fixture.merge} 1 main`,
+      FAKE_BASE: fixture.base,
+      FAKE_COMMITS: commitLines([fixture.head, "true", "brandonwie", "brandonwie"]),
+      HTTPS_PROXY: `http://u:${marker}@proxy.example:8080`,
+      no_proxy: `${marker}.example`,
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "core.autocrlf",
+      GIT_CONFIG_VALUE_0: "true",
+      ...fetchConfig(),
+    }, runDir, "", { raw: true, pathPrefix: prefix });
+    fails(worker, /cannot read the current Rust stable version/);
+    assert.ok(!output(worker).includes(marker), "a proxy value reached the gate output");
+    assert.doesNotMatch(fs.readFileSync(curlCalls, "utf8"), /proxy-env/);
+    const gitLog = fs.readFileSync(gitCalls, "utf8");
+    assert.doesNotMatch(gitLog, /proxy-env/);
+    assert.doesNotMatch(gitLog, /^checkout-env GIT_CONFIG_(COUNT|KEY_0|VALUE_0)$/m, "command-level Git config reached the checkout");
+    assert.match(gitLog, /^checkout-env GIT_CONFIG_NOSYSTEM$/m);
+    // run-isolated.sh scans the same way and runs its command.
+    const isolatedState = path.join(root, "raw-isolated-state");
+    const isolated = spawnSync("/bin/sh", rawFirst({ PATH: process.env.PATH, HOME: process.env.HOME, LC_ALL: utf8, HTTPS_PROXY: marker }, ["sh", path.join(repoRoot, "scripts", "run-isolated.sh"), isolatedState, repoRoot, "env"]).slice(1), { encoding: "utf8", env: { PATH: process.env.PATH } });
+    assert.strictEqual(isolated.status, 0, isolated.stderr);
+    assert.ok(!isolated.stdout.includes(marker), "a proxy value reached the isolated command");
+  }],
+  ["the gate and run-isolated.sh stop when the environment cannot be read", () => {
+    // A failed scan would leave every variable in place, so it stops the run.
+    const broken = path.join(root, "broken-env");
+    fs.mkdirSync(broken, { recursive: true });
+    fs.writeFileSync(path.join(broken, "env"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    for (const args of [["56"], ["verify", "56"]]) {
+      const result = runGate(args, { FAKE_STATUS: status("success") }, { pathPrefix: `${broken}${path.delimiter}` });
+      assert.strictEqual(result.status, 1, `${args[0]}: ${result.stderr}`);
+      assert.strictEqual(result.stderr, "ci-mac-gate: cannot read the environment\n");
+      assert.strictEqual(result.ghCalls, "");
+    }
+    const isolated = spawnSync("sh", [path.join(repoRoot, "scripts", "run-isolated.sh"), path.join(root, "broken-env-state"), repoRoot, "true"], { encoding: "utf8", env: { ...process.env, PATH: `${broken}${path.delimiter}${process.env.PATH}` } });
+    assert.strictEqual(isolated.status, 1);
+    assert.strictEqual(isolated.stderr, "run-isolated: cannot read the environment\n");
   }],
   ["an inherited BASH_VERSION does not make dash take the bash path", () => {
     // dash keeps an inherited BASH_VERSION or BASH_VERSINFO as plain text; the

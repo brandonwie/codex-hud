@@ -73,11 +73,16 @@ jobs=${CARGO_BUILD_JOBS:-}
 # The discovery below runs rustc and node from the inherited PATH; clear the
 # settings that change what they run or print first.
 unset BASH_ENV ENV NODE_OPTIONS NODE_DEBUG XDG_CONFIG_HOME RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER RUSTFLAGS RUSTDOCFLAGS RUSTUP_TOOLCHAIN
-for var in $(env | sed -n 's/^\(CARGO_[A-Za-z0-9_]*\)=.*/\1/p; s/^\([Nn][Pp][Mm]_[Cc][Oo][Nn][Ff][Ii][Gg]_[A-Za-z0-9_]*\)=.*/\1/p'); do
-  unset "$var"
-done
-for var in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' |
-  grep -i -e proxy -e '^GIT_'); do
+# The names of the environment variables, read bytes in the C locale from
+# NUL-ended records (as in ci-mac-gate.sh): a value that holds a newline cannot
+# pose as a variable, and a value that is not UTF-8 cannot stop the scan.
+env_records=$(env -0 | LC_ALL=C tr '\n\000' '\r\n') && [ -n "$env_records" ] ||
+  fail "cannot read the environment"
+names=$(printf '%s\n' "$env_records" | LC_ALL=C sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p') ||
+  fail "cannot read the environment"
+unset env_records
+for var in $(printf '%s\n' "$names" |
+  LC_ALL=C grep -i -e '^CARGO_' -e '^npm_config_' -e proxy -e '^GIT_'); do
   unset "$var"
 done
 

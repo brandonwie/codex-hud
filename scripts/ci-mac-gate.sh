@@ -78,14 +78,28 @@ case $- in
     fi
     ;;
 esac
+# env_names <sed pattern>: the names of the environment variables that match the
+# pattern. env -0 ends each variable with a NUL, so a value that holds a newline
+# cannot pose as one. tr and sed read bytes in the C locale: under a UTF-8
+# locale macOS tr and sed stop at a byte that is not UTF-8 (any value can hold
+# one), and the names after it would escape the scan. It fails if tr or sed
+# fails or the environment reads empty; the caller then stops the gate.
+env_names() {
+  env_records=$(env -0 | LC_ALL=C tr '\n\000' '\r\n') || return 1
+  [ -n "$env_records" ] || return 1
+  printf '%s\n' "$env_records" | LC_ALL=C sed -n "s/^\\($1\\)=.*/\\1/p"
+}
+env_scan_failed() {
+  echo "ci-mac-gate: cannot read the environment" >&2
+  exit 1
+}
 # Exported bash functions (BASH_FUNC_<name>%%=() {...}): bash -p does not import
 # them but passes them on, and a bash child such as asdf's node shim runs them;
 # a function named exec runs in place of the builtin and can export NODE_DEBUG
 # again. The gate restarts itself once without them; if any is left after the
 # restart (CI_MAC_GATE_RESTARTED set), it stops, so the variable cannot skip the
-# cleanup. env -0 ends each variable with a NUL, so a value that holds a newline
-# cannot pose as one.
-functions=$(env -0 | tr '\n\000' '\r\n' | sed -n 's/^\(BASH_FUNC_[^=]*\)=.*/\1/p')
+# cleanup.
+functions=$(env_names 'BASH_FUNC_[^=]*') || env_scan_failed
 if [ -n "$functions" ]; then
   if [ -n "${CI_MAC_GATE_RESTARTED:-}" ]; then
     echo "ci-mac-gate: cannot remove the exported shell functions from the environment" >&2
@@ -162,16 +176,19 @@ fi
 #     malformed or valueless config key, URL included, in its own errors. Each
 #     failure prints a fixed message naming the step and the trusted URL only;
 #   - the script's own messages never print a rejected URL or config key.
-for var in $(env | sed -n 's/^\(GIT_TRACE[A-Za-z0-9_]*\)=.*/\1/p'); do
+names=$(env_names 'GIT_TRACE[A-Za-z0-9_]*') || env_scan_failed
+for var in $names; do
   unset "$var"
 done
 unset GIT_CURL_VERBOSE GH_DEBUG DEBUG
-for var in $(env | sed -n 's/^\(NODE_[A-Za-z0-9_]*\)=.*/\1/p'); do
+names=$(env_names 'NODE_[A-Za-z0-9_]*') || env_scan_failed
+for var in $names; do
   unset "$var"
 done
 GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
 export GIT_TRACE2 GIT_TRACE2_PERF GIT_TRACE2_EVENT
-for var in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' | grep -i proxy); do
+names=$(env_names '[A-Za-z_][A-Za-z0-9_]*') || env_scan_failed
+for var in $(printf '%s\n' "$names" | LC_ALL=C grep -i proxy); do
   unset "$var"
 done
 
@@ -477,7 +494,8 @@ clean_git_env() {
   # Every inherited GIT_* variable goes (GIT_CONFIG_COUNT/KEY_n/VALUE_n,
   # GIT_CONFIG_PARAMETERS, GIT_TEMPLATE_DIR, GIT_ATTR_SOURCE, GIT_DEFAULT_HASH,
   # ...); then only the isolation and the trace2 disables are set.
-  for var in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
+  names=$(env_names 'GIT_[A-Za-z0-9_]*') || env_scan_failed
+  for var in $names; do
     unset "$var"
   done
   GIT_TRACE2=0 GIT_TRACE2_PERF=0 GIT_TRACE2_EVENT=0
